@@ -1,0 +1,85 @@
+services:
+  # 1. PostgreSQL (Source of Truth)
+  postgres:
+    image: postgres:16-alpine
+    container_name: dongdo_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: dongdo_cs
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/migrations/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 2. Redis (Event Bus Streams & State)
+  redis:
+    image: redis:7-alpine
+    container_name: dongdo_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+
+  # 3. Qdrant Vector DB (RAG Knowledge Base)
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: dongdo_qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrantdata:/qdrant/storage
+
+  # 4. Backend Golang Server
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dongdo_server
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      DATABASE_URL: "postgres://postgres:postgrespassword@postgres:5432/dongdo_cs?sslmode=disable"
+      REDIS_URL: "redis://redis:6379"
+      QDRANT_HOST: "qdrant"
+      QDRANT_PORT: "6334"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
+      ANTHROPIC_WORKSPACE_ID: "${ANTHROPIC_WORKSPACE_ID}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY}"
+      LLM_MODEL: "${LLM_MODEL:-claude-haiku-4-5-20251001}"
+      LLM_TEMPERATURE: "0.1"
+      DOCUMENTS_DIR: "/app/tailieu"
+    volumes:
+      - ./recordings:/app/recordings
+      - ./tailieu:/app/tailieu
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+
+volumes:
+  pgdata:
+  redisdata:
+  qdrantdata:
