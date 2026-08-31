@@ -200,6 +200,57 @@ type AnalyticsStats struct {
 	PendingLearnCount int     `json:"pending_learn_count"`
 }
 
+type FullAnalyticsReport struct {
+	TotalCustomersCount int              `json:"totalCustomersCount"`
+	TotalCasesCount     int              `json:"totalCasesCount"`
+	TotalChatsCount     int              `json:"totalChatsCount"`
+	TotalCallsCount     int              `json:"totalCallsCount"`
+	ResolvedCasesCount  int              `json:"resolvedCasesCount"`
+	OpenCasesCount      int              `json:"openCasesCount"`
+	GrowthRatePercent   string           `json:"growthRatePercent"`
+	ResolvedRatePercent string           `json:"resolvedRatePercent"`
+	AIResolutionRate    string           `json:"aiResolutionRate"`
+	AIHandoffRate       string           `json:"aiHandoffRate"`
+	AIFailureRate       string           `json:"aiFailureRate"`
+	AIConfidenceAvg     string           `json:"aiConfidenceAvg"`
+	AIQualityScore      string           `json:"aiQualityScore"`
+	CSATScore           string           `json:"csatScore"`
+	DissatisfiedRate    string           `json:"dissatisfiedRate"`
+	ComplaintRate       string           `json:"complaintRate"`
+	RepeatContactRate   string           `json:"repeatContactRate"`
+	FCRRate             string           `json:"fcrRate"`
+	UnresolvedRate      string           `json:"unresolvedRate"`
+	OpsWaitingCases     int              `json:"opsWaitingCases"`
+	OpsOverdueTickets   int              `json:"opsOverdueTickets"`
+	OpsActiveStaff      int              `json:"opsActiveStaff"`
+	OpsSlaBreachRate    string           `json:"opsSlaBreachRate"`
+	OpsAvgQueueTime     string           `json:"opsAvgQueueTime"`
+	OpsPeakHour         string           `json:"opsPeakHour"`
+	OpsMaxQueue         string           `json:"opsMaxQueue"`
+	TopIssues           []IssueTopicItem `json:"topIssues"`
+	ActionItems         []ActionItem     `json:"actionItems"`
+}
+
+type IssueTopicItem struct {
+	ID       string `json:"id"`
+	Category string `json:"category"`
+	Count    int    `json:"count"`
+	Percent  string `json:"percent"`
+	Ratio    int    `json:"ratio"`
+	Status   string `json:"status"`
+}
+
+type ActionItem struct {
+	ID       string `json:"id"`
+	Issue    string `json:"issue"`
+	Cause    string `json:"cause"`
+	Action   string `json:"action"`
+	Owner    string `json:"owner"`
+	Priority string `json:"priority"`
+	Deadline string `json:"deadline"`
+	Status   string `json:"status"`
+}
+
 // ============================================================
 // WebSocket Event Types
 // ============================================================

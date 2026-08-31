@@ -999,3 +999,24 @@ func (h *Handler) HandleDeleteCall(c *gin.Context) {
 		"message": "Đã xóa lịch sử cuộc gọi thành công",
 	})
 }
+
+func (h *Handler) HandleGetFullReport(c *gin.Context) {
+	period := c.DefaultQuery("period", "7d")
+	channel := c.DefaultQuery("channel", "ALL")
+	staffID := c.DefaultQuery("staff_id", "ALL")
+	startDate := c.Query("start_date")
+	endDate := c.Query("end_date")
+
+	report, err := h.analyticsUC.GetFullReport(c.Request.Context(), period, channel, staffID, startDate, endDate)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"full_report": report,
+		"period":      period,
+		"channel":     channel,
+		"staff_id":    staffID,
+	})
+}

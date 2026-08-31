@@ -94,6 +94,57 @@ export interface AnalyticsStats {
   pending_learn_count: number;
 }
 
+export interface IssueTopicItem {
+  id: string;
+  category: string;
+  count: number;
+  percent: string;
+  ratio: number;
+  status: string;
+}
+
+export interface ActionItem {
+  id: string;
+  issue: string;
+  cause: string;
+  action: string;
+  owner: string;
+  priority: string;
+  deadline: string;
+  status: string;
+}
+
+export interface FullAnalyticsReport {
+  totalCustomersCount: number;
+  totalCasesCount: number;
+  totalChatsCount: number;
+  totalCallsCount: number;
+  resolvedCasesCount: number;
+  openCasesCount: number;
+  growthRatePercent: string;
+  resolvedRatePercent: string;
+  aiResolutionRate: string;
+  aiHandoffRate: string;
+  aiFailureRate: string;
+  aiConfidenceAvg: string;
+  aiQualityScore: string;
+  csatScore: string;
+  dissatisfiedRate: string;
+  complaintRate: string;
+  repeatContactRate: string;
+  fcrRate: string;
+  unresolvedRate: string;
+  opsWaitingCases: number;
+  opsOverdueTickets: number;
+  opsActiveStaff: number;
+  opsSlaBreachRate: string;
+  opsAvgQueueTime: string;
+  opsPeakHour: string;
+  opsMaxQueue: string;
+  topIssues: IssueTopicItem[];
+  actionItems: ActionItem[];
+}
+
 export interface KnowledgeDocument {
   filename: string;
   size_kb: string;

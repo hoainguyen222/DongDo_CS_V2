@@ -108,6 +108,7 @@ func SetupRouter(
 
 		// Analytics
 		admin.GET("/api/admin/analytics", handler.HandleGetAnalytics)
+		admin.GET("/api/admin/analytics/full-report", handler.HandleGetFullReport)
 
 		// System Configuration
 		admin.GET("/api/admin/config", handler.HandleGetConfig)

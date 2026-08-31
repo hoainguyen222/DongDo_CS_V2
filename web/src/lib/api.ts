@@ -379,6 +379,22 @@ export const api = {
     return res.json();
   },
 
+  async getFullReport(filters?: { period?: string; channel?: string; staffId?: string; startDate?: string; endDate?: string }): Promise<{ full_report: FullAnalyticsReport }> {
+    const params = new URLSearchParams();
+    if (filters?.period) params.append('period', filters.period);
+    if (filters?.channel) params.append('channel', filters.channel);
+    if (filters?.staffId) params.append('staff_id', filters.staffId);
+    if (filters?.startDate) params.append('start_date', filters.startDate);
+    if (filters?.endDate) params.append('end_date', filters.endDate);
+
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const res = await fetch(`${API_BASE}/api/admin/analytics/full-report${query}`, {
+      headers: getHeaders(),
+    });
+    if (!res.ok) throw new Error('Không thể tải báo cáo hệ thống');
+    return res.json();
+  },
+
   async getConfig(): Promise<SystemConfig> {
     const res = await fetch(`${API_BASE}/api/admin/config`, {
       headers: getHeaders(),
