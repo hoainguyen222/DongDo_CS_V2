@@ -146,3 +146,41 @@ type StateManager interface {
 	SetAIExecution(ctx context.Context, sessionID string, active bool) error
 	IsAIExecuting(ctx context.Context, sessionID string) (bool, error)
 }
+
+// ============================================================
+// Partner System Repository Interface
+// ============================================================
+
+type PartnerRepository interface {
+	// Dashboard
+	GetDashboardKpi(ctx context.Context, startDate, endDate time.Time) (*DashboardKpiSummary, error)
+	GetDashboardAutomationTrend(ctx context.Context, startDate, endDate time.Time) ([]*DashboardAutomationTrendDaily, error)
+	GetRecentCompletedChats(ctx context.Context, limit, offset int) ([]*ChatCase, error)
+	
+	// Quick Templates
+	ListQuickTemplates(ctx context.Context) ([]*QuickTemplate, error)
+	CreateQuickTemplate(ctx context.Context, t *QuickTemplate) (*QuickTemplate, error)
+	UpdateQuickTemplate(ctx context.Context, id int64, title, category, content string) error
+	DeleteQuickTemplate(ctx context.Context, id int64) error
+
+	// Prompt History & RBAC
+	GetLatestSystemPromptHistory(ctx context.Context) (*SystemPromptHistory, error)
+	InsertSystemPromptHistory(ctx context.Context, p *SystemPromptHistory) (*SystemPromptHistory, error)
+	ListRolePermissions(ctx context.Context) ([]*RolePermission, error)
+	UpsertRolePermission(ctx context.Context, p *RolePermission) error
+
+	// Audit Logs
+	InsertAuditLog(ctx context.Context, log *SystemAuditLog) (*SystemAuditLog, error)
+	ListAuditLogs(ctx context.Context, limit, offset int) ([]*SystemAuditLog, error)
+
+	// Reports
+	GetGeneralOverviewReport(ctx context.Context, startDate, endDate time.Time) (*GeneralOverviewMetrics, error)
+	GetAIPerformanceReport(ctx context.Context, startDate, endDate time.Time) (*AIPerformanceMetrics, error)
+	GetStaffPerformanceReport(ctx context.Context, startDate, endDate time.Time) ([]*StaffPerformanceItem, error)
+	GetCXReport(ctx context.Context, startDate, endDate time.Time) (*CXMetricsReport, error)
+	InsertCSATFeedback(ctx context.Context, fb *CSATFeedback) (*CSATFeedback, error)
+	GetHourlyOperationalLoad(ctx context.Context, startDate, endDate time.Time) ([]*HourlyOperationalItem, error)
+	GetIssueAnalysisReport(ctx context.Context, startDate, endDate time.Time) ([]*IssueAnalysisItem, error)
+	GetAILearningReportStats(ctx context.Context) (*AILearningReportStats, error)
+}
+

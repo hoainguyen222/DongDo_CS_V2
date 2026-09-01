@@ -34,8 +34,12 @@ import { WSClient } from '@/lib/ws';
 import { WebRTCManager } from '@/lib/webrtc';
 import { ChatCase, CustomerProfile, LearningItem, KnowledgeOverview, AnalyticsStats, SystemConfig, Message, QAPair } from '@/lib/types';
 import { MarkdownRenderer } from '@/components/MarkdownRenderer';
+import { PartnerDashboardView } from '@/components/partner/PartnerDashboardView';
+import { PartnerAnalyticsView } from '@/components/partner/PartnerAnalyticsView';
+import { PartnerConfigView } from '@/components/partner/PartnerConfigView';
+import { LayoutDashboard, TrendingUp, SlidersHorizontal } from 'lucide-react';
 
-type TabType = 'inbox' | 'customers' | 'calls' | 'learning' | 'knowledge' | 'analytics' | 'config';
+type TabType = 'inbox' | 'customers' | 'calls' | 'learning' | 'knowledge' | 'analytics' | 'config' | 'partner_dashboard' | 'partner_analytics' | 'partner_config';
 
 interface PaginationProps {
   currentPage: number;
@@ -1388,6 +1392,46 @@ export default function AdminPage() {
               <Settings className="w-4 h-4 text-slate-400" />
               <span>Cấu Hình Hệ Thống</span>
             </button>
+
+            <div className="pt-3 pb-1 px-1 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              TÍNH NĂNG MỚI (PARTNER)
+            </div>
+
+            <button
+              onClick={() => setActiveTab('partner_dashboard')}
+              className={`w-full flex items-center space-x-3 px-3.5 py-3 rounded-xl text-sm font-medium transition-all ${
+                activeTab === 'partner_dashboard'
+                  ? 'bg-[#1C2D56] text-white border-l-4 border-[#B32D38] shadow-lg'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-[#162344]'
+              }`}
+            >
+              <LayoutDashboard className="w-4 h-4 text-purple-400" />
+              <span>Trang Chủ / Dashboard (Mới)</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('partner_analytics')}
+              className={`w-full flex items-center space-x-3 px-3.5 py-3 rounded-xl text-sm font-medium transition-all ${
+                activeTab === 'partner_analytics'
+                  ? 'bg-[#1C2D56] text-white border-l-4 border-[#B32D38] shadow-lg'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-[#162344]'
+              }`}
+            >
+              <TrendingUp className="w-4 h-4 text-emerald-400" />
+              <span>Báo Cáo &amp; Thống Kê (Mới)</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('partner_config')}
+              className={`w-full flex items-center space-x-3 px-3.5 py-3 rounded-xl text-sm font-medium transition-all ${
+                activeTab === 'partner_config'
+                  ? 'bg-[#1C2D56] text-white border-l-4 border-[#B32D38] shadow-lg'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-[#162344]'
+              }`}
+            >
+              <SlidersHorizontal className="w-4 h-4 text-sky-400" />
+              <span>Cấu Hình Hệ Thống (Mới)</span>
+            </button>
           </nav>
         </div>
 
@@ -1428,6 +1472,9 @@ export default function AdminPage() {
               {activeTab === 'knowledge' && '📚 Kho Tri Thức & Quản Trị Vector Database'}
               {activeTab === 'analytics' && '📊 Báo Cáo & Thống Kê Hiệu Năng Phục Vụ'}
               {activeTab === 'config' && '⚙️ Cấu Hình Hệ Thống & Tham Số LLM'}
+              {activeTab === 'partner_dashboard' && '📊 Trang Chủ / Dashboard - Tổng Quan Hệ Thống (Mới)'}
+              {activeTab === 'partner_analytics' && '📈 Báo Cáo & Thống Kê - Phân Tích Hiệu Năng Phục Vụ (Mới)'}
+              {activeTab === 'partner_config' && '⚙️ Cấu Hình Hệ Thống AI Engine & Phân Quyền (Mới)'}
             </h1>
             <p className="text-xs text-slate-400 hidden sm:block">
               {activeTab === 'inbox' && 'Quản lý các case cần sự can thiệp của Chuyên viên CSKH thật'}
@@ -1437,6 +1484,9 @@ export default function AdminPage() {
               {activeTab === 'knowledge' && 'Tài liệu nguồn .docx và 60 chunks embedding trong Qdrant'}
               {activeTab === 'analytics' && 'Tỷ lệ AI tự phục vụ và phân bổ trạng thái hỗ trợ'}
               {activeTab === 'config' && 'Điều chỉnh System Prompt, Claude model và nhiệt độ'}
+              {activeTab === 'partner_dashboard' && 'Thống kê hiệu suất CSKH, tỷ lệ tự động hóa AI và hoạt động gần đây'}
+              {activeTab === 'partner_analytics' && 'Phân tích chất lượng hỗ trợ, 7 sub-report chuẩn hệ thống'}
+              {activeTab === 'partner_config' && 'Tùy chỉnh System Prompt, tài khoản, phân quyền RBAC và tin nhắn mẫu'}
             </p>
           </div>
 
@@ -2554,6 +2604,14 @@ export default function AdminPage() {
               </form>
             </div>
           )}
+
+          {activeTab === 'partner_dashboard' && (
+            <PartnerDashboardView onSelectTab={(key) => setActiveTab(key as TabType)} />
+          )}
+
+          {activeTab === 'partner_analytics' && <PartnerAnalyticsView />}
+
+          {activeTab === 'partner_config' && <PartnerConfigView />}
         </div>
       </main>
     </div>

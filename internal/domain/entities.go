@@ -249,3 +249,141 @@ type QAPair struct {
 	Question string `json:"question"`
 	Answer   string `json:"answer"`
 }
+
+// ============================================================
+// Partner Features Entities & Report DTOs
+// ============================================================
+
+type QuickTemplate struct {
+	ID        int64     `json:"id"`
+	Title     string    `json:"title"`
+	Category  string    `json:"category"`
+	Content   string    `json:"content"`
+	CreatedBy string    `json:"created_by"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type SystemPromptHistory struct {
+	ID           int64     `json:"id"`
+	SystemPrompt string    `json:"system_prompt"`
+	LLMModel     string    `json:"llm_model"`
+	Temperature  float64   `json:"temperature"`
+	CreatedBy    string    `json:"created_by"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type RolePermission struct {
+	ID         int64     `json:"id"`
+	RoleName   string    `json:"role_name"`
+	FeatureKey string    `json:"feature_key"`
+	CanView    bool      `json:"can_view"`
+	CanEdit    bool      `json:"can_edit"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+type CSATFeedback struct {
+	ID            int64     `json:"id"`
+	SessionID     string    `json:"session_id"`
+	Rating        int       `json:"rating"`
+	FeedbackText  string    `json:"feedback_text"`
+	TargetType    string    `json:"target_type"` // 'ai' or 'cskh'
+	StaffUsername string    `json:"staff_username"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+type IssueCategory struct {
+	ID           int64     `json:"id"`
+	SessionID    string    `json:"session_id"`
+	CategoryName string    `json:"category_name"`
+	AIResolved   bool      `json:"ai_resolved"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type SystemAuditLog struct {
+	ID          int64     `json:"id"`
+	ActionType  string    `json:"action_type"`
+	Details     string    `json:"details"`
+	PerformedBy string    `json:"performed_by"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// Report DTOs
+type DashboardKpiSummary struct {
+	TotalConversations int     `json:"total_conversations"`
+	AIResolvedCount    int     `json:"ai_resolved_count"`
+	HumanHandoffCount  int     `json:"human_handoff_count"`
+	AIRateVal          string  `json:"ai_rate_val"`
+	AvgResponseTime    string  `json:"avg_response_time"`
+	AvgCSAT            float64 `json:"avg_csat"`
+	CSATVal            string  `json:"csat_val"`
+}
+
+type DashboardAutomationTrendDaily struct {
+	DateDay      time.Time `json:"date_day"`
+	Label        string    `json:"label"`
+	TotalCases   int       `json:"total_cases"`
+	AICases      int       `json:"ai_cases"`
+	HandoffCases int       `json:"handoff_cases"`
+}
+
+type GeneralOverviewMetrics struct {
+	TotalCustomers   int    `json:"total_customers"`
+	TotalCases       int    `json:"total_cases"`
+	ResolvedCases    int    `json:"resolved_cases"`
+	OpenCases        int    `json:"open_cases"`
+	ResolutionRate   string `json:"resolution_rate"`
+}
+
+type AIPerformanceMetrics struct {
+	TotalCases       int     `json:"total_cases"`
+	AIResolvedCases  int     `json:"ai_resolved_cases"`
+	HandoffCases     int     `json:"handoff_cases"`
+	AIResolutionRate string  `json:"ai_resolution_rate"`
+	HandoffRate      string  `json:"handoff_rate"`
+	AvgAICSAT        float64 `json:"avg_ai_csat"`
+	AvgResponseTime  string  `json:"avg_response_time"`
+}
+
+type StaffPerformanceItem struct {
+	StaffUsername     string  `json:"staff_username"`
+	StaffFullName     string  `json:"staff_full_name"`
+	StaffRole         string  `json:"staff_role"`
+	TotalCasesHandled int     `json:"total_cases_handled"`
+	ResolvedCases     int     `json:"resolved_cases"`
+	AvgResponseTime   string  `json:"avg_response_time"`
+	SLABreachRate     string  `json:"sla_breach_rate"`
+	AvgCSAT           float64 `json:"avg_csat"`
+	Status            string  `json:"status"`
+}
+
+type CXMetricsReport struct {
+	TotalFeedbackCount    int     `json:"total_feedback_count"`
+	AvgCSATScore          float64 `json:"avg_csat_score"`
+	PositiveFeedbackCount int     `json:"positive_feedback_count"`
+	NegativeFeedbackCount int     `json:"negative_feedback_count"`
+	NSIIndex              string  `json:"nsi_index"`
+	FCRRate               string  `json:"fcr_rate"`
+}
+
+type HourlyOperationalItem struct {
+	HourOfDay     int `json:"hour_of_day"`
+	TotalMessages int `json:"total_messages"`
+}
+
+type IssueAnalysisItem struct {
+	CategoryName     string `json:"category_name"`
+	TotalRequests    int    `json:"total_requests"`
+	PercentageShare  string `json:"percentage_share"`
+	AIResolvedCount  int    `json:"ai_resolved_count"`
+	AIResolutionRate string `json:"ai_resolution_rate"`
+}
+
+type AILearningReportStats struct {
+	PendingCount       int    `json:"pending_count"`
+	ApprovedCount      int    `json:"approved_count"`
+	RejectedCount      int    `json:"rejected_count"`
+	TotalLearningItems int    `json:"total_learning_items"`
+	ApprovalRate       string `json:"approval_rate"`
+}
+

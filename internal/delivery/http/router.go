@@ -112,6 +112,29 @@ func SetupRouter(
 		// System Configuration
 		admin.GET("/api/admin/config", handler.HandleGetConfig)
 		admin.POST("/api/admin/config", handler.HandleSaveConfig)
+
+		// Partner Dashboard APIs
+		admin.GET("/api/admin/partner/dashboard", handler.HandleGetDashboardData)
+
+		// Partner Config APIs
+		admin.GET("/api/admin/partner/config/templates", handler.HandleListQuickTemplates)
+		admin.POST("/api/admin/partner/config/templates", handler.HandleCreateQuickTemplate)
+		admin.PUT("/api/admin/partner/config/templates/:id", handler.HandleUpdateQuickTemplate)
+		admin.DELETE("/api/admin/partner/config/templates/:id", handler.HandleDeleteQuickTemplate)
+		admin.POST("/api/admin/partner/config/prompt-history", handler.HandleSaveSystemPromptHistory)
+		admin.GET("/api/admin/partner/config/permissions", handler.HandleListRolePermissions)
+		admin.POST("/api/admin/partner/config/permissions", handler.HandleUpsertRolePermission)
+		admin.GET("/api/admin/partner/config/audit-logs", handler.HandleListAuditLogs)
+
+		// Partner Reports APIs (7 Sub-reports)
+		admin.GET("/api/admin/partner/reports/overview", handler.HandleGetGeneralOverviewReport)
+		admin.GET("/api/admin/partner/reports/ai-performance", handler.HandleGetAIPerformanceReport)
+		admin.GET("/api/admin/partner/reports/staff-performance", handler.HandleGetStaffPerformanceReport)
+		admin.GET("/api/admin/partner/reports/cx", handler.HandleGetCXReport)
+		admin.POST("/api/admin/partner/reports/csat", handler.HandleSubmitCSATFeedback)
+		admin.GET("/api/admin/partner/reports/operational", handler.HandleGetOperationalReport)
+		admin.GET("/api/admin/partner/reports/issue-analysis", handler.HandleGetIssueAnalysisReport)
+		admin.GET("/api/admin/partner/reports/ai-learning", handler.HandleGetAILearningReportStats)
 	}
 
 	return r

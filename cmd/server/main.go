@@ -44,6 +44,7 @@ func main() {
 	var settingRepo domain.SettingRepository
 	var voiceRepo domain.VoiceCallRepository
 	var analyticsRepo domain.AnalyticsRepository
+	var partnerRepo domain.PartnerRepository
 
 	usePostgres := cfg.DatabaseURL != "" && strings.HasPrefix(cfg.DatabaseURL, "postgres://")
 
@@ -77,6 +78,7 @@ func main() {
 			settingRepo = repoPostgres.NewSettingRepo(pgDB)
 			voiceRepo = repoPostgres.NewVoiceCallRepo(pgDB)
 			analyticsRepo = repoPostgres.NewAnalyticsRepo(pgDB)
+			partnerRepo = repoPostgres.NewPartnerRepo(pgDB)
 		}
 	}
 
@@ -98,6 +100,7 @@ func main() {
 		settingRepo = repoSqlite.NewSettingRepo(sqliteDB)
 		voiceRepo = repoSqlite.NewVoiceCallRepo(sqliteDB)
 		analyticsRepo = repoSqlite.NewAnalyticsRepo(sqliteDB)
+		partnerRepo = repoSqlite.NewPartnerRepo(sqliteDB)
 	}
 
 	// 2. Initialize Redis (Event Bus & State)
@@ -152,6 +155,7 @@ func main() {
 	learningUC := usecase.NewLearningUseCase(learningRepo, settingRepo, qdrantClient, embedder)
 	voiceUC := usecase.NewVoiceUseCase(voiceRepo, caseRepo, eventBus)
 	analyticsUC := usecase.NewAnalyticsUseCase(analyticsRepo, settingRepo)
+	partnerUC := usecase.NewPartnerUseCase(partnerRepo, settingRepo)
 
 	// 7. Initialize WebSocket Hub
 	hub := deliveryWS.NewHub()
@@ -181,6 +185,7 @@ func main() {
 		learningUC,
 		voiceUC,
 		analyticsUC,
+		partnerUC,
 		ragUC,
 		qdrantClient,
 		embedder,

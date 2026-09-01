@@ -28,6 +28,7 @@ type Handler struct {
 	learningUC  *usecase.LearningUseCase
 	voiceUC     *usecase.VoiceUseCase
 	analyticsUC *usecase.AnalyticsUseCase
+	partnerUC   *usecase.PartnerUseCase
 	ragUC       *usecase.RAGUseCase
 	vectorStore domain.VectorStore
 	embedder    domain.Embedder
@@ -42,6 +43,7 @@ func NewHandler(
 	learningUC *usecase.LearningUseCase,
 	voiceUC *usecase.VoiceUseCase,
 	analyticsUC *usecase.AnalyticsUseCase,
+	partnerUC *usecase.PartnerUseCase,
 	ragUC *usecase.RAGUseCase,
 	vectorStore domain.VectorStore,
 	embedder domain.Embedder,
@@ -55,6 +57,7 @@ func NewHandler(
 		learningUC:  learningUC,
 		voiceUC:     voiceUC,
 		analyticsUC: analyticsUC,
+		partnerUC:   partnerUC,
 		ragUC:       ragUC,
 		vectorStore: vectorStore,
 		embedder:    embedder,
