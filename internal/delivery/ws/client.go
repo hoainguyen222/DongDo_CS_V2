@@ -3,8 +3,10 @@ package ws
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -21,12 +23,44 @@ const (
 	maxMessageSize = 65536
 )
 
-var upgrader = websocket.Upgrader{
+// defaultUpgrader is used by dual-mode WS handlers with proper origin checks.
+var defaultUpgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
-		return true // Allow all CORS origins
+		return false // Deny by default; handlers set per-endpoint whitelist
 	},
+}
+
+// WSCheckOrigin returns a CheckOrigin func that only allows configured origins.
+func WSCheckOrigin(allowedOrigins []string) func(r *http.Request) bool {
+	return func(r *http.Request) bool {
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return true // non-browser clients (curl, wscat, mobile)
+		}
+		for _, allowed := range allowedOrigins {
+			if allowed == origin {
+				return true
+			}
+		}
+		log.Printf("⚠️ WS origin rejected: %s (allowed: %v)", origin, allowedOrigins)
+		return false
+	}
+}
+
+// StaffUpgrader creates an Upgrader for staff WS with origin whitelist.
+func StaffUpgrader(allowedOrigins []string) websocket.Upgrader {
+	u := defaultUpgrader
+	u.CheckOrigin = WSCheckOrigin(allowedOrigins)
+	return u
+}
+
+// CustomerUpgrader creates an Upgrader for customer WS with origin whitelist.
+func CustomerUpgrader(allowedOrigins []string) websocket.Upgrader {
+	u := defaultUpgrader
+	u.CheckOrigin = WSCheckOrigin(allowedOrigins)
+	return u
 }
 
 // Client is a middleman between the websocket connection and the hub.
@@ -37,10 +71,40 @@ type Client struct {
 	sessionID string
 	userID    string
 	userRole  string
+	isStaff   bool // true = staff (JWT), false = customer (session)
+
+	// Dependencies
 	chatUC    *usecase.ChatUseCase
 	voiceUC   *usecase.VoiceUseCase
 	stateMgr  domain.StateManager
 	eventBus  domain.EventBus
+	authUC    *usecase.AuthUseCase   // nil for customers
+	sessionUC *usecase.SessionUseCase // nil for staff
+}
+
+// newClient creates a Client with all dependencies wired.
+func newClient(
+	hub *Hub, conn *websocket.Conn, sessionID, userID, userRole string,
+	isStaff bool,
+	chatUC *usecase.ChatUseCase, voiceUC *usecase.VoiceUseCase,
+	stateMgr domain.StateManager, eventBus domain.EventBus,
+	authUC *usecase.AuthUseCase, sessionUC *usecase.SessionUseCase,
+) *Client {
+	return &Client{
+		hub:       hub,
+		conn:      conn,
+		send:      make(chan *domain.WSEvent, 256),
+		sessionID: sessionID,
+		userID:    userID,
+		userRole:  userRole,
+		isStaff:   isStaff,
+		chatUC:    chatUC,
+		voiceUC:   voiceUC,
+		stateMgr:  stateMgr,
+		eventBus:  eventBus,
+		authUC:    authUC,
+		sessionUC: sessionUC,
+	}
 }
 
 // ReadPump pumps messages from the websocket connection to the hub.
@@ -70,10 +134,10 @@ func (c *Client) ReadPump() {
 
 		var incoming struct {
 			Type        domain.WSEventType `json:"type"`
-			SessionID   string             `json:"session_id,omitempty"`
-			Content     string             `json:"content"`
-			ClientMsgID *string            `json:"client_msg_id,omitempty"`
-			Payload     interface{}        `json:"payload,omitempty"`
+			SessionID   string            `json:"session_id,omitempty"`
+			Content     string            `json:"content"`
+			ClientMsgID *string           `json:"client_msg_id,omitempty"`
+			Payload     interface{}       `json:"payload,omitempty"`
 		}
 
 		if err := json.Unmarshal(message, &incoming); err != nil {
@@ -138,7 +202,6 @@ func (c *Client) ReadPump() {
 				SenderID:  c.userID,
 				Timestamp: time.Now(),
 			}, c.userID)
-			// Also notify admin_inbox if a guest is calling
 			if callerType == domain.CallerGuest {
 				_ = c.eventBus.PublishWS(ctx, "admin_inbox", domain.WSEventCallRing, map[string]interface{}{
 					"session_id":  targetSession,
@@ -239,7 +302,179 @@ func (c *Client) WritePump() {
 	}
 }
 
-// ServeWS handles websocket requests from the peer.
+// ─── Dual-mode WebSocket handlers ────────────────────────────────────────────
+
+// ServeStaffWS handles WebSocket connections for staff (admin/cskh) receiving messages.
+// Auth: JWT (cookie `access_token` or query `?token=`).
+// Staff always connects to the `admin_inbox` session to receive all guest messages.
+// Allowed roles: `admin`, `cskh`.
+//
+//	GET /ws/staff
+func ServeStaffWS(
+	hub *Hub,
+	chatUC *usecase.ChatUseCase,
+	voiceUC *usecase.VoiceUseCase,
+	stateMgr domain.StateManager,
+	eventBus domain.EventBus,
+	authUC *usecase.AuthUseCase,
+	allowedOrigins []string,
+	adminInboxSession string,
+) gin.HandlerFunc {
+	upgrader := StaffUpgrader(allowedOrigins)
+
+	return func(c *gin.Context) {
+		// 1. Extract JWT from cookie or query param
+		var tokenString string
+		if cookie, err := c.Cookie("access_token"); err == nil && cookie != "" {
+			tokenString = cookie
+		} else {
+			tokenString = c.Query("token")
+		}
+		if tokenString == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "missing JWT token",
+				"code":  "WS_TOKEN_REQUIRED",
+			})
+			return
+		}
+
+		// 2. Verify JWT
+		user, err := authUC.VerifyStaffToken(c.Request.Context(), tokenString)
+		if err != nil || user == nil {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "invalid or expired JWT",
+				"code":  "WS_TOKEN_INVALID",
+			})
+			return
+		}
+
+		// 3. Role must be admin or cskh
+		role := strings.ToLower(string(user.Role))
+		if role != "admin" && role != "cskh" {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "staff role required (admin or cskh)",
+				"code":  "WS_ROLE_FORBIDDEN",
+			})
+			return
+		}
+
+		// 4. Upgrade to WebSocket
+		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+		if err != nil {
+			log.Printf("WS staff upgrade error: %v", err)
+			return
+		}
+
+		// 5. Register client — always on admin_inbox
+		client := newClient(
+			hub, conn, adminInboxSession,
+			user.Username, string(user.Role), true,
+			chatUC, voiceUC, stateMgr, eventBus,
+			authUC, nil, // sessionUC nil for staff
+		)
+
+		hub.register <- client
+		go client.WritePump()
+		go client.ReadPump()
+
+		log.Printf("🔌 Staff WS connected: %s (role=%s, session=%s)", user.Username, string(user.Role), adminInboxSession)
+	}
+}
+
+// ServeCustomerWS handles WebSocket connections for customers (guests).
+// Auth: session_id from query `?session=` validated against chat_sessions DB.
+// Customer connects to their own session to receive AI replies and staff messages.
+//
+//	GET /ws/customer
+func ServeCustomerWS(
+	hub *Hub,
+	chatUC *usecase.ChatUseCase,
+	voiceUC *usecase.VoiceUseCase,
+	stateMgr domain.StateManager,
+	eventBus domain.EventBus,
+	sessionUC *usecase.SessionUseCase,
+	allowedOrigins []string,
+	adminInboxSession string,
+) gin.HandlerFunc {
+	upgrader := CustomerUpgrader(allowedOrigins)
+
+	return func(c *gin.Context) {
+		// 1. Get session_id from query param (NOT from cookie — must be explicit)
+		sessionID := c.Query("session")
+		if sessionID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "missing session parameter (?session=...)",
+				"code":  "WS_SESSION_REQUIRED",
+			})
+			return
+		}
+
+		// 2. Customer cannot access admin_inbox
+		if sessionID == adminInboxSession {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "access denied",
+				"code":  "WS_ADMIN_ACCESS_DENIED",
+			})
+			return
+		}
+
+		// 3. Validate session in DB (exists, active, not expired)
+		session, err := sessionUC.ValidateSession(c.Request.Context(), sessionID)
+		if err != nil {
+			if errors.Is(err, usecase.ErrSessionExpired) {
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"error": "session expired",
+					"code":  "WS_SESSION_EXPIRED",
+				})
+				return
+			}
+			if errors.Is(err, usecase.ErrSessionNotFound) || errors.Is(err, usecase.ErrSessionInactive) {
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"error": "invalid session",
+					"code":  "WS_SESSION_INVALID",
+				})
+				return
+			}
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "session validation failed",
+				"code":  "WS_SESSION_ERROR",
+			})
+			return
+		}
+
+		// 4. Upgrade to WebSocket
+		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+		if err != nil {
+			log.Printf("WS customer upgrade error: %v", err)
+			return
+		}
+
+		// 5. Register client — on their own session
+		displayName := session.DisplayName
+		if displayName == "" {
+			displayName = "Khách"
+		}
+
+		client := newClient(
+			hub, conn, sessionID,
+			sessionID, "guest", false, // userID=sessionID, role=guest, isStaff=false
+			chatUC, voiceUC, stateMgr, eventBus,
+			nil, sessionUC, // authUC nil for customer
+		)
+		_ = displayName // used in display but stored in session if needed
+
+		hub.register <- client
+		go client.WritePump()
+		go client.ReadPump()
+
+		log.Printf("🔌 Customer WS connected: session=%s (guest)", sessionID)
+	}
+}
+
+// ─── Legacy ServeWS — DEPRECATED ─────────────────────────────────────────────
+// ServeWS is kept for backward compatibility with existing integrations.
+// New code should use ServeStaffWS and ServeCustomerWS.
+// This handler trusts role and session_id from query params — a security risk.
 func ServeWS(
 	hub *Hub,
 	chatUC *usecase.ChatUseCase,
@@ -263,7 +498,7 @@ func ServeWS(
 			userRole = "guest"
 		}
 
-		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+		conn, err := defaultUpgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
 			log.Printf("WS upgrade error: %v", err)
 			return
@@ -276,14 +511,14 @@ func ServeWS(
 			sessionID: sessionID,
 			userID:    userID,
 			userRole:  userRole,
+			isStaff:   false,
 			chatUC:    chatUC,
 			voiceUC:   voiceUC,
 			stateMgr:  stateMgr,
 			eventBus:  eventBus,
 		}
 
-		client.hub.register <- client
-
+		hub.register <- client
 		go client.WritePump()
 		go client.ReadPump()
 	}

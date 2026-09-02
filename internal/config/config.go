@@ -1,9 +1,13 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/hoainguyen222/DongDo_CS_V2/pkg/security"
 )
 
 // Config holds all application configuration loaded from environment variables.
@@ -44,8 +48,19 @@ type Config struct {
 	DocumentsDir string
 
 	// WebSocket
-	WSPingInterval  int // seconds
-	WSWriteTimeout  int // seconds
+	WSPingInterval  int      // seconds
+	WSWriteTimeout  int      // seconds
+	WSAllowedOrigins []string // whitelist for WS origin checks
+	WSAdminInboxSession string // session ID for staff admin inbox (default "admin_inbox")
+
+	// CORS
+	CORSAllowedOrigins []string // whitelist for HTTP CORS headers
+
+	// Rate Limiting (requests per minute per IP)
+	RateLimitLoginRequestsPerMinute int // default 5
+	RateLimitChatRequestsPerMinute  int // default 30
+	RateLimitAdminRequestsPerMinute int // default 100
+	RateLimitUploadRequestsPerMinute int // default 10
 
 	// Workers
 	DBBatchSize     int
@@ -58,6 +73,11 @@ type Config struct {
 
 	// System Prompt
 	SystemPrompt string
+
+	// JWT (Staff auth only)
+	JWTManager   *security.StaffJWTManager
+	JWTAccessTTL  time.Duration // default 15 minutes
+	JWTRefreshTTL time.Duration // default 7 days
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -102,6 +122,19 @@ func Load() *Config {
 		WSPingInterval: getEnvInt("WS_PING_INTERVAL", 30),
 		WSWriteTimeout: getEnvInt("WS_WRITE_TIMEOUT", 10),
 
+		// WebSocket security
+		WSAllowedOrigins:    strings.Split(getEnv("WS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001"), ","),
+		WSAdminInboxSession: getEnv("WS_ADMIN_INBOX_SESSION", "admin_inbox"),
+
+		// CORS
+		CORSAllowedOrigins: strings.Split(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001"), ","),
+
+		// Rate Limiting (requests per minute per IP)
+		RateLimitLoginRequestsPerMinute:  getEnvInt("RATE_LIMIT_LOGIN", 5),
+		RateLimitChatRequestsPerMinute:   getEnvInt("RATE_LIMIT_CHAT", 30),
+		RateLimitAdminRequestsPerMinute:  getEnvInt("RATE_LIMIT_ADMIN", 100),
+		RateLimitUploadRequestsPerMinute: getEnvInt("RATE_LIMIT_UPLOAD", 10),
+
 		// Workers
 		DBBatchSize:     getEnvInt("DB_BATCH_SIZE", 50),
 		DBBatchInterval: getEnvInt("DB_BATCH_INTERVAL_MS", 2000),
@@ -113,7 +146,27 @@ func Load() *Config {
 
 		// System Prompt
 		SystemPrompt: getEnv("SYSTEM_PROMPT", defaultSystemPrompt),
+
+		// JWT TTL defaults (manager initialized separately via LoadJWT)
+		JWTAccessTTL:  time.Duration(getEnvInt("JWT_ACCESS_TTL_MINUTES", 15)) * time.Minute,
+		JWTRefreshTTL: time.Duration(getEnvInt("JWT_REFRESH_TTL_HOURS", 168)) * time.Hour,
 	}
+}
+
+// LoadJWT initializes the JWT manager from JWT_SECRET env var.
+// Call this after Load() if you need JWT auth.
+// Returns error if JWT_SECRET is missing or too short (< 32 chars).
+func (cfg *Config) LoadJWT() error {
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		return fmt.Errorf("JWT_SECRET environment variable is required for staff auth")
+	}
+	manager, err := security.NewStaffJWTManager(jwtSecret, cfg.JWTAccessTTL, cfg.JWTRefreshTTL)
+	if err != nil {
+		return fmt.Errorf("JWT config: %w", err)
+	}
+	cfg.JWTManager = manager
+	return nil
 }
 
 func getEnv(key, fallback string) string {

@@ -137,6 +137,30 @@ func (db *DB) initSchema() error {
 		ended_at TEXT
 	);
 
+	CREATE TABLE IF NOT EXISTS revoked_tokens (
+		jti        TEXT PRIMARY KEY,
+		user_id    TEXT NOT NULL,
+		revoked_at TEXT NOT NULL,
+		expires_at TEXT NOT NULL,
+		reason     TEXT DEFAULT ''
+	);
+
+	CREATE TABLE IF NOT EXISTS chat_sessions (
+		session_id     TEXT PRIMARY KEY,
+		guest_id       TEXT,
+		display_name   TEXT NOT NULL DEFAULT 'Khách',
+		created_at     TEXT NOT NULL,
+		last_active_at TEXT NOT NULL,
+		expires_at     TEXT NOT NULL,
+		ip_address     TEXT DEFAULT '',
+		user_agent     TEXT DEFAULT '',
+		is_active      INTEGER NOT NULL DEFAULT 1
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_chat_sessions_expires ON chat_sessions(expires_at);
+	CREATE INDEX IF NOT EXISTS idx_chat_sessions_guest   ON chat_sessions(guest_id);
+	CREATE INDEX IF NOT EXISTS idx_chat_sessions_active  ON chat_sessions(last_active_at);
+
 	INSERT OR IGNORE INTO system_settings (setting_key, setting_value) VALUES
 		('auto_learning_enabled', '0'),
 		('llm_model', 'claude-haiku-4-5-20251001'),

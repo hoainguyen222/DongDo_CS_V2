@@ -7,9 +7,13 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hoainguyen222/DongDo_CS_V2/internal/delivery/http/middleware"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/delivery/ws"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/usecase"
+	infraRedis "github.com/hoainguyen222/DongDo_CS_V2/internal/infra/redis"
+	"github.com/hoainguyen222/DongDo_CS_V2/pkg/security"
+	"github.com/redis/go-redis/v9"
 )
 
 // SetupRouter initializes Gin engine with middlewares and routes.
@@ -21,13 +25,21 @@ func SetupRouter(
 	stateMgr domain.StateManager,
 	eventBus domain.EventBus,
 	authUC *usecase.AuthUseCase,
+	sessionUC *usecase.SessionUseCase,
+	corsAllowedOrigins []string,
+	wsAllowedOrigins []string,
+	wsAdminInboxSession string,
+	// Rate limiting
+	redisClient *infraRedis.Client,
+	rateLimitLogin, rateLimitChat, rateLimitAdmin, rateLimitUpload int,
 ) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 
 	r.Use(gin.Recovery())
-	r.Use(gin.Logger())
-	r.Use(CORSMiddleware())
+	r.Use(middleware.SecurityHeaders())
+	r.Use(middleware.RequestID())
+	r.Use(CORSMiddleware(corsAllowedOrigins))
 
 	// Health check
 	r.GET("/health", func(c *gin.Context) {
@@ -37,40 +49,128 @@ func SetupRouter(
 		})
 	})
 
-	// Public Guest & Chat Endpoints
-	r.POST("/guest/register", handler.HandleGuestRegister)
-	r.POST("/chat", handler.HandleChat)
-	r.GET("/history/:session_id", handler.HandleGetHistory)
+	// ─── WebSocket Endpoints (dual-mode, placed early) ───────────────
+	// Staff WS: JWT auth → admin_inbox
+	r.GET("/ws/staff", ws.ServeStaffWS(
+		hub, chatUC, voiceUC, stateMgr, eventBus,
+		authUC, wsAllowedOrigins, wsAdminInboxSession,
+	))
 
-	// Auth Endpoints
-	r.POST("/auth/login", handler.HandleLogin)
+	// Customer WS: session auth via ?session= query param
+	r.GET("/ws/customer", ws.ServeCustomerWS(
+		hub, chatUC, voiceUC, stateMgr, eventBus,
+		sessionUC, wsAllowedOrigins, wsAdminInboxSession,
+	))
 
-	// WebSocket Endpoint
+	// Legacy WS endpoint (DEPRECATED — trusts query params, security risk)
 	r.GET("/ws", ws.ServeWS(hub, chatUC, voiceUC, stateMgr, eventBus))
 
-	// Voice Call Endpoints
-	r.POST("/api/voice/initiate", handler.HandleInitiateCall)
-	r.POST("/api/voice/end", handler.HandleEndCall)
-	r.POST("/api/voice/upload-recording", handler.HandleUploadRecording)
-	r.GET("/static/recordings/:filename", func(c *gin.Context) {
-		filename := filepath.Base(c.Param("filename"))
-		recordingsDir := filepath.Join(handler.docsDir, "..", "recordings")
-		filePath := filepath.Join(recordingsDir, filename)
+	// ─── Rate Limiters ─────────────────────────────────────────────
+	// Nil-safe: if Redis not configured, limiters fall back to allow-all
+	var redis *redis.Client
+	if redisClient != nil {
+		redis = redisClient.RDB()
+	}
 
-		if _, err := os.Stat(filePath); os.IsNotExist(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "File ghi âm không tồn tại"})
-			return
-		}
-
-		c.Header("Content-Type", "audio/webm")
-		c.Header("Accept-Ranges", "bytes")
-		c.Header("Cache-Control", "public, max-age=31536000")
-		c.File(filePath)
+	// Login: strict — 5 req/min per IP (no user scoping needed here)
+	loginLimiter := middleware.RateLimitByIPSimple(redis, middleware.RateLimiterConfig{
+		RequestsPerMinute: rateLimitLogin,
+		KeyPrefix:         "rl:login",
 	})
 
-	// Protected CSKH & Admin API Group
+	// Chat: medium — 30 req/min per IP (auth required)
+	chatLimiter := middleware.RateLimitByIP(redis, middleware.RateLimiterConfig{
+		RequestsPerMinute: rateLimitChat,
+		KeyPrefix:         "rl:chat",
+	})
+
+	// Upload: low — 10 req/min per IP (admin only)
+	uploadLimiter := middleware.RateLimitByIP(redis, middleware.RateLimiterConfig{
+		RequestsPerMinute: rateLimitUpload,
+		KeyPrefix:         "rl:upload",
+	})
+
+	// ─── Customer (guest) routes — SessionAuth ─────────────────────
+	// /chat/guest-session and /chat/session/logout do NOT require auth
+	// (you can't log out without first having a session)
+	r.POST("/chat/guest-session", handler.HandleGuestSession)
+	r.POST("/chat/session/logout", handler.HandleLogoutSession)
+	r.PATCH("/chat/session", handler.HandleUpdateSession)
+
+	// Customer-facing chat endpoints (require valid guest_session cookie + rate limit)
+	customerGroup := r.Group("/chat")
+	customerGroup.Use(middleware.SessionAuth(sessionUC))
+	customerGroup.Use(chatLimiter)
+	{
+		customerGroup.POST("", handler.HandleChat)
+	}
+
+	// History endpoint also requires session auth
+	r.GET("/history/:session_id", middleware.SessionAuth(sessionUC), handler.HandleGetHistory)
+
+	// Legacy guest register (kept for backward compat — creates guest without session)
+	r.POST("/guest/register", handler.HandleGuestRegister)
+
+	// ─── Auth Endpoints (with login rate limit) ────────────────────
+	// Legacy (DEPRECATED — returns token in JSON body)
+	r.POST("/auth/login", loginLimiter, handler.HandleLogin)
+
+	// Staff auth (JWT via httpOnly cookie)
+	r.POST("/auth/staff/login", loginLimiter, handler.HandleStaffLogin)
+	r.POST("/auth/staff/refresh", handler.HandleRefreshToken)
+	r.POST("/auth/staff/logout", handler.HandleLogout)
+	r.GET("/auth/staff/me", JWTAuthMiddleware(authUC), handler.HandleGetMe)
+
+	// ─── Voice Call Endpoints (with upload rate limit) ─────────────
+	r.POST("/api/voice/initiate", handler.HandleInitiateCall)
+	r.POST("/api/voice/end", handler.HandleEndCall)
+	r.POST("/api/voice/upload-recording", JWTAuthMiddleware(authUC), uploadLimiter, handler.HandleUploadRecording)
+
+	// ─── Static Recordings (SECURE — Task 07) ──────────────────────
+	// Auth required + path traversal protection
+	r.GET("/static/recordings/:filename",
+		JWTAuthMiddleware(authUC),
+		func(c *gin.Context) {
+			// 1. Sanitize filename
+			raw := c.Param("filename")
+			safeName, err := security.ValidateAndSanitizeFilename(raw)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid filename"})
+				return
+			}
+
+			// 2. Build path + prefix check
+			recordingsDir := filepath.Join(handler.docsDir, "..", "recordings")
+			absDir, _ := filepath.Abs(recordingsDir)
+			filePath := filepath.Join(absDir, safeName)
+
+			if err := security.CheckPrefix(absDir, filePath); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "access denied"})
+				return
+			}
+
+			// 3. Check file exists
+			if _, err := os.Stat(filePath); os.IsNotExist(err) {
+				c.JSON(http.StatusNotFound, gin.H{"error": "File ghi âm không tồn tại"})
+				return
+			}
+
+			// 4. Serve
+			c.Header("Content-Type", "audio/webm")
+			c.Header("Accept-Ranges", "bytes")
+			c.Header("Cache-Control", "public, max-age=31536000")
+			c.File(filePath)
+		},
+	)
+
+	// ─── Protected CSKH & Admin API Group ─────────────────────────
+	// (uses JWT via httpOnly cookie + admin rate limit)
 	admin := r.Group("/")
-	admin.Use(AuthMiddleware(authUC))
+	admin.Use(JWTAuthMiddleware(authUC))
+	admin.Use(middleware.RateLimitByIP(redis, middleware.RateLimiterConfig{
+		RequestsPerMinute: rateLimitAdmin,
+		KeyPrefix:         "rl:admin",
+	}))
 	{
 		admin.GET("/auth/me", handler.HandleGetMe)
 		admin.POST("/auth/logout", handler.HandleLogout)
@@ -140,15 +240,34 @@ func SetupRouter(
 	return r
 }
 
-func CORSMiddleware() gin.HandlerFunc {
+func CORSMiddleware(allowedOrigins []string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-Auth-Token")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
+		origin := c.Request.Header.Get("Origin")
+
+		// Check if origin is in whitelist
+		allowed := false
+		for _, o := range allowedOrigins {
+			if o == origin {
+				allowed = true
+				break
+			}
+		}
+
+		if allowed {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+			c.Writer.Header().Set("Vary", "Origin")
+			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+			c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
+			c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization, X-Request-ID, X-Auth-Token")
+			c.Writer.Header().Set("Access-Control-Max-Age", "86400") // 24h preflight cache
+		}
 
 		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(http.StatusNoContent)
+			if allowed {
+				c.AbortWithStatus(http.StatusNoContent)
+			} else {
+				c.AbortWithStatus(http.StatusForbidden)
+			}
 			return
 		}
 
@@ -156,15 +275,21 @@ func CORSMiddleware() gin.HandlerFunc {
 	}
 }
 
-func AuthMiddleware(authUC *usecase.AuthUseCase) gin.HandlerFunc {
+// JWTAuthMiddleware verifies JWT access tokens for staff routes.
+// Supports both httpOnly cookie and Authorization: Bearer header.
+func JWTAuthMiddleware(authUC *usecase.AuthUseCase) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		token := ""
+		var token string
 
-		if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
-			token = strings.TrimPrefix(authHeader, "Bearer ")
-		} else if xToken := c.GetHeader("X-Auth-Token"); xToken != "" {
-			token = xToken
+		// Try cookie first (browser)
+		if cookie, err := c.Cookie("access_token"); err == nil && cookie != "" {
+			token = cookie
+		} else {
+			// Fallback: Authorization: Bearer header (for API clients / Postman)
+			authHeader := c.GetHeader("Authorization")
+			if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+				token = strings.TrimPrefix(authHeader, "Bearer ")
+			}
 		}
 
 		if token == "" {
@@ -172,7 +297,7 @@ func AuthMiddleware(authUC *usecase.AuthUseCase) gin.HandlerFunc {
 			return
 		}
 
-		user, err := authUC.VerifyToken(c.Request.Context(), token)
+		user, err := authUC.VerifyStaffToken(c.Request.Context(), token)
 		if err != nil || user == nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"detail": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."})
 			return

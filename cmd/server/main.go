@@ -3,8 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -21,18 +22,29 @@ import (
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/usecase"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/worker"
 	"github.com/hoainguyen222/DongDo_CS_V2/pkg/graceful"
+	"github.com/hoainguyen222/DongDo_CS_V2/pkg/logging"
 )
 
 func main() {
-	log.Println("============================================================")
-	log.Println("🚀 Khởi động Đông Đô CS Core V2 (Golang Clean Architecture)")
-	log.Println("============================================================")
-
 	cfg := config.Load()
+
+	// Initialize structured JSON logger
+	logging.InitLogger(os.Getenv("LOG_LEVEL"))
+
+	slog.Info("starting DongDo CS V2")
+	slog.Info("server build", "version", "v2.0", "go", "1.25")
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	sm := graceful.NewShutdownManager(15 * time.Second)
+
+	// 0. Initialize JWT manager (staff auth)
+	if err := cfg.LoadJWT(); err != nil {
+		slog.Error("jwt initialization failed", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	slog.Info("jwt manager initialized for staff auth")
 
 	// 1. Initialize Database (PostgreSQL with auto SQLite fallback)
 	var userRepo domain.UserRepository
@@ -45,11 +57,12 @@ func main() {
 	var voiceRepo domain.VoiceCallRepository
 	var analyticsRepo domain.AnalyticsRepository
 	var partnerRepo domain.PartnerRepository
+	var revokedRepo domain.RevokedTokenRepository
+	var sessionStoreRepo domain.ChatSessionRepository
 
 	usePostgres := cfg.DatabaseURL != "" && strings.HasPrefix(cfg.DatabaseURL, "postgres://")
 
 	if usePostgres {
-		log.Printf("🐘 Connecting to PostgreSQL: %s", cfg.DatabaseURL)
 		var pgDB *repoPostgres.DB
 		var err error
 		for attempt := 1; attempt <= 15; attempt++ {
@@ -57,14 +70,20 @@ func main() {
 			if err == nil {
 				break
 			}
-			log.Printf("⏳ Waiting for PostgreSQL (attempt %d/15): %v", attempt, err)
+			slog.Warn("postgresql connection attempt failed",
+				slog.Int("attempt", attempt),
+				slog.String("error", err.Error()),
+			)
 			time.Sleep(1 * time.Second)
 		}
 
 		if err != nil {
-			log.Printf("⚠️ PostgreSQL connection failed (%v). Falling back to SQLite.", err)
+			slog.Warn("postgresql connection failed, falling back to SQLite",
+				slog.String("error", err.Error()),
+			)
 			usePostgres = false
 		} else {
+			slog.Info("connected to PostgreSQL")
 			sm.Register("PostgreSQL Connection Pool", func(ctx context.Context) error {
 				pgDB.Close()
 				return nil
@@ -79,14 +98,17 @@ func main() {
 			voiceRepo = repoPostgres.NewVoiceCallRepo(pgDB)
 			analyticsRepo = repoPostgres.NewAnalyticsRepo(pgDB)
 			partnerRepo = repoPostgres.NewPartnerRepo(pgDB)
+			revokedRepo = repoPostgres.NewRevokedTokenRepo(pgDB)
+			sessionStoreRepo = repoPostgres.NewChatSessionRepo(pgDB)
 		}
 	}
 
 	if !usePostgres {
-		log.Println("📦 Khởi tạo cơ sở dữ liệu SQLite cục bộ (chat_history.db)...")
+		slog.Info("using SQLite database (chat_history.db)")
 		sqliteDB, err := repoSqlite.NewDB("chat_history.db")
 		if err != nil {
-			log.Fatalf("❌ Failed to initialize SQLite: %v", err)
+			slog.Error("sqlite initialization failed", slog.String("error", err.Error()))
+			os.Exit(1)
 		}
 		sm.Register("SQLite Database", func(ctx context.Context) error {
 			return sqliteDB.Close()
@@ -101,6 +123,8 @@ func main() {
 		voiceRepo = repoSqlite.NewVoiceCallRepo(sqliteDB)
 		analyticsRepo = repoSqlite.NewAnalyticsRepo(sqliteDB)
 		partnerRepo = repoSqlite.NewPartnerRepo(sqliteDB)
+		revokedRepo = repoSqlite.NewRevokedTokenRepo(sqliteDB)
+		sessionStoreRepo = repoSqlite.NewChatSessionRepo(sqliteDB)
 	}
 
 	// 2. Initialize Redis (Event Bus & State)
@@ -116,13 +140,19 @@ func main() {
 			if err == nil {
 				break
 			}
-			log.Printf("⏳ Waiting for Redis (attempt %d/15): %v", attempt, err)
+			slog.Warn("redis connection attempt failed",
+				slog.Int("attempt", attempt),
+				slog.String("error", err.Error()),
+			)
 			time.Sleep(1 * time.Second)
 		}
 
 		if err != nil {
-			log.Printf("⚠️ Redis connection failed (%v). Running with NoOp fallback.", err)
+			slog.Warn("redis connection failed, using NoOp fallback",
+				slog.String("error", err.Error()),
+			)
 		} else {
+			slog.Info("connected to Redis")
 			streamEventBus = infraRedis.NewEventBus(redisClient)
 			eventBus = streamEventBus
 			stateMgr = infraRedis.NewStateManager(redisClient)
@@ -136,7 +166,9 @@ func main() {
 	var qdrantClient *infraQdrant.Client
 	qdrantClient, err := infraQdrant.NewClient(ctx, cfg.QdrantHost, cfg.QdrantPort, 384)
 	if err != nil {
-		log.Printf("⚠️ Qdrant connection notice: %v (RAG will run in fallback mode until Qdrant is up)", err)
+		slog.Warn("qdrant connection failed, RAG will use fallback mode",
+			slog.String("error", err.Error()),
+		)
 	} else {
 		sm.Register("Qdrant gRPC Connection", func(ctx context.Context) error {
 			return qdrantClient.Close()
@@ -148,7 +180,8 @@ func main() {
 	claudeClient := infraClaude.NewClient(cfg.AnthropicAPIKey, cfg.AnthropicWorkspaceID, cfg.OpenAIAPIKey, cfg.GeminiAPIKey, cfg.LLMModel, cfg.LLMTemperature)
 
 	// 5. Initialize Use Cases
-	authUC := usecase.NewAuthUseCase(userRepo, sessionRepo, guestRepo)
+	authUC := usecase.NewAuthUseCase(userRepo, sessionRepo, guestRepo, cfg.JWTManager, revokedRepo)
+	sessionUC := usecase.NewSessionUseCase(sessionStoreRepo)
 	ragUC := usecase.NewRAGUseCase(qdrantClient, embedder, claudeClient, messageRepo, settingRepo, cfg.SystemPrompt, cfg.MemoryWindow, cfg.RetrieverK)
 	caseUC := usecase.NewCaseUseCase(guestRepo, caseRepo, messageRepo, learningRepo, settingRepo, qdrantClient, embedder, eventBus)
 	chatUC := usecase.NewChatUseCase(messageRepo, caseRepo, eventBus, stateMgr)
@@ -180,6 +213,7 @@ func main() {
 	// 9. Initialize HTTP Router
 	handler := deliveryHTTP.NewHandler(
 		authUC,
+		sessionUC,
 		chatUC,
 		caseUC,
 		learningUC,
@@ -193,7 +227,19 @@ func main() {
 		eventBus,
 	)
 
-	router := deliveryHTTP.SetupRouter(handler, hub, chatUC, voiceUC, stateMgr, eventBus, authUC)
+	router := deliveryHTTP.SetupRouter(
+		handler, hub, chatUC, voiceUC, stateMgr, eventBus,
+		authUC, sessionUC,
+		cfg.CORSAllowedOrigins,
+		cfg.WSAllowedOrigins,
+		cfg.WSAdminInboxSession,
+		// Rate limiting — pass nil-safe redis client
+		redisClient,
+		cfg.RateLimitLoginRequestsPerMinute,
+		cfg.RateLimitChatRequestsPerMinute,
+		cfg.RateLimitAdminRequestsPerMinute,
+		cfg.RateLimitUploadRequestsPerMinute,
+	)
 
 	// 10. Start HTTP Server
 	serverAddr := fmt.Sprintf("%s:%s", cfg.ServerHost, cfg.ServerPort)
@@ -210,9 +256,13 @@ func main() {
 	})
 
 	go func() {
-		log.Printf("🌐 Server listening on http://%s", serverAddr)
+		slog.Info("server listening",
+			slog.String("addr", serverAddr),
+			slog.String("engine", "Golang Clean Architecture (Gin)"),
+		)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("❌ HTTP server error: %v", err)
+			slog.Error("http server error", slog.String("error", err.Error()))
+			os.Exit(1)
 		}
 	}()
 

@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"context"
 	"time"
 
 	"github.com/google/uuid"
@@ -386,4 +387,65 @@ type AILearningReportStats struct {
 	TotalLearningItems int    `json:"total_learning_items"`
 	ApprovalRate       string `json:"approval_rate"`
 }
+
+// ============================================================
+// Revoked Token (Staff JWT blacklist)
+// ============================================================
+
+type RevokedToken struct {
+	JTI       string    `json:"jti" db:"jti"`
+	UserID    string    `json:"user_id" db:"user_id"`
+	RevokedAt time.Time `json:"revoked_at" db:"revoked_at"`
+	ExpiresAt time.Time `json:"expires_at" db:"expires_at"`
+	Reason    string    `json:"reason" db:"reason"`
+}
+
+// RevokedTokenRepository defines DB operations for JWT revocation.
+type RevokedTokenRepository interface {
+	// IsRevoked checks if a jti is in the revocation list.
+	IsRevoked(ctx context.Context, jti string) (bool, error)
+	// Revoke adds a jti to the revocation list.
+	Revoke(ctx context.Context, jti, userID string, expiresAt time.Time, reason string) error
+	// Cleanup removes expired entries.
+	Cleanup(ctx context.Context) (int64, error)
+}
+
+// ============================================================
+// Chat Session (Customer / Guest auth — separate from staff JWT)
+// ============================================================
+
+type ChatSession struct {
+	SessionID    string    `json:"sessionId" db:"session_id"`
+	GuestID      *string   `json:"guestId,omitempty" db:"guest_id"`
+	DisplayName  string    `json:"displayName" db:"display_name"`
+	CreatedAt    time.Time `json:"createdAt" db:"created_at"`
+	LastActiveAt time.Time `json:"lastActiveAt" db:"last_active_at"`
+	ExpiresAt    time.Time `json:"expiresAt" db:"expires_at"`
+	IPAddress    string    `json:"-" db:"ip_address"`
+	UserAgent    string    `json:"-" db:"user_agent"`
+	IsActive     bool      `json:"isActive" db:"is_active"`
+}
+
+// ChatSessionRepository defines DB operations for customer chat sessions.
+type ChatSessionRepository interface {
+	// Get retrieves an active session by ID.
+	Get(ctx context.Context, sessionID string) (*ChatSession, error)
+	// Upsert creates or resumes a session.
+	Upsert(ctx context.Context, session *ChatSession) (*ChatSession, error)
+	// UpdateLastActive updates last_active_at + bumps expires_at if idle > idleReset.
+	Touch(ctx context.Context, sessionID string, newExpiry time.Time) error
+	// Deactivate marks session as inactive (logout).
+	Deactivate(ctx context.Context, sessionID string) error
+	// UpdateGuestID associates a guest_id with a session.
+	UpdateGuestID(ctx context.Context, sessionID, guestID string) error
+	// UpdateDisplayName updates the session's display name.
+	UpdateDisplayName(ctx context.Context, sessionID, displayName string) error
+	// CleanupExpired removes expired sessions.
+	CleanupExpired(ctx context.Context) (int64, error)
+}
+
+const (
+	SessionExpiryDays   = 30
+	SessionIdleResetDays = 7
+)
 

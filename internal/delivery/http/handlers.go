@@ -19,10 +19,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/usecase"
+	"github.com/hoainguyen222/DongDo_CS_V2/pkg/httpx"
+	"github.com/hoainguyen222/DongDo_CS_V2/pkg/security"
 )
 
 type Handler struct {
 	authUC      *usecase.AuthUseCase
+	sessionUC   *usecase.SessionUseCase
 	chatUC      *usecase.ChatUseCase
 	caseUC      *usecase.CaseUseCase
 	learningUC  *usecase.LearningUseCase
@@ -38,6 +41,7 @@ type Handler struct {
 
 func NewHandler(
 	authUC *usecase.AuthUseCase,
+	sessionUC *usecase.SessionUseCase,
 	chatUC *usecase.ChatUseCase,
 	caseUC *usecase.CaseUseCase,
 	learningUC *usecase.LearningUseCase,
@@ -52,6 +56,7 @@ func NewHandler(
 ) *Handler {
 	return &Handler{
 		authUC:      authUC,
+		sessionUC:   sessionUC,
 		chatUC:      chatUC,
 		caseUC:      caseUC,
 		learningUC:  learningUC,
@@ -75,27 +80,77 @@ type LoginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
-func (h *Handler) HandleLogin(c *gin.Context) {
+// HandleStaffLogin handles POST /auth/staff/login
+// Verifies credentials and issues JWT access + refresh tokens via httpOnly cookies.
+// NEVER echoes token in JSON body.
+func (h *Handler) HandleStaffLogin(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu"})
 		return
 	}
 
-	user, err := h.authUC.Login(c.Request.Context(), req.Username, req.Password)
+	accessToken, refreshToken, user, err := h.authUC.StaffLogin(c.Request.Context(), req.Username, req.Password)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"detail": err.Error()})
+  httpx.UnauthorizedResp(c, "Xác thực thất bại")
 		return
 	}
 
+	// Set httpOnly cookies — NEVER echo tokens in JSON body
+	c.SetCookie("access_token", accessToken, 15*60, "/", "", true, true)              // 15 min, HttpOnly, Secure
+	c.SetCookie("refresh_token", refreshToken, 7*24*3600, "/auth/staff", "", true, true) // 7 days, HttpOnly, Secure, Path=/auth/staff
+
 	c.JSON(http.StatusOK, gin.H{
-		"token":     user.Token,
-		"username":  user.Username,
-		"full_name": user.FullName,
-		"role":      user.Role,
+		"user": gin.H{
+			"username":  user.Username,
+			"full_name": user.FullName,
+			"role":      user.Role,
+		},
 	})
 }
 
+// HandleRefreshToken handles POST /auth/staff/refresh
+// Reads refresh token from cookie, verifies it, issues new access token.
+func (h *Handler) HandleRefreshToken(c *gin.Context) {
+	refreshToken, err := c.Cookie("refresh_token")
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"detail": "missing refresh token"})
+		return
+	}
+
+	newAccessToken, err := h.authUC.RefreshStaffToken(c.Request.Context(), refreshToken)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"detail": "invalid or expired refresh token"})
+		return
+	}
+
+	// Set new access token cookie
+	c.SetCookie("access_token", newAccessToken, 15*60, "/", "", true, true)
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "token refreshed",
+	})
+}
+
+// HandleLogout handles POST /auth/staff/logout
+// Revokes the JWT and clears cookies.
+func (h *Handler) HandleLogout(c *gin.Context) {
+	accessToken, _ := c.Cookie("access_token")
+
+	// Revoke token in DB (best-effort)
+	if accessToken != "" {
+		_ = h.authUC.RevokeStaffToken(c.Request.Context(), accessToken, "user logout")
+	}
+
+	// Clear cookies
+	c.SetCookie("access_token", "", -1, "/", "", true, true)
+	c.SetCookie("refresh_token", "", -1, "/auth/staff", "", true, true)
+
+	c.JSON(http.StatusOK, gin.H{"message": "Đã đăng xuất thành công."})
+}
+
+// HandleGetMe handles GET /auth/staff/me
+// Returns current authenticated user info from JWT claims.
 func (h *Handler) HandleGetMe(c *gin.Context) {
 	user := c.MustGet("user").(*domain.SessionUser)
 	c.JSON(http.StatusOK, gin.H{
@@ -105,10 +160,27 @@ func (h *Handler) HandleGetMe(c *gin.Context) {
 	})
 }
 
-func (h *Handler) HandleLogout(c *gin.Context) {
-	user := c.MustGet("user").(*domain.SessionUser)
-	_ = h.authUC.Logout(c.Request.Context(), user.Token)
-	c.JSON(http.StatusOK, gin.H{"message": "Đã đăng xuất thành công."})
+// HandleLogin is the legacy login handler (DEPRECATED, kept for backward compat).
+// For new staff login, use HandleStaffLogin (JWT via httpOnly cookie).
+func (h *Handler) HandleLogin(c *gin.Context) {
+	var req LoginRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu"})
+		return
+	}
+
+	user, err := h.authUC.Login(c.Request.Context(), req.Username, req.Password)
+	if err != nil {
+  httpx.UnauthorizedResp(c, "Xác thực thất bại")
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"token":     user.Token,
+		"username":  user.Username,
+		"full_name": user.FullName,
+		"role":      user.Role,
+	})
 }
 
 type GuestRegisterRequest struct {
@@ -122,7 +194,7 @@ func (h *Handler) HandleGuestRegister(c *gin.Context) {
 
 	guest, token, err := h.authUC.RegisterGuest(c.Request.Context(), req.DisplayName, req.Phone)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "Lỗi tạo phiên khách hàng: " + err.Error()})
+  httpx.InternalErrorResp(c, err, "HandleGuestRegister")
 		return
 	}
 
@@ -137,6 +209,98 @@ func (h *Handler) HandleGuestRegister(c *gin.Context) {
 		"phone":        guest.Phone,
 		"session_id":   sessionID,
 		"token":        token,
+	})
+}
+
+// ============================================================
+// Customer Session Handlers (POST /chat/guest-session, /chat/session/logout)
+// ============================================================
+
+type UpdateSessionRequest struct {
+	DisplayName string `json:"display_name"`
+}
+
+// HandleGuestSession creates a new guest session or resumes an existing one.
+// POST /chat/guest-session
+// Sets cookie `guest_session` (NOT HttpOnly so JS can read for WebSocket).
+func (h *Handler) HandleGuestSession(c *gin.Context) {
+	// If there's an existing cookie, try to resume
+	if existingID, _ := c.Cookie("guest_session"); existingID != "" {
+		session, err := h.sessionUC.ValidateSession(c.Request.Context(), existingID)
+		if err == nil && session != nil {
+			// Refresh cookie expiry
+			maxAge := int(time.Until(session.ExpiresAt).Seconds())
+			if maxAge < 0 {
+				maxAge = 0
+			}
+			c.SetCookie("guest_session", session.SessionID, maxAge, "/", "", false, false)
+			c.JSON(http.StatusOK, gin.H{
+				"session_id":   session.SessionID,
+				"display_name": session.DisplayName,
+				"expires_at":   session.ExpiresAt,
+				"resumed":      true,
+			})
+			return
+		}
+		// Invalid cookie — fall through and create new
+	}
+
+	// Create new session
+	session, _, err := h.sessionUC.EnsureSession(
+		c.Request.Context(),
+		c.ClientIP(),
+		c.Request.UserAgent(),
+	)
+	if err != nil {
+  httpx.InternalErrorResp(c, err, "HandleGuestSession")
+		return
+	}
+
+	maxAge := int(time.Until(session.ExpiresAt).Seconds())
+	c.SetCookie("guest_session", session.SessionID, maxAge, "/", "", false, false)
+
+	c.JSON(http.StatusOK, gin.H{
+		"session_id":   session.SessionID,
+		"display_name": session.DisplayName,
+		"expires_at":   session.ExpiresAt,
+		"resumed":      false,
+	})
+}
+
+// HandleLogoutSession deactivates the current session and clears the cookie.
+// POST /chat/session/logout
+func (h *Handler) HandleLogoutSession(c *gin.Context) {
+	if sessionID, _ := c.Cookie("guest_session"); sessionID != "" {
+		_ = h.sessionUC.LogoutSession(c.Request.Context(), sessionID)
+	}
+
+	c.SetCookie("guest_session", "", -1, "/", "", false, false)
+	c.JSON(http.StatusOK, gin.H{"message": "Đã đăng xuất phiên khách."})
+}
+
+// HandleUpdateSession updates display name for the current session.
+// PATCH /chat/session
+func (h *Handler) HandleUpdateSession(c *gin.Context) {
+	var req UpdateSessionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "Vui lòng cung cấp display_name."})
+		return
+	}
+
+	sessionID, _ := c.Cookie("guest_session")
+	if sessionID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"detail": "missing session"})
+		return
+	}
+
+	if err := h.sessionUC.UpdateDisplayName(c.Request.Context(), sessionID, req.DisplayName); err != nil {
+  httpx.InternalErrorResp(c, err, "HandleUpdateSession")
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"session_id":   sessionID,
+		"display_name": req.DisplayName,
 	})
 }
 
@@ -170,7 +334,7 @@ func (h *Handler) HandleChat(c *gin.Context) {
 
 	msg, err := h.chatUC.SendGuestMessage(c.Request.Context(), sessionID, custName, req.Message, req.ClientMsgID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+  httpx.InternalErrorResp(c, err, "HandleChat")
 		return
 	}
 
@@ -185,7 +349,7 @@ func (h *Handler) HandleGetHistory(c *gin.Context) {
 	sessionID := c.Param("session_id")
 	messages, chatCase, err := h.chatUC.GetHistory(c.Request.Context(), sessionID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+  httpx.InternalErrorResp(c, err, "HandleGetHistory")
 		return
 	}
 
@@ -222,7 +386,7 @@ func (h *Handler) HandleListCases(c *gin.Context) {
 
 	allCases, err := h.caseUC.ListCases(c.Request.Context(), statusFilter)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+  httpx.InternalErrorResp(c, err, "HandleListCases")
 		return
 	}
 
@@ -274,7 +438,7 @@ func (h *Handler) HandleTakeCase(c *gin.Context) {
 
 	err := h.caseUC.TakeCase(c.Request.Context(), sessionID, user.Username, user.FullName)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+  httpx.InternalErrorResp(c, err, "HandleTakeCase")
 		return
 	}
 
@@ -297,7 +461,7 @@ func (h *Handler) HandleReplyCase(c *gin.Context) {
 
 	_, err := h.chatUC.SendCSReply(c.Request.Context(), sessionID, user.Username, user.FullName, req.Message)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+  httpx.InternalErrorResp(c, err, "HandleReplyCase")
 		return
 	}
 
@@ -318,7 +482,7 @@ func (h *Handler) HandleResolveCase(c *gin.Context) {
 
 	autoLearned, count, err := h.caseUC.ResolveCase(c.Request.Context(), sessionID, user.Username, user.FullName, req.ResolutionNote, req.ExtractPairs)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+  httpx.InternalErrorResp(c, err, "HandleResolveCase")
 		return
 	}
 
@@ -334,7 +498,7 @@ func (h *Handler) HandleDeleteCase(c *gin.Context) {
 	sessionID := c.Param("session_id")
 	err := h.caseUC.DeleteCase(c.Request.Context(), sessionID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+  httpx.InternalErrorResp(c, err, "HandleDeleteCase")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Đã xóa case thành công"})
@@ -355,7 +519,7 @@ func (h *Handler) HandleUpdateCaseCustomer(c *gin.Context) {
 
 	err := h.caseUC.UpdateCustomerInfo(c.Request.Context(), sessionID, req.CustomerName, req.CustomerPhone)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+  httpx.InternalErrorResp(c, err, "HandleUpdateCaseCustomer")
 		return
 	}
 
@@ -365,7 +529,7 @@ func (h *Handler) HandleUpdateCaseCustomer(c *gin.Context) {
 func (h *Handler) HandleClearAllCases(c *gin.Context) {
 	err := h.caseUC.ClearAllCases(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+  httpx.InternalErrorResp(c, err, "HandleClearAllCases")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Đã xóa toàn bộ danh sách case thành công"})
@@ -384,7 +548,7 @@ func (h *Handler) HandleListCustomers(c *gin.Context) {
 
 	allCustomers, err := h.caseUC.ListCustomers(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+  httpx.InternalErrorResp(c, err, "HandleListCustomers")
 		return
 	}
 
@@ -440,7 +604,7 @@ func (h *Handler) HandleUpdateCustomer(c *gin.Context) {
 
 	err := h.caseUC.UpdateCustomer(c.Request.Context(), guestID, req.CustomerName, req.CustomerPhone)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+  httpx.InternalErrorResp(c, err, "HandleUpdateCustomer")
 		return
 	}
 
@@ -451,7 +615,7 @@ func (h *Handler) HandleDeleteCustomer(c *gin.Context) {
 	guestID := c.Param("guest_id")
 	err := h.caseUC.DeleteCustomer(c.Request.Context(), guestID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+  httpx.InternalErrorResp(c, err, "HandleDeleteCustomer")
 		return
 	}
 
@@ -474,7 +638,7 @@ func (h *Handler) HandleListPendingLearning(c *gin.Context) {
 
 	items, err := h.learningUC.ListPending(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+  httpx.InternalErrorResp(c, err, "HandleListPendingLearning")
 		return
 	}
 
@@ -523,7 +687,7 @@ func (h *Handler) HandleUpdateLearning(c *gin.Context) {
 
 	err := h.learningUC.UpdateContent(c.Request.Context(), id, req.Question, req.Answer)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+  httpx.InternalErrorResp(c, err, "HandleUpdateLearning")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Đã cập nhật nội dung mẩu tri thức"})
@@ -550,7 +714,7 @@ func (h *Handler) HandleApproveLearning(c *gin.Context) {
 	}
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+  httpx.InternalErrorResp(c, err, "HandleApproveLearning")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": fmt.Sprintf("Đã phê duyệt và nạp tri thức vào Qdrant thành công bởi %s!", approverName)})
@@ -568,7 +732,7 @@ func (h *Handler) HandleRejectLearning(c *gin.Context) {
 
 	err := h.learningUC.Reject(c.Request.Context(), id, approverName)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+  httpx.InternalErrorResp(c, err, "HandleRejectLearning")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Đã từ chối mẩu tri thức"})
@@ -599,7 +763,7 @@ func (h *Handler) HandleSetLearningSettings(c *gin.Context) {
 func (h *Handler) HandleResetLearnedKnowledge(c *gin.Context) {
 	count, err := h.learningUC.ResetLearnedKnowledge(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+  httpx.InternalErrorResp(c, err, "HandleResetLearnedKnowledge")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -644,27 +808,67 @@ func (h *Handler) HandleGetKnowledgeOverview(c *gin.Context) {
 func (h *Handler) HandleUploadDocument(c *gin.Context) {
 	file, err := c.FormFile("file")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "Vui lòng chọn file tải lên"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Vui lòng chọn file tải lên"})
 		return
 	}
 
-	if !strings.HasSuffix(strings.ToLower(file.Filename), ".docx") {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "Chỉ hỗ trợ định dạng file Microsoft Word (.docx)"})
+	// 1. Size limit
+	if file.Size > security.MaxDocUploadSize {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":       "file too large",
+			"max_size_mb": security.MaxDocUploadSize / (1024 * 1024),
+		})
 		return
 	}
 
-	_ = os.MkdirAll(h.docsDir, 0755)
-	savePath := filepath.Join(h.docsDir, file.Filename)
+	// 2. Sanitize filename
+	safeName, err := security.ValidateAndSanitizeFilename(file.Filename)
+	if err != nil {
+  httpx.BadRequestResp(c, err)
+		return
+	}
 
+	// 3. Extension whitelist
+	if !strings.EqualFold(filepath.Ext(safeName), ".docx") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "only .docx files are allowed"})
+		return
+	}
+
+	// 4. MIME magic bytes (ZIP signature for .docx)
+	f, err := file.Open()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot read file"})
+		return
+	}
+	if err := security.ValidateDOCXMagicBytes(f); err != nil {
+		f.Close()
+  httpx.BadRequestResp(c, err)
+		return
+	}
+	f.Close()
+
+	// 5. Ensure directory exists + prefix check
+	if err := security.EnsureDirExists(h.docsDir); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create upload directory"})
+		return
+	}
+	savePath := filepath.Join(h.docsDir, safeName)
+	if err := security.CheckPrefix(h.docsDir, savePath); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid file path"})
+		return
+	}
+
+	// 6. Save file
 	if err := c.SaveUploadedFile(file, savePath); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "Lỗi lưu file: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save file"})
 		return
 	}
 
+	// TODO(security): integrate virus scanner here before processing
 	c.JSON(http.StatusOK, gin.H{
 		"success":  true,
-		"filename": file.Filename,
-		"message":  fmt.Sprintf("Đã tải lên file '%s' thành công.", file.Filename),
+		"filename": safeName,
+		"message":  fmt.Sprintf("Đã tải lên file '%s' thành công.", safeName),
 	})
 }
 
@@ -675,7 +879,7 @@ func (h *Handler) HandleUploadDocument(c *gin.Context) {
 func (h *Handler) HandleGetAnalytics(c *gin.Context) {
 	stats, err := h.analyticsUC.GetDashboardStats(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+  httpx.InternalErrorResp(c, err, "HandleGetAnalytics")
 		return
 	}
 	c.JSON(http.StatusOK, stats)
@@ -705,7 +909,7 @@ func (h *Handler) HandleSaveConfig(c *gin.Context) {
 
 	err := h.analyticsUC.SaveSystemConfig(c.Request.Context(), req.SystemPrompt, req.LLMModel, req.Temperature)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+  httpx.InternalErrorResp(c, err, "HandleSaveConfig")
 		return
 	}
 
@@ -740,7 +944,7 @@ func (h *Handler) HandleInitiateCall(c *gin.Context) {
 		req.CalleeID,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+  httpx.InternalErrorResp(c, err, "HandleInitiateCall")
 		return
 	}
 
@@ -763,7 +967,7 @@ func (h *Handler) HandleEndCall(c *gin.Context) {
 
 	err := h.voiceUC.EndCall(c.Request.Context(), req.CallID, req.SessionID, req.DurationSeconds, req.RecordingURL)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+  httpx.InternalErrorResp(c, err, "HandleEndCall")
 		return
 	}
 
@@ -773,27 +977,72 @@ func (h *Handler) HandleEndCall(c *gin.Context) {
 func (h *Handler) HandleUploadRecording(c *gin.Context) {
 	file, err := c.FormFile("audio")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "Không có file ghi âm"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Không có file ghi âm"})
 		return
 	}
 
-	sessionID := c.PostForm("session_id")
-	callIDStr := c.PostForm("call_id")
-	durStr := c.PostForm("duration_seconds")
-	durationSeconds, _ := strconv.Atoi(durStr)
+	// 1. Size check
+	if file.Size > security.MaxAudioUploadSize {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "file too large (max 100MB)"})
+		return
+	}
 
+	// 2. Extension whitelist
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	if !security.AllowedAudioExtensions[ext] {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":        "only audio files allowed: webm, ogg, wav, mp3, m4a",
+			"allowed_exts": []string{".webm", ".ogg", ".wav", ".mp3", ".m4a"},
+		})
+		return
+	}
+
+	// 3. MIME magic bytes
+	f, err := file.Open()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot read file"})
+		return
+	}
+	if err := security.ValidateAudioMagicBytes(f); err != nil {
+		f.Close()
+  httpx.BadRequestResp(c, err)
+		return
+	}
+	f.Close()
+
+	// 4. Server-generated filename (never trust user input)
+	filename, err := security.GenerateSecureFilename("call", ext[1:]) // ext[1:] strips leading dot
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate filename"})
+		return
+	}
+
+	// 5. Ensure directory + prefix check
 	recordingsDir := filepath.Join(h.docsDir, "..", "recordings")
-	_ = os.MkdirAll(recordingsDir, 0755)
-
-	filename := fmt.Sprintf("call_%d_%s", time.Now().UnixMilli(), file.Filename)
+	if err := security.EnsureDirExists(recordingsDir); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create recordings directory"})
+		return
+	}
 	savePath := filepath.Join(recordingsDir, filename)
+	absDir, _ := filepath.Abs(recordingsDir)
+	if err := security.CheckPrefix(absDir, savePath); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid file path"})
+		return
+	}
 
+	// 6. Save file
 	if err := c.SaveUploadedFile(file, savePath); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "Lỗi lưu file ghi âm: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save recording"})
 		return
 	}
 
 	recordingURL := "/static/recordings/" + filename
+
+	// Parse form fields AFTER file save
+	sessionID := c.PostForm("session_id")
+	callIDStr := c.PostForm("call_id")
+	durStr := c.PostForm("duration_seconds")
+	durationSeconds, _ := strconv.Atoi(durStr)
 
 	// Update call record in database
 	var callID int64
@@ -950,7 +1199,7 @@ func (h *Handler) HandleGetCalls(c *gin.Context) {
 	}
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+  httpx.InternalErrorResp(c, err, "HandleGetCalls")
 		return
 	}
 	if allCalls == nil {
@@ -993,7 +1242,7 @@ func (h *Handler) HandleDeleteCall(c *gin.Context) {
 	}
 
 	if err := h.voiceUC.DeleteCall(c.Request.Context(), callID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "Lỗi xóa lịch sử cuộc gọi: " + err.Error()})
+  httpx.InternalErrorResp(c, err, "HandleDeleteCall")
 		return
 	}
 
