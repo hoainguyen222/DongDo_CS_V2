@@ -19,7 +19,7 @@ func (h *Handler) HandleGetDashboardData(c *gin.Context) {
 
 	kpi, trend, recentChats, err := h.partnerUC.GetDashboardData(c.Request.Context(), startDate, endDate)
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleGetDashboardData")
+		httpx.InternalErrorResp(c, err, "HandleGetDashboardData")
 		return
 	}
 
@@ -37,7 +37,7 @@ func (h *Handler) HandleGetDashboardData(c *gin.Context) {
 func (h *Handler) HandleListQuickTemplates(c *gin.Context) {
 	list, err := h.partnerUC.ListQuickTemplates(c.Request.Context())
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleListQuickTemplates")
+		httpx.InternalErrorResp(c, err, "HandleListQuickTemplates")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"templates": list})
@@ -59,7 +59,7 @@ func (h *Handler) HandleCreateQuickTemplate(c *gin.Context) {
 
 	res, err := h.partnerUC.CreateQuickTemplate(c.Request.Context(), &req)
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleCreateQuickTemplate")
+		httpx.InternalErrorResp(c, err, "HandleCreateQuickTemplate")
 		return
 	}
 	c.JSON(http.StatusOK, res)
@@ -80,7 +80,7 @@ func (h *Handler) HandleUpdateQuickTemplate(c *gin.Context) {
 	}
 
 	if err := h.partnerUC.UpdateQuickTemplate(c.Request.Context(), id, req.Title, req.Category, req.Content); err != nil {
-  httpx.InternalErrorResp(c, err, "HandleUpdateQuickTemplate")
+		httpx.InternalErrorResp(c, err, "HandleUpdateQuickTemplate")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Đã cập nhật tin nhắn mẫu thành công"})
@@ -95,7 +95,7 @@ func (h *Handler) HandleDeleteQuickTemplate(c *gin.Context) {
 	}
 
 	if err := h.partnerUC.DeleteQuickTemplate(c.Request.Context(), id); err != nil {
-  httpx.InternalErrorResp(c, err, "HandleDeleteQuickTemplate")
+		httpx.InternalErrorResp(c, err, "HandleDeleteQuickTemplate")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Đã xóa tin nhắn mẫu"})
@@ -122,7 +122,7 @@ func (h *Handler) HandleSaveSystemPromptHistory(c *gin.Context) {
 	}
 
 	if err := h.partnerUC.SaveSystemPromptConfig(c.Request.Context(), req.SystemPrompt, req.LLMModel, req.Temperature, username); err != nil {
-  httpx.InternalErrorResp(c, err, "HandleSaveSystemPromptHistory")
+		httpx.InternalErrorResp(c, err, "HandleSaveSystemPromptHistory")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Đã lưu lịch sử System Prompt thành công"})
@@ -131,7 +131,7 @@ func (h *Handler) HandleSaveSystemPromptHistory(c *gin.Context) {
 func (h *Handler) HandleListRolePermissions(c *gin.Context) {
 	list, err := h.partnerUC.ListRolePermissions(c.Request.Context())
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleListRolePermissions")
+		httpx.InternalErrorResp(c, err, "HandleListRolePermissions")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"permissions": list})
@@ -145,7 +145,7 @@ func (h *Handler) HandleUpsertRolePermission(c *gin.Context) {
 	}
 
 	if err := h.partnerUC.UpsertRolePermission(c.Request.Context(), &req); err != nil {
-  httpx.InternalErrorResp(c, err, "HandleUpsertRolePermission")
+		httpx.InternalErrorResp(c, err, "HandleUpsertRolePermission")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "success"})
@@ -157,7 +157,7 @@ func (h *Handler) HandleListAuditLogs(c *gin.Context) {
 
 	list, err := h.partnerUC.ListAuditLogs(c.Request.Context(), limit, offset)
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleListAuditLogs")
+		httpx.InternalErrorResp(c, err, "HandleListAuditLogs")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"audit_logs": list})
@@ -173,7 +173,7 @@ func (h *Handler) HandleGetGeneralOverviewReport(c *gin.Context) {
 
 	res, err := h.partnerUC.GetGeneralOverviewReport(c.Request.Context(), sDate, eDate)
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleGetGeneralOverviewReport")
+		httpx.InternalErrorResp(c, err, "HandleGetGeneralOverviewReport")
 		return
 	}
 	c.JSON(http.StatusOK, res)
@@ -185,7 +185,7 @@ func (h *Handler) HandleGetAIPerformanceReport(c *gin.Context) {
 
 	res, err := h.partnerUC.GetAIPerformanceReport(c.Request.Context(), sDate, eDate)
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleGetAIPerformanceReport")
+		httpx.InternalErrorResp(c, err, "HandleGetAIPerformanceReport")
 		return
 	}
 	c.JSON(http.StatusOK, res)
@@ -197,7 +197,7 @@ func (h *Handler) HandleGetStaffPerformanceReport(c *gin.Context) {
 
 	list, err := h.partnerUC.GetStaffPerformanceReport(c.Request.Context(), sDate, eDate)
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleGetStaffPerformanceReport")
+		httpx.InternalErrorResp(c, err, "HandleGetStaffPerformanceReport")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"staff_reports": list})
@@ -209,7 +209,7 @@ func (h *Handler) HandleGetCXReport(c *gin.Context) {
 
 	res, err := h.partnerUC.GetCXReport(c.Request.Context(), sDate, eDate)
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleGetCXReport")
+		httpx.InternalErrorResp(c, err, "HandleGetCXReport")
 		return
 	}
 	c.JSON(http.StatusOK, res)
@@ -224,7 +224,7 @@ func (h *Handler) HandleSubmitCSATFeedback(c *gin.Context) {
 
 	res, err := h.partnerUC.SubmitCSATFeedback(c.Request.Context(), &req)
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleSubmitCSATFeedback")
+		httpx.InternalErrorResp(c, err, "HandleSubmitCSATFeedback")
 		return
 	}
 	c.JSON(http.StatusOK, res)
@@ -236,7 +236,7 @@ func (h *Handler) HandleGetOperationalReport(c *gin.Context) {
 
 	list, err := h.partnerUC.GetHourlyOperationalLoad(c.Request.Context(), sDate, eDate)
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleGetOperationalReport")
+		httpx.InternalErrorResp(c, err, "HandleGetOperationalReport")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"hourly_load": list})
@@ -248,7 +248,7 @@ func (h *Handler) HandleGetIssueAnalysisReport(c *gin.Context) {
 
 	list, err := h.partnerUC.GetIssueAnalysisReport(c.Request.Context(), sDate, eDate)
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleGetIssueAnalysisReport")
+		httpx.InternalErrorResp(c, err, "HandleGetIssueAnalysisReport")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"issues": list})
@@ -257,7 +257,7 @@ func (h *Handler) HandleGetIssueAnalysisReport(c *gin.Context) {
 func (h *Handler) HandleGetAILearningReportStats(c *gin.Context) {
 	res, err := h.partnerUC.GetAILearningReportStats(c.Request.Context())
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleGetAILearningReportStats")
+		httpx.InternalErrorResp(c, err, "HandleGetAILearningReportStats")
 		return
 	}
 	c.JSON(http.StatusOK, res)

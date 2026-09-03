@@ -39,27 +39,27 @@ type Config struct {
 	EmbeddingModel string
 
 	// RAG Parameters
-	ChunkSize      int
-	ChunkOverlap   int
-	RetrieverK     int
-	MemoryWindow   int
+	ChunkSize    int
+	ChunkOverlap int
+	RetrieverK   int
+	MemoryWindow int
 
 	// Paths
 	DocumentsDir string
 
 	// WebSocket
-	WSPingInterval  int      // seconds
-	WSWriteTimeout  int      // seconds
-	WSAllowedOrigins []string // whitelist for WS origin checks
-	WSAdminInboxSession string // session ID for staff admin inbox (default "admin_inbox")
+	WSPingInterval      int      // seconds
+	WSWriteTimeout      int      // seconds
+	WSAllowedOrigins    []string // whitelist for WS origin checks
+	WSAdminInboxSession string   // session ID for staff admin inbox (default "admin_inbox")
 
 	// CORS
 	CORSAllowedOrigins []string // whitelist for HTTP CORS headers
 
 	// Rate Limiting (requests per minute per IP)
-	RateLimitLoginRequestsPerMinute int // default 5
-	RateLimitChatRequestsPerMinute  int // default 30
-	RateLimitAdminRequestsPerMinute int // default 100
+	RateLimitLoginRequestsPerMinute  int // default 5
+	RateLimitChatRequestsPerMinute   int // default 30
+	RateLimitAdminRequestsPerMinute  int // default 100
 	RateLimitUploadRequestsPerMinute int // default 10
 
 	// Workers
@@ -75,7 +75,7 @@ type Config struct {
 	SystemPrompt string
 
 	// JWT (Staff auth only)
-	JWTManager   *security.StaffJWTManager
+	JWTManager    *security.StaffJWTManager
 	JWTAccessTTL  time.Duration // default 15 minutes
 	JWTRefreshTTL time.Duration // default 7 days
 }

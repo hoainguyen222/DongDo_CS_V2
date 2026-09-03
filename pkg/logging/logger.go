@@ -11,19 +11,19 @@ import (
 // Field names for structured logging (consistent across all packages).
 const (
 	FieldRequestID = "request_id"
-	FieldUserID   = "user_id"
-	FieldMethod   = "method"
-	FieldPath     = "path"
-	FieldStatus   = "status"
-	FieldDuration = "duration_ms"
-	FieldClientIP = "client_ip"
+	FieldUserID    = "user_id"
+	FieldMethod    = "method"
+	FieldPath      = "path"
+	FieldStatus    = "status"
+	FieldDuration  = "duration_ms"
+	FieldClientIP  = "client_ip"
 	FieldUserAgent = "user_agent"
-	FieldWorker   = "worker"
-	FieldJobID    = "job_id"
-	FieldModel    = "model"
-	FieldTokensIn = "prompt_tokens"
+	FieldWorker    = "worker"
+	FieldJobID     = "job_id"
+	FieldModel     = "model"
+	FieldTokensIn  = "prompt_tokens"
 	FieldTokensOut = "completion_tokens"
-	FieldLatency  = "latency_ms"
+	FieldLatency   = "latency_ms"
 )
 
 // Redaction patterns — compiled once at init.
@@ -33,14 +33,14 @@ var (
 		`(?i)(authorization[\s:=]+(?:bearer[\s]+)?)([^\s,;"]+)`,
 	)
 	// Standalone Bearer prefix in JWT-style tokens
-	bearerRe     = regexp.MustCompile(`(?i)(bearer[\s]+)([^\s,;"]+)`)
+	bearerRe = regexp.MustCompile(`(?i)(bearer[\s]+)([^\s,;"]+)`)
 	// Matches "token=abc" or "token: abc"
-	tokenRe      = regexp.MustCompile(`(?i)(token[\s:=]+)([^\s,;"]+)`)
+	tokenRe = regexp.MustCompile(`(?i)(token[\s:=]+)([^\s,;"]+)`)
 	// Matches "password=xxx"
-	pwdRe        = regexp.MustCompile(`(?i)(password[\s:=]+)([^\s,;"]+)`)
+	pwdRe = regexp.MustCompile(`(?i)(password[\s:=]+)([^\s,;"]+)`)
 	// Matches "api_key=xxx" or "api-key: xxx"
 	apiKeyRe     = regexp.MustCompile(`(?i)(api[_-]?key[\s:=]+)([^\s,;"]+)`)
-	phoneRe      = regexp.MustCompile(`\b0\d{9,10}\b`)  // Vietnamese phone
+	phoneRe      = regexp.MustCompile(`\b0\d{9,10}\b`) // Vietnamese phone
 	emailRe      = regexp.MustCompile(`\b[\w.-]+@[\w.-]+\.\w+\b`)
 	creditCardRe = regexp.MustCompile(`\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b`)
 )

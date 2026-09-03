@@ -141,13 +141,13 @@ func NewGatewayTimeout() *AppError {
 // ─── Convenience aliases (backward compat) ─────────────────────────────────
 // Use New* versions; these keep older call sites working.
 
-func BadRequestf(format string, args ...any) *AppError       { return NewBadRequestf(format, args...) }
-func InvalidInput(message string) *AppError                  { return NewInvalidInput(message) }
-func Unauthorized(message string) *AppError                  { return NewUnauthorized(message) }
-func Forbidden(message string) *AppError                     { return NewForbidden(message) }
-func NotFound(resource string) *AppError                     { return NewNotFound(resource) }
-func Conflict(message string) *AppError                      { return NewConflict(message) }
-func TooManyRequests(retryAfter int) *AppError               { return NewTooManyRequests(retryAfter) }
-func InternalError(err error) *AppError                      { return NewInternalError(err) }
-func ServiceUnavailable(message string) *AppError            { return NewServiceUnavailable(message) }
-func GatewayTimeout() *AppError                              { return NewGatewayTimeout() }
+func BadRequestf(format string, args ...any) *AppError { return NewBadRequestf(format, args...) }
+func InvalidInput(message string) *AppError            { return NewInvalidInput(message) }
+func Unauthorized(message string) *AppError            { return NewUnauthorized(message) }
+func Forbidden(message string) *AppError               { return NewForbidden(message) }
+func NotFound(resource string) *AppError               { return NewNotFound(resource) }
+func Conflict(message string) *AppError                { return NewConflict(message) }
+func TooManyRequests(retryAfter int) *AppError         { return NewTooManyRequests(retryAfter) }
+func InternalError(err error) *AppError                { return NewInternalError(err) }
+func ServiceUnavailable(message string) *AppError      { return NewServiceUnavailable(message) }
+func GatewayTimeout() *AppError                        { return NewGatewayTimeout() }

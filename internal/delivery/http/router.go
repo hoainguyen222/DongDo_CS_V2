@@ -10,8 +10,8 @@ import (
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/delivery/http/middleware"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/delivery/ws"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
-	"github.com/hoainguyen222/DongDo_CS_V2/internal/usecase"
 	infraRedis "github.com/hoainguyen222/DongDo_CS_V2/internal/infra/redis"
+	"github.com/hoainguyen222/DongDo_CS_V2/internal/usecase"
 	"github.com/hoainguyen222/DongDo_CS_V2/pkg/security"
 	"github.com/redis/go-redis/v9"
 )
@@ -39,6 +39,7 @@ func SetupRouter(
 	r.Use(gin.Recovery())
 	r.Use(middleware.SecurityHeaders())
 	r.Use(middleware.RequestID())
+	r.Use(middleware.StructuredLogger()) // replaces plain gin.Logger with structured JSON
 	r.Use(CORSMiddleware(corsAllowedOrigins))
 
 	// Health check

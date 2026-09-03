@@ -20,8 +20,8 @@ type RateLimiterConfig struct {
 
 // redisRateLimiter holds Redis-backed sliding-window state for a rate limiter.
 type redisRateLimiter struct {
-	client   *redis.Client
-	rpm      int
+	client    *redis.Client
+	rpm       int
 	keyPrefix string
 }
 

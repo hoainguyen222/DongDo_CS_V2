@@ -86,18 +86,18 @@ type LoginRequest struct {
 func (h *Handler) HandleStaffLogin(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu"})
+  httpx.BadRequestResp(c, err)
 		return
 	}
 
 	accessToken, refreshToken, user, err := h.authUC.StaffLogin(c.Request.Context(), req.Username, req.Password)
 	if err != nil {
-  httpx.UnauthorizedResp(c, "Xác thực thất bại")
+		httpx.UnauthorizedResp(c, "Xác thực thất bại")
 		return
 	}
 
 	// Set httpOnly cookies — NEVER echo tokens in JSON body
-	c.SetCookie("access_token", accessToken, 15*60, "/", "", true, true)              // 15 min, HttpOnly, Secure
+	c.SetCookie("access_token", accessToken, 15*60, "/", "", true, true)                 // 15 min, HttpOnly, Secure
 	c.SetCookie("refresh_token", refreshToken, 7*24*3600, "/auth/staff", "", true, true) // 7 days, HttpOnly, Secure, Path=/auth/staff
 
 	c.JSON(http.StatusOK, gin.H{
@@ -165,13 +165,13 @@ func (h *Handler) HandleGetMe(c *gin.Context) {
 func (h *Handler) HandleLogin(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu"})
+  httpx.BadRequestResp(c, err)
 		return
 	}
 
 	user, err := h.authUC.Login(c.Request.Context(), req.Username, req.Password)
 	if err != nil {
-  httpx.UnauthorizedResp(c, "Xác thực thất bại")
+		httpx.UnauthorizedResp(c, "Xác thực thất bại")
 		return
 	}
 
@@ -194,7 +194,7 @@ func (h *Handler) HandleGuestRegister(c *gin.Context) {
 
 	guest, token, err := h.authUC.RegisterGuest(c.Request.Context(), req.DisplayName, req.Phone)
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleGuestRegister")
+		httpx.InternalErrorResp(c, err, "HandleGuestRegister")
 		return
 	}
 
@@ -252,7 +252,7 @@ func (h *Handler) HandleGuestSession(c *gin.Context) {
 		c.Request.UserAgent(),
 	)
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleGuestSession")
+		httpx.InternalErrorResp(c, err, "HandleGuestSession")
 		return
 	}
 
@@ -283,7 +283,7 @@ func (h *Handler) HandleLogoutSession(c *gin.Context) {
 func (h *Handler) HandleUpdateSession(c *gin.Context) {
 	var req UpdateSessionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "Vui lòng cung cấp display_name."})
+  httpx.BadRequestResp(c, err)
 		return
 	}
 
@@ -294,7 +294,7 @@ func (h *Handler) HandleUpdateSession(c *gin.Context) {
 	}
 
 	if err := h.sessionUC.UpdateDisplayName(c.Request.Context(), sessionID, req.DisplayName); err != nil {
-  httpx.InternalErrorResp(c, err, "HandleUpdateSession")
+		httpx.InternalErrorResp(c, err, "HandleUpdateSession")
 		return
 	}
 
@@ -309,16 +309,16 @@ func (h *Handler) HandleUpdateSession(c *gin.Context) {
 // ============================================================
 
 type ChatRequest struct {
-	SessionID   string     `json:"session_id"`
-	CustomerName string    `json:"customer_name"`
-	Message     string     `json:"message" binding:"required"`
-	ClientMsgID *uuid.UUID `json:"client_msg_id"`
+	SessionID    string     `json:"session_id"`
+	CustomerName string     `json:"customer_name"`
+	Message      string     `json:"message" binding:"required"`
+	ClientMsgID  *uuid.UUID `json:"client_msg_id"`
 }
 
 func (h *Handler) HandleChat(c *gin.Context) {
 	var req ChatRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "Tin nhắn không được để trống"})
+  httpx.BadRequestResp(c, err)
 		return
 	}
 
@@ -334,7 +334,7 @@ func (h *Handler) HandleChat(c *gin.Context) {
 
 	msg, err := h.chatUC.SendGuestMessage(c.Request.Context(), sessionID, custName, req.Message, req.ClientMsgID)
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleChat")
+		httpx.InternalErrorResp(c, err, "HandleChat")
 		return
 	}
 
@@ -349,7 +349,7 @@ func (h *Handler) HandleGetHistory(c *gin.Context) {
 	sessionID := c.Param("session_id")
 	messages, chatCase, err := h.chatUC.GetHistory(c.Request.Context(), sessionID)
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleGetHistory")
+		httpx.InternalErrorResp(c, err, "HandleGetHistory")
 		return
 	}
 
@@ -386,7 +386,7 @@ func (h *Handler) HandleListCases(c *gin.Context) {
 
 	allCases, err := h.caseUC.ListCases(c.Request.Context(), statusFilter)
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleListCases")
+		httpx.InternalErrorResp(c, err, "HandleListCases")
 		return
 	}
 
@@ -438,7 +438,7 @@ func (h *Handler) HandleTakeCase(c *gin.Context) {
 
 	err := h.caseUC.TakeCase(c.Request.Context(), sessionID, user.Username, user.FullName)
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleTakeCase")
+		httpx.InternalErrorResp(c, err, "HandleTakeCase")
 		return
 	}
 
@@ -455,13 +455,13 @@ func (h *Handler) HandleReplyCase(c *gin.Context) {
 
 	var req ReplyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "Tin nhắn không được để trống"})
+  httpx.BadRequestResp(c, err)
 		return
 	}
 
 	_, err := h.chatUC.SendCSReply(c.Request.Context(), sessionID, user.Username, user.FullName, req.Message)
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleReplyCase")
+		httpx.InternalErrorResp(c, err, "HandleReplyCase")
 		return
 	}
 
@@ -469,7 +469,7 @@ func (h *Handler) HandleReplyCase(c *gin.Context) {
 }
 
 type ResolveRequest struct {
-	ResolutionNote string         `json:"resolution_note"`
+	ResolutionNote string          `json:"resolution_note"`
 	ExtractPairs   []domain.QAPair `json:"extract_pairs"`
 }
 
@@ -482,7 +482,7 @@ func (h *Handler) HandleResolveCase(c *gin.Context) {
 
 	autoLearned, count, err := h.caseUC.ResolveCase(c.Request.Context(), sessionID, user.Username, user.FullName, req.ResolutionNote, req.ExtractPairs)
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleResolveCase")
+		httpx.InternalErrorResp(c, err, "HandleResolveCase")
 		return
 	}
 
@@ -498,7 +498,7 @@ func (h *Handler) HandleDeleteCase(c *gin.Context) {
 	sessionID := c.Param("session_id")
 	err := h.caseUC.DeleteCase(c.Request.Context(), sessionID)
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleDeleteCase")
+		httpx.InternalErrorResp(c, err, "HandleDeleteCase")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Đã xóa case thành công"})
@@ -513,13 +513,13 @@ func (h *Handler) HandleUpdateCaseCustomer(c *gin.Context) {
 	sessionID := c.Param("session_id")
 	var req UpdateCustomerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "Dữ liệu không hợp lệ"})
+  httpx.BadRequestResp(c, err)
 		return
 	}
 
 	err := h.caseUC.UpdateCustomerInfo(c.Request.Context(), sessionID, req.CustomerName, req.CustomerPhone)
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleUpdateCaseCustomer")
+		httpx.InternalErrorResp(c, err, "HandleUpdateCaseCustomer")
 		return
 	}
 
@@ -529,7 +529,7 @@ func (h *Handler) HandleUpdateCaseCustomer(c *gin.Context) {
 func (h *Handler) HandleClearAllCases(c *gin.Context) {
 	err := h.caseUC.ClearAllCases(c.Request.Context())
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleClearAllCases")
+		httpx.InternalErrorResp(c, err, "HandleClearAllCases")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Đã xóa toàn bộ danh sách case thành công"})
@@ -548,7 +548,7 @@ func (h *Handler) HandleListCustomers(c *gin.Context) {
 
 	allCustomers, err := h.caseUC.ListCustomers(c.Request.Context())
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleListCustomers")
+		httpx.InternalErrorResp(c, err, "HandleListCustomers")
 		return
 	}
 
@@ -598,13 +598,13 @@ func (h *Handler) HandleUpdateCustomer(c *gin.Context) {
 	guestID := c.Param("guest_id")
 	var req UpdateCustomerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "Dữ liệu không hợp lệ"})
+  httpx.BadRequestResp(c, err)
 		return
 	}
 
 	err := h.caseUC.UpdateCustomer(c.Request.Context(), guestID, req.CustomerName, req.CustomerPhone)
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleUpdateCustomer")
+		httpx.InternalErrorResp(c, err, "HandleUpdateCustomer")
 		return
 	}
 
@@ -615,7 +615,7 @@ func (h *Handler) HandleDeleteCustomer(c *gin.Context) {
 	guestID := c.Param("guest_id")
 	err := h.caseUC.DeleteCustomer(c.Request.Context(), guestID)
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleDeleteCustomer")
+		httpx.InternalErrorResp(c, err, "HandleDeleteCustomer")
 		return
 	}
 
@@ -638,7 +638,7 @@ func (h *Handler) HandleListPendingLearning(c *gin.Context) {
 
 	items, err := h.learningUC.ListPending(c.Request.Context())
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleListPendingLearning")
+		httpx.InternalErrorResp(c, err, "HandleListPendingLearning")
 		return
 	}
 
@@ -681,13 +681,13 @@ func (h *Handler) HandleUpdateLearning(c *gin.Context) {
 
 	var req UpdateLearningRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "Dữ liệu không hợp lệ"})
+  httpx.BadRequestResp(c, err)
 		return
 	}
 
 	err := h.learningUC.UpdateContent(c.Request.Context(), id, req.Question, req.Answer)
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleUpdateLearning")
+		httpx.InternalErrorResp(c, err, "HandleUpdateLearning")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Đã cập nhật nội dung mẩu tri thức"})
@@ -714,7 +714,7 @@ func (h *Handler) HandleApproveLearning(c *gin.Context) {
 	}
 
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleApproveLearning")
+		httpx.InternalErrorResp(c, err, "HandleApproveLearning")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": fmt.Sprintf("Đã phê duyệt và nạp tri thức vào Qdrant thành công bởi %s!", approverName)})
@@ -732,7 +732,7 @@ func (h *Handler) HandleRejectLearning(c *gin.Context) {
 
 	err := h.learningUC.Reject(c.Request.Context(), id, approverName)
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleRejectLearning")
+		httpx.InternalErrorResp(c, err, "HandleRejectLearning")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Đã từ chối mẩu tri thức"})
@@ -748,7 +748,7 @@ func (h *Handler) HandleSetLearningSettings(c *gin.Context) {
 		AutoLearningEnabled bool `json:"auto_learning_enabled"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "Dữ liệu không hợp lệ"})
+  httpx.BadRequestResp(c, err)
 		return
 	}
 
@@ -763,7 +763,7 @@ func (h *Handler) HandleSetLearningSettings(c *gin.Context) {
 func (h *Handler) HandleResetLearnedKnowledge(c *gin.Context) {
 	count, err := h.learningUC.ResetLearnedKnowledge(c.Request.Context())
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleResetLearnedKnowledge")
+		httpx.InternalErrorResp(c, err, "HandleResetLearnedKnowledge")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -824,7 +824,7 @@ func (h *Handler) HandleUploadDocument(c *gin.Context) {
 	// 2. Sanitize filename
 	safeName, err := security.ValidateAndSanitizeFilename(file.Filename)
 	if err != nil {
-  httpx.BadRequestResp(c, err)
+		httpx.BadRequestResp(c, err)
 		return
 	}
 
@@ -842,7 +842,7 @@ func (h *Handler) HandleUploadDocument(c *gin.Context) {
 	}
 	if err := security.ValidateDOCXMagicBytes(f); err != nil {
 		f.Close()
-  httpx.BadRequestResp(c, err)
+		httpx.BadRequestResp(c, err)
 		return
 	}
 	f.Close()
@@ -879,7 +879,7 @@ func (h *Handler) HandleUploadDocument(c *gin.Context) {
 func (h *Handler) HandleGetAnalytics(c *gin.Context) {
 	stats, err := h.analyticsUC.GetDashboardStats(c.Request.Context())
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleGetAnalytics")
+		httpx.InternalErrorResp(c, err, "HandleGetAnalytics")
 		return
 	}
 	c.JSON(http.StatusOK, stats)
@@ -903,13 +903,13 @@ type ConfigSaveRequest struct {
 func (h *Handler) HandleSaveConfig(c *gin.Context) {
 	var req ConfigSaveRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "Dữ liệu cấu hình không hợp lệ"})
+  httpx.BadRequestResp(c, err)
 		return
 	}
 
 	err := h.analyticsUC.SaveSystemConfig(c.Request.Context(), req.SystemPrompt, req.LLMModel, req.Temperature)
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleSaveConfig")
+		httpx.InternalErrorResp(c, err, "HandleSaveConfig")
 		return
 	}
 
@@ -931,7 +931,7 @@ type InitiateCallRequest struct {
 func (h *Handler) HandleInitiateCall(c *gin.Context) {
 	var req InitiateCallRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "Dữ liệu cuộc gọi không hợp lệ"})
+  httpx.BadRequestResp(c, err)
 		return
 	}
 
@@ -944,7 +944,7 @@ func (h *Handler) HandleInitiateCall(c *gin.Context) {
 		req.CalleeID,
 	)
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleInitiateCall")
+		httpx.InternalErrorResp(c, err, "HandleInitiateCall")
 		return
 	}
 
@@ -961,13 +961,13 @@ type EndCallRequest struct {
 func (h *Handler) HandleEndCall(c *gin.Context) {
 	var req EndCallRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "Dữ liệu kết thúc cuộc gọi không hợp lệ"})
+  httpx.BadRequestResp(c, err)
 		return
 	}
 
 	err := h.voiceUC.EndCall(c.Request.Context(), req.CallID, req.SessionID, req.DurationSeconds, req.RecordingURL)
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleEndCall")
+		httpx.InternalErrorResp(c, err, "HandleEndCall")
 		return
 	}
 
@@ -1005,7 +1005,7 @@ func (h *Handler) HandleUploadRecording(c *gin.Context) {
 	}
 	if err := security.ValidateAudioMagicBytes(f); err != nil {
 		f.Close()
-  httpx.BadRequestResp(c, err)
+		httpx.BadRequestResp(c, err)
 		return
 	}
 	f.Close()
@@ -1199,7 +1199,7 @@ func (h *Handler) HandleGetCalls(c *gin.Context) {
 	}
 
 	if err != nil {
-  httpx.InternalErrorResp(c, err, "HandleGetCalls")
+		httpx.InternalErrorResp(c, err, "HandleGetCalls")
 		return
 	}
 	if allCalls == nil {
@@ -1237,12 +1237,12 @@ func (h *Handler) HandleDeleteCall(c *gin.Context) {
 	callIDStr := c.Param("call_id")
 	callID, err := strconv.ParseInt(callIDStr, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "ID cuộc gọi không hợp lệ"})
+		httpx.BadRequestMessageResp(c, "ID cuộc gọi không hợp lệ")
 		return
 	}
 
 	if err := h.voiceUC.DeleteCall(c.Request.Context(), callID); err != nil {
-  httpx.InternalErrorResp(c, err, "HandleDeleteCall")
+		httpx.InternalErrorResp(c, err, "HandleDeleteCall")
 		return
 	}
 

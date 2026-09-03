@@ -124,8 +124,8 @@ func ValidateAudioMagicBytes(r io.ReadSeeker) error {
 		valid = valid ||
 			(header[0] == 0x4F && header[1] == 0x67 && header[2] == 0x67 && header[3] == 0x53) || // OggS
 			(header[0] == 0x52 && header[1] == 0x49 && header[2] == 0x46 && header[3] == 0x46) || // RIFF/WAV
-			(header[0] == 0x49 && header[1] == 0x44 && header[2] == 0x33) ||                       // ID3/MP3
-			(header[0] == 0xFF && (header[1]&0xE0) == 0xE0) ||                                    // MP3 frame sync
+			(header[0] == 0x49 && header[1] == 0x44 && header[2] == 0x33) || // ID3/MP3
+			(header[0] == 0xFF && (header[1]&0xE0) == 0xE0) || // MP3 frame sync
 			(header[0] == 0x66 && header[1] == 0x74 && header[2] == 0x79 && header[3] == 0x70) || // ftyp/M4A
 			(header[0] == 0x23 && header[1] == 0x21) // shebang fallback for some webms
 	}
@@ -137,8 +137,8 @@ func ValidateAudioMagicBytes(r io.ReadSeeker) error {
 
 // Upload limits
 const (
-	MaxDocUploadSize    = 50 * 1024 * 1024  // 50 MB
-	MaxAudioUploadSize  = 100 * 1024 * 1024 // 100 MB
+	MaxDocUploadSize   = 50 * 1024 * 1024  // 50 MB
+	MaxAudioUploadSize = 100 * 1024 * 1024 // 100 MB
 )
 
 // AllowedDOCXMIMETypes is a whitelist of MIME types accepted for document uploads.
