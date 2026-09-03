@@ -1,0 +1,34 @@
+// ============================================================
+// AdminRootPage — Redirects to inbox
+// ============================================================
+@use '../../styles/_shared.scss' as s;
+
+.shell {
+  min-height: 100vh;
+  background-color: s.$bg-dark;
+  color: s.$text-main;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: s.$space-4;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid s.$brand-red-light;
+  border-top-color: transparent;
+  border-radius: 9999px;
+  animation: spin 0.8s linear infinite;
+}
+
+.label {
+  font-size: s.$text-sm;
+  color: s.$text-muted;
+}

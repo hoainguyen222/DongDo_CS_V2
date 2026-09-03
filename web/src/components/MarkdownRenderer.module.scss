@@ -1,0 +1,115 @@
+// ============================================================
+// MarkdownRenderer — Renders AI chat messages with markdown
+// ============================================================
+@use '../styles/_shared.scss' as s;
+
+.content {
+  font-size: s.$text-sm;
+  line-height: 1.6;
+
+  p {
+    margin-bottom: s.$space-2;
+    &:last-child { margin-bottom: 0; }
+  }
+
+  h1 {
+    font-size: s.$text-base;
+    font-weight: 700;
+    color: #fff;
+    margin: s.$space-3 0 s.$space-2;
+    padding-bottom: s.$space-1;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  h2 {
+    font-size: s.$text-sm;
+    font-weight: 700;
+    color: #e2e8f0;
+    margin: s.$space-2 + 1 0 s.$space-2;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  h3 {
+    font-size: s.$text-sm;
+    font-weight: 600;
+    color: #fda4af;
+    margin: s.$space-2 0 s.$space-1;
+  }
+
+  strong { font-weight: 600; color: #fff; letter-spacing: 0.01em; }
+  em { color: #cbd5e1; font-style: italic; }
+
+  ul {
+    padding-left: 20px;
+    margin-bottom: s.$space-2 + 1;
+    list-style: disc;
+    li { margin-bottom: 4px; }
+  }
+
+  ol {
+    padding-left: 20px;
+    margin-bottom: s.$space-2 + 1;
+    list-style: decimal;
+    li { margin-bottom: 4px; font-weight: 500; }
+  }
+
+  blockquote {
+    border-left: 4px solid s.$brand-red;
+    padding: 4px s.$space-3;
+    margin: s.$space-2 0;
+    background-color: rgba(15, 23, 42, 0.4);
+    border-radius: 0 s.$radius-xl s.$radius-xl 0;
+    font-style: italic;
+    color: #cbd5e1;
+  }
+
+  code {
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(30, 41, 59, 0.8);
+    color: #fda4af;
+    font-family: s.$font-mono;
+    font-size: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  table {
+    width: 100%;
+    overflow-x: auto;
+    border-radius: s.$radius-xl;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(s.$brand-navy-dark, 0.9);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    margin: s.$space-3 0;
+    border-collapse: collapse;
+
+    th {
+      background: s.$brand-navy;
+      padding: 10px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #e2e8f0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 10px 14px;
+      font-size: 13px;
+      color: #cbd5e1;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      vertical-align: top;
+      line-height: 1.6;
+    }
+
+    tbody tr:hover td { background-color: rgba(30, 41, 59, 0.3); }
+  }
+
+  hr {
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    margin: s.$space-3 0;
+  }
+}

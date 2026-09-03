@@ -85,6 +85,18 @@ func (uc *PartnerUseCase) UpsertRolePermission(ctx context.Context, p *domain.Ro
 	return uc.partnerRepo.UpsertRolePermission(ctx, p)
 }
 
+// UpsertRolePermissionSimple is a convenience wrapper that creates a RolePermission from individual parameters.
+func (uc *PartnerUseCase) UpsertRolePermissionSimple(ctx context.Context, roleName, featureKey, permissionLevel string) error {
+	p := &domain.RolePermission{
+		RoleName:        roleName,
+		FeatureKey:      featureKey,
+		PermissionLevel: permissionLevel,
+		CanView:         permissionLevel == "act" || permissionLevel == "view",
+		CanEdit:         permissionLevel == "act",
+	}
+	return uc.partnerRepo.UpsertRolePermission(ctx, p)
+}
+
 func (uc *PartnerUseCase) ListAuditLogs(ctx context.Context, limit, offset int) ([]*domain.SystemAuditLog, error) {
 	return uc.partnerRepo.ListAuditLogs(ctx, limit, offset)
 }

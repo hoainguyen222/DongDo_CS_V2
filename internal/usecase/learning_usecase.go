@@ -13,6 +13,7 @@ type LearningUseCase struct {
 	settingRepo  domain.SettingRepository
 	vectorStore  domain.VectorStore
 	embedder     domain.Embedder
+	eventBus     domain.EventBus
 }
 
 func NewLearningUseCase(
@@ -20,13 +21,28 @@ func NewLearningUseCase(
 	settingRepo domain.SettingRepository,
 	vectorStore domain.VectorStore,
 	embedder domain.Embedder,
+	eventBus domain.EventBus,
 ) *LearningUseCase {
 	return &LearningUseCase{
 		learningRepo: learningRepo,
 		settingRepo:  settingRepo,
 		vectorStore:  vectorStore,
 		embedder:     embedder,
+		eventBus:     eventBus,
 	}
+}
+
+// publishLearningUpdate broadcasts a learning_update WS event so the admin inbox
+// can refresh /api/admin/learning/pending in real-time instead of polling.
+func (uc *LearningUseCase) publishLearningUpdate(ctx context.Context, action string, itemID int64) {
+	if uc.eventBus == nil {
+		return
+	}
+	_ = uc.eventBus.PublishWS(ctx, "admin_inbox", domain.WSEventLearningUpdate, map[string]interface{}{
+		"action":   action, // "added" | "approved" | "rejected" | "updated"
+		"item_id":  itemID,
+		"channels": []string{"learning_queue"},
+	}, "system")
 }
 
 func (uc *LearningUseCase) ListPending(ctx context.Context) ([]*domain.LearningItem, error) {
@@ -71,11 +87,19 @@ func (uc *LearningUseCase) Approve(ctx context.Context, itemID int64, approverNa
 	}
 
 	// 2. Mark status as APPROVED
-	return uc.learningRepo.MarkStatus(ctx, itemID, domain.LearnApproved, approverName)
+	if err := uc.learningRepo.MarkStatus(ctx, itemID, domain.LearnApproved, approverName); err != nil {
+		return err
+	}
+	uc.publishLearningUpdate(ctx, "approved", itemID)
+	return nil
 }
 
 func (uc *LearningUseCase) UpdateContent(ctx context.Context, itemID int64, question, answer string) error {
-	return uc.learningRepo.UpdateContent(ctx, itemID, question, answer)
+	if err := uc.learningRepo.UpdateContent(ctx, itemID, question, answer); err != nil {
+		return err
+	}
+	uc.publishLearningUpdate(ctx, "updated", itemID)
+	return nil
 }
 
 func (uc *LearningUseCase) ApproveWithContent(ctx context.Context, itemID int64, approverName, question, answer string) error {
@@ -86,7 +110,11 @@ func (uc *LearningUseCase) ApproveWithContent(ctx context.Context, itemID int64,
 }
 
 func (uc *LearningUseCase) Reject(ctx context.Context, itemID int64, approverName string) error {
-	return uc.learningRepo.MarkStatus(ctx, itemID, domain.LearnRejected, approverName)
+	if err := uc.learningRepo.MarkStatus(ctx, itemID, domain.LearnRejected, approverName); err != nil {
+		return err
+	}
+	uc.publishLearningUpdate(ctx, "rejected", itemID)
+	return nil
 }
 
 func (uc *LearningUseCase) GetSettings(ctx context.Context) (bool, error) {
@@ -115,7 +143,12 @@ func (uc *LearningUseCase) AddPending(ctx context.Context, sessionID, question, 
 		_ = uc.Approve(ctx, item.ID, "AutoSystem")
 		return item, nil
 	}
-	return uc.learningRepo.Add(ctx, sessionID, question, answer, domain.LearnPending, createdBy)
+	item, err := uc.learningRepo.Add(ctx, sessionID, question, answer, domain.LearnPending, createdBy)
+	if err != nil {
+		return nil, err
+	}
+	uc.publishLearningUpdate(ctx, "added", item.ID)
+	return item, nil
 }
 
 func (uc *LearningUseCase) UpsertVoiceLearning(ctx context.Context, sessionID, question, answer string, durationSeconds int) (*domain.LearningItem, error) {

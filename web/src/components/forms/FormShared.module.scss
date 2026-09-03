@@ -1,0 +1,196 @@
+// ============================================================
+// Form styles — Shared for CustomerEdit / Config form inputs
+// ============================================================
+@use '../../styles/_shared.scss' as s;
+
+.formGroup {
+  margin-bottom: s.$space-4;
+}
+
+.formLabel {
+  display: block;
+  font-size: s.$text-xs;
+  font-weight: 600;
+  color: #cbd5e1;
+  margin-bottom: 6px;
+}
+
+.input {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: s.$radius-xl;
+  background-color: s.$bg-dark;
+  border: 1px solid rgba(s.$brand-navy, 0.5);
+  color: #f1f5f9;
+  font-size: s.$text-sm;
+  outline: none;
+  transition: border-color s.$transition-base, box-shadow s.$transition-base;
+
+  &:focus {
+    border-color: s.$brand-red-light;
+    box-shadow: 0 0 0 3px rgba(s.$brand-red, 0.25);
+  }
+
+  &::placeholder {
+    color: s.$text-dim;
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+.errorMsg {
+  margin-top: s.$space-1;
+  font-size: s.$text-xs;
+  color: s.$accent-red;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: s.$space-3;
+  padding-top: s.$space-2;
+}
+
+.btnSecondary {
+  padding: s.$space-2 + 1 s.$space-4;
+  border-radius: s.$radius-xl;
+  background-color: rgba(30, 41, 59, 0.8);
+  color: #cbd5e1;
+  font-size: s.$text-xs;
+  font-weight: 600;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: background s.$transition-fast;
+
+  &:hover {
+    background-color: rgba(51, 65, 85, 0.9);
+  }
+}
+
+.btnPrimary {
+  padding: s.$space-2 + 1 s.$space-5;
+  border-radius: s.$radius-xl;
+  background: linear-gradient(135deg, s.$brand-red 0%, s.$brand-red-light 100%);
+  color: #fff;
+  font-size: s.$text-xs;
+  font-weight: 600;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  box-shadow: s.$shadow-glow-red;
+  transition: transform s.$transition-base, filter s.$transition-base;
+
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+    filter: brightness(1.08);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.successMessage {
+  padding: s.$space-3;
+  border-radius: s.$radius-xl;
+  background-color: rgba(s.$accent-green, 0.1);
+  border: 1px solid rgba(s.$accent-green, 0.3);
+  color: #6ee7b7;
+  font-size: s.$text-xs;
+  display: flex;
+  align-items: center;
+  gap: s.$space-2;
+}
+
+.rangeWrap {
+  display: flex;
+  align-items: center;
+  gap: s.$space-3;
+}
+
+.rangeInput {
+  flex: 1 1 auto;
+  accent-color: s.$brand-red;
+  cursor: pointer;
+}
+
+.rangeValue {
+  font-size: s.$text-sm;
+  font-family: s.$font-mono;
+  font-weight: 700;
+  color: #fff;
+  width: 48px;
+  text-align: right;
+}
+
+.rangeScale {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: s.$text-dim;
+  margin-top: s.$space-1;
+}
+
+.textarea {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: s.$radius-xl;
+  background-color: s.$bg-dark;
+  border: 1px solid rgba(s.$brand-navy, 0.5);
+  color: #f1f5f9;
+  font-size: s.$text-sm;
+  outline: none;
+  resize: vertical;
+  transition: border-color s.$transition-base, box-shadow s.$transition-base;
+  font-family: s.$font-mono;
+  line-height: 1.6;
+
+  &:focus {
+    border-color: s.$brand-red-light;
+    box-shadow: 0 0 0 3px rgba(s.$brand-red, 0.25);
+  }
+
+  &::placeholder {
+    color: s.$text-dim;
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+.select {
+  width: 100%;
+  padding: s.$space-3 16px;
+  border-radius: s.$radius-xl;
+  background-color: s.$bg-dark;
+  border: 1px solid rgba(s.$brand-navy, 0.5);
+  color: #f1f5f9;
+  font-size: s.$text-sm;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  transition: border-color s.$transition-base, box-shadow s.$transition-base;
+
+  &:focus {
+    border-color: s.$brand-red-light;
+    box-shadow: 0 0 0 3px rgba(s.$brand-red, 0.25);
+  }
+}
+
+.formStack {
+  display: flex;
+  flex-direction: column;
+  gap: s.$space-5;
+}

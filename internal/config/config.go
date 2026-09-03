@@ -12,6 +12,10 @@ type Config struct {
 	ServerPort string
 	ServerHost string
 
+	// Bootstrap / First-time setup
+	EnableBootstrap bool
+	AdminPath       string
+
 	// Database
 	DatabaseURL string
 
@@ -35,17 +39,17 @@ type Config struct {
 	EmbeddingModel string
 
 	// RAG Parameters
-	ChunkSize      int
-	ChunkOverlap   int
-	RetrieverK     int
-	MemoryWindow   int
+	ChunkSize    int
+	ChunkOverlap int
+	RetrieverK   int
+	MemoryWindow int
 
 	// Paths
 	DocumentsDir string
 
 	// WebSocket
-	WSPingInterval  int // seconds
-	WSWriteTimeout  int // seconds
+	WSPingInterval int // seconds
+	WSWriteTimeout int // seconds
 
 	// Workers
 	DBBatchSize     int
@@ -66,6 +70,10 @@ func Load() *Config {
 		// Server
 		ServerPort: getEnv("PORT", "8080"),
 		ServerHost: getEnv("SERVER_HOST", "0.0.0.0"),
+
+		// Bootstrap / First-time setup
+		EnableBootstrap: getEnvBool("ENABLE_BOOTSTRAP", false),
+		AdminPath:       getEnv("ADMIN_PATH", "/admin"),
 
 		// Database
 		DatabaseURL: getEnv("DATABASE_URL", "postgres://localhost:5432/dongdo_cs?sslmode=disable"),
@@ -139,6 +147,14 @@ func getEnvFloat(key string, fallback float64) float64 {
 		}
 	}
 	return fallback
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	return strings.ToLower(v) == "true" || v == "1"
 }
 
 const defaultSystemPrompt = `Bạn là chuyên viên Chăm sóc khách hàng của Đông Đô Partners. Nhiệm vụ của bạn là tư vấn, giải đáp thắc mắc cho khách hàng về Hàng hóa phái sinh, hướng dẫn nền tảng DDP Invest, quy trình nạp/rút tiền và quản trị rủi ro.

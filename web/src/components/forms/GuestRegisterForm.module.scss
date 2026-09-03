@@ -1,0 +1,110 @@
+// ============================================================
+// GuestRegisterForm — Pre-chat form cho khách hàng
+// ============================================================
+@use '../../styles/_shared.scss' as s;
+
+.formGroup {
+  margin-bottom: s.$space-4;
+}
+
+.formLabel {
+  display: block;
+  font-size: s.$text-xs;
+  font-weight: 600;
+  color: #cbd5e1;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: s.$space-2;
+
+  &Required {
+    color: s.$accent-red;
+  }
+
+  &Optional {
+    color: s.$text-dim;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: normal;
+    margin-left: 4px;
+  }
+}
+
+.inputWrap {
+  position: relative;
+}
+
+.inputIcon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  color: s.$text-muted;
+  pointer-events: none;
+}
+
+.input {
+  width: 100%;
+  background: s.$surface-input;
+  border: 1px solid s.$border-subtle;
+  color: #f1f5f9;
+  font-size: s.$text-sm;
+  padding: s.$space-3 16px s.$space-3 40px;
+  border-radius: s.$radius-xl;
+  transition: border-color s.$transition-base, box-shadow s.$transition-base;
+  outline: none;
+
+  &:focus {
+    border-color: s.$brand-red-light;
+    box-shadow: 0 0 0 3px rgba(s.$brand-red, 0.25), 0 0 15px rgba(s.$brand-red-light, 0.2);
+  }
+
+  &::placeholder {
+    color: s.$text-dim;
+  }
+}
+
+.errorMsg {
+  margin-top: s.$space-1;
+  font-size: s.$text-xs;
+  color: s.$accent-red;
+}
+
+.serverError {
+  padding: s.$space-3;
+  border-radius: s.$radius-xl;
+  background-color: rgba(s.$accent-red, 0.1);
+  border: 1px solid rgba(s.$accent-red, 0.3);
+  color: #fda4af;
+  font-size: s.$text-xs;
+}
+
+.submit {
+  width: 100%;
+  padding: s.$space-3 + 1 s.$space-4;
+  border-radius: s.$radius-xl;
+  background: linear-gradient(135deg, s.$brand-red 0%, s.$brand-red-light 100%);
+  color: #fff;
+  font-weight: 600;
+  font-size: s.$text-sm;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: s.$space-2;
+  margin-top: s.$space-6;
+  cursor: pointer;
+  box-shadow: s.$shadow-glow-red;
+  transition: transform s.$transition-base, filter s.$transition-base;
+
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+    filter: brightness(1.08);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}

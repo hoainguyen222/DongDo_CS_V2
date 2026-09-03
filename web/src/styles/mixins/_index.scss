@@ -1,0 +1,268 @@
+// ============================================================
+// SCSS Mixins — DongDo CS V2
+// Reusable patterns across all modules
+// ============================================================
+@import '../tokens/variables';
+
+// ── Responsive breakpoints ──────────────────────────────────
+@mixin sm-up {
+  @media (min-width: #{$breakpoint-sm}) { @content; }
+}
+@mixin md-up {
+  @media (min-width: #{$breakpoint-md}) { @content; }
+}
+@mixin lg-up {
+  @media (min-width: #{$breakpoint-lg}) { @content; }
+}
+@mixin xl-up {
+  @media (min-width: #{$breakpoint-xl}) { @content; }
+}
+
+// ── Glassmorphism panels ─────────────────────────────────
+@mixin glass-panel {
+  background: $bg-card;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid $border-subtle;
+}
+
+@mixin glass-panel-brand {
+  background: rgba($brand-navy, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid $border-glass;
+}
+
+@mixin glass-input {
+  background: $surface-input;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: white;
+  transition: border-color $transition-base, box-shadow $transition-base;
+
+  &:focus {
+    border-color: $brand-red-light;
+    box-shadow: 0 0 0 3px rgba($brand-red, 0.25), 0 0 15px rgba($brand-red-light, 0.2);
+    outline: none;
+  }
+}
+
+// ── Card base ──────────────────────────────────────────────
+@mixin card {
+  background-color: $bg-card-solid;
+  border: 1px solid $border-subtle;
+  border-radius: $radius-lg;
+  padding: $space-6;
+  box-shadow: $shadow-card;
+}
+
+@mixin card-hover {
+  transition: transform $transition-base, border-color $transition-base;
+  &:hover {
+    transform: translateY(-2px);
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+}
+
+// ── Button variants ────────────────────────────────────────
+@mixin btn-brand {
+  background: linear-gradient(135deg, $brand-red 0%, $brand-red-light 100%);
+  color: white;
+  font-weight: 600;
+  box-shadow: $shadow-glow-red;
+  transition: transform $transition-base, filter $transition-base, box-shadow $transition-base;
+
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+    filter: brightness(1.08);
+    box-shadow: 0 6px 20px rgba($brand-red-light, 0.5);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+@mixin btn-navy {
+  background: linear-gradient(135deg, $brand-navy 0%, $brand-navy-light 100%);
+  color: white;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 14px rgba($brand-navy, 0.35);
+  transition: background $transition-base, border-color $transition-base;
+
+  &:hover:not(:disabled) {
+    background: linear-gradient(135deg, #24386B 0%, #354D8C 100%);
+    border-color: rgba($brand-red, 0.4);
+  }
+}
+
+@mixin btn-ghost {
+  background: transparent;
+  color: $text-muted;
+  border: 1px solid $border-subtle;
+  transition: background $transition-base, color $transition-base;
+
+  &:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.05);
+    color: white;
+  }
+}
+
+@mixin btn-purple {
+  background: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%);
+  color: white;
+  font-weight: 700;
+  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.35);
+  transition: transform $transition-base, box-shadow $transition-base;
+
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(124, 58, 237, 0.5);
+  }
+}
+
+// ── Status pills ────────────────────────────────────────────
+@mixin pill($bg, $color) {
+  padding: 3px 10px;
+  border-radius: $radius-full;
+  font-size: 11px;
+  font-weight: 600;
+  background: $bg;
+  color: $color;
+}
+
+@mixin pill-green { @include pill(rgba($accent-green, 0.15), #34d399); }
+@mixin pill-red { @include pill(rgba($accent-red, 0.15), #f87171); }
+@mixin pill-amber { @include pill(rgba($accent-amber, 0.15), #fbbf24); }
+@mixin pill-blue { @include pill(rgba($accent-blue, 0.15), #38bdf8); }
+@mixin pill-purple { @include pill(rgba($accent-purple, 0.15), #c4b5fd); }
+
+// ── Scrollbar ───────────────────────────────────────────────
+@mixin custom-scrollbar($width: 6px) {
+  &::-webkit-scrollbar {
+    width: $width;
+    height: $width;
+  }
+  &::-webkit-scrollbar-track {
+    background: rgba($bg-dark, 0.8);
+  }
+  &::-webkit-scrollbar-thumb {
+    background: rgba($brand-red, 0.4);
+    border-radius: 4px;
+    &:hover { background: rgba($brand-red-light, 0.7); }
+  }
+}
+
+// ── Table base ──────────────────────────────────────────────
+@mixin table-base {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: $text-sm;
+
+  th {
+    padding: $space-3 $space-4;
+    font-size: 12px;
+    font-weight: 600;
+    color: $text-muted;
+    background: rgba($brand-navy-dark, 0.6);
+    border-bottom: 1px solid $border-subtle;
+    white-space: nowrap;
+  }
+
+  td {
+    padding: $space-3 + 1 $space-4;
+    color: $text-main;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    vertical-align: middle;
+  }
+
+  tbody tr:hover td {
+    background-color: rgba($brand-navy-medium, 0.4);
+  }
+}
+
+// ── Metric card ─────────────────────────────────────────────
+@mixin metric-card {
+  @include card;
+  display: flex;
+  align-items: center;
+  gap: $space-4;
+  @include card-hover;
+}
+
+@mixin metric-icon($bg, $color) {
+  width: 48px;
+  height: 48px;
+  border-radius: $radius-md;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+  background: $bg;
+  color: $color;
+}
+
+// ── Form controls ────────────────────────────────────────────
+@mixin form-input {
+  width: 100%;
+  background-color: $surface-input;
+  border: 1px solid $border-subtle;
+  border-radius: $radius-md;
+  color: #e2e8f0;
+  font-size: $text-base;
+  padding: $space-3 $space-4;
+  outline: none;
+  transition: border-color $transition-base, box-shadow $transition-base;
+
+  &:focus {
+    border-color: $accent-purple;
+    box-shadow: 0 0 0 3px rgba($accent-purple, 0.15);
+  }
+
+  &::placeholder { color: $text-dim; }
+  &:disabled { opacity: 0.6; cursor: not-allowed; }
+}
+
+@mixin form-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: $text-muted;
+  margin-bottom: $space-2;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+// ── Sub-nav pills ────────────────────────────────────────────
+@mixin nav-pill {
+  padding: $space-3 $space-4;
+  background-color: $bg-card-solid;
+  border: 1px solid $border-subtle;
+  border-radius: $radius-md;
+  color: $text-muted;
+  font-size: $text-base;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: $space-2;
+  white-space: nowrap;
+  transition: background $transition-base, color $transition-base, border-color $transition-base;
+  user-select: none;
+
+  &:hover {
+    background-color: rgba($brand-navy-medium, 0.4);
+    color: white;
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+
+  &.active {
+    background: linear-gradient(135deg, rgba($accent-purple, 0.2) 0%, rgba(99, 102, 241, 0.2) 100%);
+    border-color: $accent-purple;
+    color: white;
+    box-shadow: 0 4px 12px rgba($accent-purple, 0.2);
+  }
+}

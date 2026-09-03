@@ -12,7 +12,15 @@ services:
       - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./db/migrations/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql
+      # db/init runs on FIRST boot only (when pgdata volume is empty).
+      # It executes all *.sql files in db/init sequentially — this handles the
+      # initial schema creation so goose doesn't need to CREATE everything.
+      #
+      # KEEP THESE IN SYNC: every time you add a new migration under
+      # db/migrations/, run `make sync-init` to copy it to db/init.
+      # For existing volumes, goose picks up pending migrations on server startup
+      # via embedded //go:embed migrations/ (no manual copy needed).
+      - ./db/init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s

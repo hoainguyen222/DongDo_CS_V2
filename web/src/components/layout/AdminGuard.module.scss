@@ -1,0 +1,71 @@
+// ============================================================
+// AdminGuard — Loading + Auth gate shell
+// ============================================================
+@use '../../styles/_shared.scss' as s;
+
+.shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: s.$space-4;
+  position: relative;
+  overflow: hidden;
+  background-color: s.$bg-dark;
+}
+
+.blobNavy {
+  position: absolute;
+  top: -10rem;
+  left: -10rem;
+  width: 24rem;
+  height: 24rem;
+  border-radius: 9999px;
+  background-color: rgba(s.$brand-navy, 0.4);
+  filter: blur(64px);
+  pointer-events: none;
+}
+
+.blobRed {
+  position: absolute;
+  bottom: -10rem;
+  right: -10rem;
+  width: 24rem;
+  height: 24rem;
+  border-radius: 9999px;
+  background-color: rgba(s.$brand-red, 0.3);
+  filter: blur(64px);
+  pointer-events: none;
+}
+
+.content {
+  text-align: center;
+  position: relative;
+  z-index: 10;
+}
+
+.iconBox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: s.$space-4;
+  border-radius: s.$radius-xl;
+  background-color: rgba(s.$brand-navy, 0.6);
+  border: 1px solid rgba(s.$brand-red, 0.4);
+  margin-bottom: s.$space-4;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+}
+
+.iconPulse {
+  width: 3rem;
+  height: 3rem;
+  color: #fff;
+  animation: pulseDot 1.5s ease-in-out infinite;
+}
+
+.title {
+  color: #fff;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  animation: pulseDot 1.5s ease-in-out infinite;
+}

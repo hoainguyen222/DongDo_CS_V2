@@ -50,7 +50,17 @@ func (h *Hub) Run() {
 			if clients, ok := h.sessions[client.sessionID]; ok {
 				if _, ok := clients[client]; ok {
 					delete(clients, client)
-					close(client.send)
+					// Đóng channel an toàn — dùng recover để chống "close of closed channel"
+					// trong trường hợp hub đã close ở drop path trước đó (defensive).
+					func() {
+						defer func() {
+							if r := recover(); r != nil {
+								log.Printf("⚠️ WS hub: recover on close client.send for session=%s user=%s",
+									client.sessionID, client.userID)
+							}
+						}()
+						close(client.send)
+					}()
 					if len(clients) == 0 {
 						delete(h.sessions, client.sessionID)
 					}
@@ -71,6 +81,10 @@ func (h *Hub) BroadcastToSession(sessionID string, event *domain.WSEvent) {
 }
 
 // BroadcastToSessionExcept sends an event to session clients while excluding the sender to avoid reflection.
+//
+// Lưu ý: trước đây hub drop theo kiểu `close(client.send) + delete(client)` khi channel đầy,
+// làm client mất kết nối cho đến khi reconnect — khiến các event sau (typing/AI reply/call)
+// bị mất hoàn toàn. Giờ chỉ drop event đó và log, giữ client online.
 func (h *Hub) BroadcastToSessionExcept(sessionID string, event *domain.WSEvent, excludeUserID string) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -84,13 +98,13 @@ func (h *Hub) BroadcastToSessionExcept(sessionID string, event *domain.WSEvent, 
 			select {
 			case client.send <- event:
 			default:
-				close(client.send)
-				delete(clients, client)
+				log.Printf("⚠️ WS hub: client.send buffer full, dropping event type=%s for session=%s user=%s",
+					event.Type, sessionID, client.userID)
 			}
 		}
 	}
 
-	// 2. If it's a message, case update, typing, or WebRTC call event from guest, also broadcast to admin_inbox
+	// 2. Broadcast to admin_inbox cho message/case_update/typing/call events
 	if sessionID != "admin_inbox" {
 		isBroadcastToAdmin := event.Type == domain.WSEventMessage ||
 			event.Type == domain.WSEventCaseUpdate ||
@@ -109,8 +123,8 @@ func (h *Hub) BroadcastToSessionExcept(sessionID string, event *domain.WSEvent, 
 					select {
 					case client.send <- event:
 					default:
-						close(client.send)
-						delete(adminClients, client)
+						log.Printf("⚠️ WS hub: admin_inbox buffer full, dropping event type=%s for user=%s",
+							event.Type, client.userID)
 					}
 				}
 			}

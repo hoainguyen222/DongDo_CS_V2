@@ -1,0 +1,88 @@
+// ============================================================
+// Design Tokens — DongDo CS V2
+// Consistent variables across all SCSS modules
+// ============================================================
+
+// ── Colors ──────────────────────────────────────────────────
+$brand-navy: #1C2D56;
+$brand-navy-dark: #0A0F1D;
+$brand-navy-medium: #162344;
+$brand-navy-light: #2A3F74;
+$brand-red: #95252E;
+$brand-red-light: #B32D38;
+$brand-red-dark: #7A1E26;
+
+$bg-dark: #0A0F1D;
+$bg-card: rgba(22, 35, 68, 0.75);
+$bg-card-solid: #131a2b;
+$surface-glass: rgba(28, 45, 86, 0.5);
+$surface-input: rgba(15, 24, 48, 0.8);
+
+$border-subtle: rgba(255, 255, 255, 0.08);
+$border-active: #7c3aed;
+$border-glass: rgba(149, 37, 46, 0.25);
+
+$text-main: #f1f5f9;
+$text-muted: #94a3b8;
+$text-dim: #64748b;
+
+$accent-green: #10b981;
+$accent-cyan: #06b6d4;
+$accent-amber: #f59e0b;
+$accent-red: #ef4444;
+$accent-purple: #7c3aed;
+$accent-blue: #38bdf8;
+
+// ── Typography ───────────────────────────────────────────────
+$font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+$font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+
+$text-xs: 11px;
+$text-sm: 13px;
+$text-base: 14px;
+$text-md: 15px;
+$text-lg: 16px;
+$text-xl: 18px;
+$text-2xl: 20px;
+$text-3xl: 24px;
+
+// ── Spacing ─────────────────────────────────────────────────
+$space-1: 4px;
+$space-2: 8px;
+$space-3: 12px;
+$space-4: 16px;
+$space-5: 20px;
+$space-6: 24px;
+$space-8: 32px;
+
+// ── Border Radius ────────────────────────────────────────────
+$radius-sm: 6px;
+$radius-md: 10px;
+$radius-lg: 14px;
+$radius-xl: 20px;
+$radius-full: 9999px;
+
+// ── Shadows ─────────────────────────────────────────────────
+$shadow-card: 0 4px 16px rgba(0, 0, 0, 0.2);
+$shadow-elevated: 0 10px 30px rgba(0, 0, 0, 0.3);
+$shadow-glow-purple: 0 0 20px rgba(124, 58, 237, 0.25);
+$shadow-glow-red: 0 4px 14px rgba(149, 37, 46, 0.35);
+
+// ── Transitions ───────────────────────────────────────────────
+$transition-fast: 0.15s ease;
+$transition-base: 0.2s ease;
+$transition-slow: 0.3s ease;
+
+// ── Breakpoints ──────────────────────────────────────────────
+$breakpoint-sm: 640px;
+$breakpoint-md: 768px;
+$breakpoint-lg: 1024px;
+$breakpoint-xl: 1280px;
+
+// ── Z-Index ────────────────────────────────────────────────
+$z-dropdown: 100;
+$z-sticky: 200;
+$z-modal-backdrop: 400;
+$z-modal: 500;
+$z-toast: 600;
+$z-tooltip: 700;

@@ -81,6 +81,13 @@ func (w *AIWorker) Start(ctx context.Context) {
 					isFallback = true
 				}
 
+				// Guard: if all providers returned empty content, fall back to a human handoff message.
+				if strings.TrimSpace(reply) == "" {
+					log.Printf("⚠️ AI Worker: all LLM providers returned empty reply for session %s. Using fallback message.", sessionID)
+					reply = "Dạ xin lỗi anh/chị, hiện tại em chưa nhận được phản hồi từ hệ thống AI. Chuyên viên CSKH của Đông Đô sẽ trực tiếp tham gia cuộc trò chuyện để hỗ trợ bạn ngay."
+					isFallback = true
+				}
+
 				// Stop typing indicator
 				_ = w.eventBus.PublishWS(ctx, sessionID, domain.WSEventTyping, map[string]interface{}{
 					"sender_id": "Đông Đô AI",

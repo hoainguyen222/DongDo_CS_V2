@@ -1,17 +1,71 @@
 version: "2"
 sql:
+  # ============================================================
+  # Auth domain — users, sessions
+  # ============================================================
   - engine: "postgresql"
-    queries: "db/queries/"
-    schema: "db/migrations/"
+    queries: "db/queries/auth"
+    schema: "db/migrations"
     gen:
       go:
-        package: "sqlcdb"
-        out: "internal/repository/sqlcdb"
+        package: "authdb"
+        out: "internal/repository/sqlcdb/auth"
         sql_package: "pgx/v5"
         emit_json_tags: true
         emit_prepared_queries: false
         emit_interface: true
-        emit_exact_table_names: false
+        emit_empty_slices: true
+        emit_methods_with_db_argument: false
+        overrides:
+          - db_type: "uuid"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - db_type: "timestamptz"
+            go_type:
+              import: "time"
+              type: "Time"
+          - db_type: "pg_catalog.int4"
+            go_type: "int32"
+          - db_type: "user_role"
+            go_type:
+              import: "github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
+              type: "UserRole"
+          - db_type: "case_status"
+            go_type:
+              import: "github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
+              type: "CaseStatus"
+          - db_type: "sender_type"
+            go_type:
+              import: "github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
+              type: "SenderType"
+          - db_type: "learn_status"
+            go_type:
+              import: "github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
+              type: "LearnStatus"
+          - db_type: "call_status"
+            go_type:
+              import: "github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
+              type: "CallStatus"
+          - db_type: "caller_type"
+            go_type:
+              import: "github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
+              type: "CallerType"
+
+  # ============================================================
+  # Chat domain — guests, messages, cases
+  # ============================================================
+  - engine: "postgresql"
+    queries: "db/queries/chat"
+    schema: "db/migrations"
+    gen:
+      go:
+        package: "chatdb"
+        out: "internal/repository/sqlcdb/chat"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_prepared_queries: false
+        emit_interface: true
         emit_empty_slices: true
         overrides:
           - db_type: "uuid"
@@ -24,3 +78,147 @@ sql:
               type: "Time"
           - db_type: "pg_catalog.int4"
             go_type: "int32"
+          - db_type: "user_role"
+            go_type:
+              import: "github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
+              type: "UserRole"
+          - db_type: "case_status"
+            go_type:
+              import: "github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
+              type: "CaseStatus"
+          - db_type: "sender_type"
+            go_type:
+              import: "github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
+              type: "SenderType"
+
+  # ============================================================
+  # Learning domain
+  # ============================================================
+  - engine: "postgresql"
+    queries: "db/queries/learning"
+    schema: "db/migrations"
+    gen:
+      go:
+        package: "learningdb"
+        out: "internal/repository/sqlcdb/learning"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_prepared_queries: false
+        emit_interface: true
+        emit_empty_slices: true
+        overrides:
+          - db_type: "uuid"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - db_type: "timestamptz"
+            go_type:
+              import: "time"
+              type: "Time"
+          - db_type: "learn_status"
+            go_type:
+              import: "github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
+              type: "LearnStatus"
+
+  # ============================================================
+  # Voice calls domain
+  # ============================================================
+  - engine: "postgresql"
+    queries: "db/queries/voice"
+    schema: "db/migrations"
+    gen:
+      go:
+        package: "voicedb"
+        out: "internal/repository/sqlcdb/voice"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_prepared_queries: false
+        emit_interface: true
+        emit_empty_slices: true
+        overrides:
+          - db_type: "uuid"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - db_type: "timestamptz"
+            go_type:
+              import: "time"
+              type: "Time"
+          - db_type: "call_status"
+            go_type:
+              import: "github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
+              type: "CallStatus"
+          - db_type: "caller_type"
+            go_type:
+              import: "github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
+              type: "CallerType"
+
+  # ============================================================
+  # Settings (KV) domain
+  # ============================================================
+  - engine: "postgresql"
+    queries: "db/queries/settings"
+    schema: "db/migrations"
+    gen:
+      go:
+        package: "settingsdb"
+        out: "internal/repository/sqlcdb/settings"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_prepared_queries: false
+        emit_interface: true
+        emit_empty_slices: true
+
+  # ============================================================
+  # Analytics domain
+  # ============================================================
+  - engine: "postgresql"
+    queries: "db/queries/analytics"
+    schema: "db/migrations"
+    gen:
+      go:
+        package: "analyticsdb"
+        out: "internal/repository/sqlcdb/analytics"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_prepared_queries: false
+        emit_interface: true
+        emit_empty_slices: true
+        overrides:
+          - db_type: "uuid"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - db_type: "timestamptz"
+            go_type:
+              import: "time"
+              type: "Time"
+
+  # ============================================================
+  # Partner domain (config, dashboard, reports)
+  # ============================================================
+  - engine: "postgresql"
+    queries: "db/queries/partner"
+    schema: "db/migrations"
+    gen:
+      go:
+        package: "partnerdb"
+        out: "internal/repository/sqlcdb/partner"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_prepared_queries: false
+        emit_interface: true
+        emit_empty_slices: true
+        overrides:
+          - db_type: "uuid"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - db_type: "timestamptz"
+            go_type:
+              import: "time"
+              type: "Time"
+          - db_type: "case_status"
+            go_type:
+              import: "github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
+              type: "CaseStatus"

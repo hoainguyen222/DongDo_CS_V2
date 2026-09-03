@@ -1,0 +1,268 @@
+// ============================================================
+// ResolveCaseForm — Form kết thúc case + dạy AI
+// ============================================================
+@use '../../styles/_shared.scss' as s;
+
+.formStack {
+  display: flex;
+  flex-direction: column;
+  gap: s.$space-4;
+  padding: s.$space-5;
+}
+
+.learnToggle {
+  background-color: rgba(15, 23, 42, 0.5);
+  padding: s.$space-3 + 1;
+  border-radius: s.$radius-xl;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: s.$space-4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.toggleLabel {
+  display: flex;
+  align-items: center;
+  gap: s.$space-2 + 1;
+  font-size: s.$text-sm;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+}
+
+.toggleCheckbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: s.$brand-red;
+}
+
+.toggleStatus {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: s.$radius-full;
+  font-weight: 600;
+
+  &Enabled {
+    background-color: rgba(s.$accent-green, 0.1);
+    color: s.$accent-green;
+    border: 1px solid rgba(s.$accent-green, 0.3);
+  }
+
+  &Disabled {
+    background-color: rgba(s.$text-dim, 0.1);
+    color: s.$text-dim;
+    border: 1px solid rgba(s.$text-dim, 0.3);
+  }
+}
+
+.caseInfo {
+  font-size: 11px;
+  color: s.$text-muted;
+  background: rgba(15, 23, 42, 0.5);
+  padding: s.$space-3;
+  border-radius: s.$radius-xl;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: s.$space-4;
+
+  code {
+    color: #7dd3fc;
+    font-family: s.$font-mono;
+  }
+
+  strong {
+    color: #fff;
+  }
+}
+
+.qaListHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: s.$text-xs;
+  color: #cbd5e1;
+  margin-bottom: s.$space-2;
+}
+
+.qaListTitle {
+  font-weight: 600;
+}
+
+.addPairBtn {
+  color: #38bdf8;
+  font-size: s.$text-xs;
+  background: transparent;
+  border: none;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: s.$space-1;
+  cursor: pointer;
+
+  &:hover {
+    color: #7dd3fc;
+  }
+}
+
+.qaList {
+  max-height: 45vh;
+  overflow-y: auto;
+  padding-right: s.$space-1;
+  display: flex;
+  flex-direction: column;
+  gap: s.$space-3;
+}
+
+.qaCard {
+  background-color: s.$bg-dark;
+  padding: s.$space-4;
+  border-radius: s.$radius-xl;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: s.$space-3;
+}
+
+.qaCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.qaCardNumber {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(s.$accent-amber, 0.9);
+  background-color: rgba(s.$accent-amber, 0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(s.$accent-amber, 0.3);
+}
+
+.removeBtn {
+  color: s.$accent-red;
+  font-size: s.$text-xs;
+  background: transparent;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: s.$space-1;
+  cursor: pointer;
+
+  &:hover {
+    color: #fb7185;
+  }
+}
+
+.qaField {
+  width: 100%;
+}
+
+.qaFieldLabel {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #cbd5e1;
+  margin-bottom: s.$space-1;
+}
+
+.qaFieldInput {
+  width: 100%;
+  padding: s.$space-2 s.$space-3;
+  border-radius: s.$radius-sm + 2;
+  background-color: rgb(15, 23, 42);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: s.$text-xs;
+  outline: none;
+  transition: border-color s.$transition-fast;
+
+  &:focus {
+    border-color: s.$brand-red-light;
+  }
+}
+
+.qaFieldTextarea {
+  @extend .qaFieldInput;
+  resize: vertical;
+  min-height: 60px;
+}
+
+.errorMsg {
+  margin-top: s.$space-1;
+  font-size: s.$text-xs;
+  color: s.$accent-red;
+}
+
+.noteField {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: s.$radius-xl;
+  background-color: s.$bg-dark;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: s.$text-xs;
+  outline: none;
+  resize: vertical;
+  transition: border-color s.$transition-fast;
+
+  &:focus {
+    border-color: s.$brand-red-light;
+  }
+
+  &::placeholder {
+    color: s.$text-dim;
+  }
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: s.$space-3;
+  padding-top: s.$space-2;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.btnSecondary {
+  padding: s.$space-2 s.$space-4;
+  border-radius: s.$radius-xl;
+  background-color: rgba(30, 41, 59, 0.8);
+  color: #cbd5e1;
+  font-size: s.$text-xs;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: background s.$transition-fast;
+
+  &:hover {
+    background-color: rgba(51, 65, 85, 0.9);
+  }
+}
+
+.btnPrimary {
+  padding: s.$space-2 s.$space-5;
+  border-radius: s.$radius-xl;
+  background: linear-gradient(135deg, s.$brand-red 0%, s.$brand-red-light 100%);
+  color: #fff;
+  font-size: s.$text-xs;
+  font-weight: 600;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  box-shadow: s.$shadow-glow-red;
+  transition: transform s.$transition-base, filter s.$transition-base;
+
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+    filter: brightness(1.08);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}

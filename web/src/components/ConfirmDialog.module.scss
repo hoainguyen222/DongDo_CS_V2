@@ -1,0 +1,150 @@
+// ============================================================
+// ConfirmDialog — Global confirm modal
+// ============================================================
+@use '../styles/_shared.scss' as s;
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: s.$space-4;
+  animation: fadeIn 150ms ease both;
+}
+
+.dialog {
+  width: 100%;
+  max-width: 28rem;
+  background: linear-gradient(135deg, rgba(s.$brand-navy, 0.85) 0%, rgba(s.$brand-navy-light, 0.85) 100%);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(s.$brand-red, 0.15);
+  border-radius: s.$radius-xl;
+  box-shadow: s.$shadow-elevated;
+  padding: s.$space-6;
+  animation: zoomIn 150ms ease both;
+}
+
+.body {
+  display: flex;
+  align-items: flex-start;
+  gap: s.$space-4;
+  margin-bottom: s.$space-4;
+}
+
+.icon {
+  width: 48px;
+  height: 48px;
+  border-radius: s.$radius-xl;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid;
+
+  &Danger {
+    background-color: rgba(s.$accent-red, 0.2);
+    border-color: rgba(s.$accent-red, 0.4);
+    color: #f87171;
+  }
+
+  &Warning {
+    background-color: rgba(s.$accent-amber, 0.2);
+    border-color: rgba(s.$accent-amber, 0.4);
+    color: #fbbf24;
+  }
+
+  &Info {
+    background-color: rgba(s.$accent-blue, 0.2);
+    border-color: rgba(s.$accent-blue, 0.4);
+    color: s.$accent-blue;
+  }
+}
+
+.text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.title {
+  font-size: s.$text-base;
+  font-weight: 700;
+  color: #fff;
+}
+
+.message {
+  font-size: s.$text-sm;
+  color: #cbd5e1;
+  margin-top: 6px;
+  line-height: 1.6;
+}
+
+.closeBtn {
+  padding: s.$space-1;
+  border-radius: s.$radius-sm + 2;
+  background: transparent;
+  color: s.$text-muted;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color s.$transition-fast;
+
+  &:hover {
+    color: #fff;
+  }
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: s.$space-3;
+  padding-top: s.$space-4;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.btnCancel {
+  padding: s.$space-2 + 1 s.$space-4;
+  border-radius: s.$radius-xl;
+  background-color: rgba(30, 41, 59, 0.8);
+  color: #cbd5e1;
+  font-size: s.$text-xs;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: background s.$transition-fast;
+
+  &:hover {
+    background-color: rgba(51, 65, 85, 0.9);
+  }
+}
+
+.btnConfirm {
+  padding: s.$space-2 + 1 s.$space-5;
+  border-radius: s.$radius-xl;
+  color: #fff;
+  font-size: s.$text-xs;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.3);
+  transition: filter s.$transition-fast;
+
+  &:hover {
+    filter: brightness(1.08);
+  }
+}
+
+.btnDanger {
+  background: s.$accent-red;
+}
+
+.btnWarning {
+  background: s.$accent-amber;
+}
+
+.btnInfo {
+  background: s.$accent-blue;
+}

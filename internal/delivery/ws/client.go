@@ -81,24 +81,10 @@ func (c *Client) ReadPump() {
 			continue
 		}
 
-		var clientMsgUUID *uuid.UUID
-		if incoming.ClientMsgID != nil && *incoming.ClientMsgID != "" {
-			if u, err := uuid.Parse(*incoming.ClientMsgID); err == nil {
-				clientMsgUUID = &u
-			} else {
-				u2 := uuid.NewSHA1(uuid.NameSpaceOID, []byte(*incoming.ClientMsgID))
-				clientMsgUUID = &u2
-			}
-		}
+		// Message sending has been migrated to REST API.
+		// Only typing, call signaling, and ICE candidates are processed via WS.
 
 		switch incoming.Type {
-		case domain.WSEventMessage:
-			if c.userRole == "guest" || c.userRole == "customer" {
-				_, _ = c.chatUC.SendGuestMessage(ctx, c.sessionID, c.userID, incoming.Content, clientMsgUUID)
-			} else {
-				_, _ = c.chatUC.SendCSReply(ctx, c.sessionID, c.userID, c.userID, incoming.Content)
-			}
-
 		case domain.WSEventTyping:
 			_ = c.stateMgr.SetTyping(ctx, c.sessionID, c.userID)
 			c.hub.BroadcastToSession(c.sessionID, &domain.WSEvent{

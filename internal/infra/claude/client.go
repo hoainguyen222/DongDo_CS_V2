@@ -120,7 +120,9 @@ func (c *Client) GenerateResponse(
 
 					if resp.StatusCode == http.StatusOK {
 						var anthropicResp AnthropicResponse
-						if err := json.Unmarshal(respBytes, &anthropicResp); err == nil {
+						if err := json.Unmarshal(respBytes, &anthropicResp); err != nil {
+							log.Printf("⚠️ Anthropic JSON unmarshal error: %v | body: %s", err, string(respBytes))
+						} else {
 							var replyBuilder strings.Builder
 							for _, block := range anthropicResp.Content {
 								if block.Type == "text" {
@@ -130,7 +132,12 @@ func (c *Client) GenerateResponse(
 							reply = replyBuilder.String()
 							fallbackPhrase := "chuyên viên CSKH của Đông Đô sẽ trực tiếp tham gia cuộc trò chuyện để hỗ trợ bạn ngay"
 							isFallback = strings.Contains(strings.ToLower(reply), strings.ToLower(fallbackPhrase)) || contextBlock == ""
-							return reply, isFallback, nil
+
+							// Only return if we have actual content; otherwise fall through to next provider.
+							if reply != "" {
+								return reply, isFallback, nil
+							}
+							log.Printf("⚠️ Anthropic 200 OK but empty text content | body: %s", string(respBytes))
 						}
 					} else {
 						log.Printf("⚠️ Anthropic Claude API response status %d: %s", resp.StatusCode, string(respBytes))

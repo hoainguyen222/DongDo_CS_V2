@@ -1,0 +1,120 @@
+// ============================================================
+// Providers — Toast + Confirm + Query Client
+// ============================================================
+@use '../../styles/_shared.scss' as s;
+
+.toastContainer {
+  position: fixed;
+  bottom: s.$space-4;
+  right: s.$space-4;
+  // z-index 90 > callModalBackdrop 70 > callBanner 70
+  // đảm bảo toast không bị modal che hoặc ngược lại
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  gap: s.$space-2;
+  max-width: 24rem;
+  width: calc(100% - 2 * s.$space-4);
+  pointer-events: none;
+  // tránh che nút gọi CSKH ở header khi trên mobile
+  max-height: calc(100vh - 80px);
+  max-height: calc(100dvh - 80px);
+  overflow-y: auto;
+}
+
+.toastItem {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: s.$space-3;
+  padding: s.$space-4;
+  border-radius: s.$radius-xl;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  animation: slideInFromRight 200ms ease both;
+  background-color: rgba(15, 23, 42, 0.92);
+  border: 1px solid;
+
+  &Success {
+    background-color: rgba(16, 185, 129, 0.92);
+    border-color: rgba(16, 185, 129, 0.4);
+    color: #fff;
+  }
+
+  &Error {
+    background-color: rgba(239, 68, 68, 0.92);
+    border-color: rgba(239, 68, 68, 0.4);
+    color: #fff;
+  }
+
+  &Warning {
+    background-color: rgba(245, 158, 11, 0.92);
+    border-color: rgba(245, 158, 11, 0.4);
+    color: #0A0F1D;
+  }
+
+  &Info {
+    background-color: rgba(56, 189, 248, 0.92);
+    border-color: rgba(56, 189, 248, 0.4);
+    color: #fff;
+  }
+}
+
+.toastIcon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  align-self: center; // icon căn giữa theo chiều dọc khi body 1 dòng
+}
+
+.toastBody {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.toastTitle {
+  font-size: s.$text-sm;
+  font-weight: 600;
+  margin: 0;
+  line-height: 1.3;
+  // title luôn 1 dòng, quá dài ellipsis
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toastMessage {
+  font-size: s.$text-xs;
+  opacity: 0.9;
+  margin: 0;
+  line-height: 1.4;
+  // message tối đa 2 dòng
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.toastClose {
+  background: transparent;
+  border: none;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+  padding: s.$space-1 / 2;
+  flex-shrink: 0;
+  transition: opacity s.$transition-fast;
+
+  &:hover {
+    opacity: 1;
+  }
+}

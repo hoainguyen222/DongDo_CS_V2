@@ -1,0 +1,502 @@
+// ============================================================
+// AdminPage — Shared shell for /admin/* feature pages
+// ============================================================
+@use '../../styles/_shared.scss' as s;
+
+.page {
+  padding: s.$space-6;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: s.$space-6;
+  gap: s.$space-3;
+  flex-wrap: wrap;
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: s.$space-3;
+}
+
+.headerIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: s.$radius-xl;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid;
+
+  &Blue {
+    background-color: rgba(56, 189, 248, 0.2);
+    border-color: rgba(56, 189, 248, 0.3);
+    color: #38bdf8;
+  }
+
+  &Emerald {
+    background-color: rgba(16, 185, 129, 0.2);
+    border-color: rgba(16, 185, 129, 0.3);
+    color: #34d399;
+  }
+
+  &Cyan {
+    background-color: rgba(34, 211, 238, 0.2);
+    border-color: rgba(34, 211, 238, 0.3);
+    color: s.$accent-cyan;
+  }
+
+  &Amber {
+    background-color: rgba(s.$accent-amber, 0.2);
+    border-color: rgba(s.$accent-amber, 0.3);
+    color: #fbbf24;
+  }
+
+  &Indigo {
+    background-color: rgba(99, 102, 241, 0.2);
+    border-color: rgba(99, 102, 241, 0.3);
+    color: #818cf8;
+  }
+
+  &Slate {
+    background-color: rgba(100, 116, 139, 0.2);
+    border-color: rgba(100, 116, 139, 0.3);
+    color: #94a3b8;
+  }
+
+  &Sky {
+    background-color: rgba(s.$accent-blue, 0.2);
+    border-color: rgba(s.$accent-blue, 0.3);
+    color: s.$accent-blue;
+  }
+
+  &EmeraldDark {
+    background-color: rgba(s.$accent-green, 0.2);
+    border-color: rgba(s.$accent-green, 0.3);
+    color: s.$accent-green;
+  }
+}
+
+.headerTitles {
+  display: flex;
+  flex-direction: column;
+}
+
+.headerTitle {
+  font-size: s.$text-lg;
+  font-weight: 700;
+  color: #fff;
+}
+
+.headerSubtitle {
+  font-size: s.$text-xs;
+  color: s.$text-muted;
+  margin-top: 2px;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: s.$space-3;
+}
+
+// ── Toolbar / Filter bar ──────────────────────────────────
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: s.$space-3;
+  margin-bottom: s.$space-4;
+  flex-wrap: wrap;
+}
+
+.searchInput {
+  flex: 1 1 auto;
+  max-width: 380px;
+  padding: 10px 16px;
+  border-radius: s.$radius-xl;
+  background-color: s.$bg-dark;
+  border: 1px solid rgba(71, 85, 105, 0.7);
+  color: #f1f5f9;
+  font-size: s.$text-sm;
+  outline: none;
+  transition: border-color s.$transition-fast, box-shadow s.$transition-fast;
+
+  &::placeholder {
+    color: s.$text-dim;
+  }
+
+  &:focus {
+    border-color: s.$brand-red-light;
+    box-shadow: 0 0 0 3px rgba(s.$brand-red, 0.25);
+  }
+}
+
+.searchInputWrap {
+  position: relative;
+  flex: 1 1 auto;
+  max-width: 380px;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  color: s.$text-muted;
+  pointer-events: none;
+}
+
+.searchInputPadded {
+  padding-left: 44px;
+}
+
+// ── Stat tile ─────────────────────────────────────────────
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: s.$space-4;
+  margin-bottom: s.$space-6;
+
+  @media (min-width: s.$breakpoint-lg) {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.statTile {
+  background: linear-gradient(135deg, rgba(s.$brand-navy, 0.85) 0%, rgba(s.$brand-navy-light, 0.85) 100%);
+  backdrop-filter: blur(16px);
+  padding: s.$space-4;
+  border-radius: s.$radius-xl;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: s.$space-1;
+}
+
+.statValue {
+  font-size: 24px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.2;
+}
+
+.statLabel {
+  font-size: s.$text-xs;
+  color: s.$text-muted;
+  margin-top: s.$space-1;
+}
+
+// ── Generic card container ────────────────────────────────
+.card {
+  background: linear-gradient(135deg, rgba(s.$brand-navy, 0.85) 0%, rgba(s.$brand-navy-light, 0.85) 100%);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: s.$radius-xl;
+  overflow: hidden;
+}
+
+.cardPad {
+  padding: s.$space-6;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: s.$space-4;
+  flex-wrap: wrap;
+  gap: s.$space-3;
+}
+
+.cardTitle {
+  font-size: s.$text-lg;
+  font-weight: 700;
+  color: #fff;
+}
+
+// ── Tables ────────────────────────────────────────────────
+.tableScroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.dataTable {
+  width: 100%;
+  text-align: left;
+  font-size: s.$text-sm;
+  border-collapse: collapse;
+
+  thead {
+    background: rgba(s.$brand-navy-dark, 0.5);
+  }
+
+  th {
+    padding: s.$space-3 s.$space-4;
+    font-size: s.$text-xs;
+    font-weight: 600;
+    color: s.$text-muted;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 14px s.$space-4;
+    color: s.$text-main;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    vertical-align: middle;
+  }
+
+  tbody tr:hover td {
+    background-color: rgba(s.$brand-navy-medium, 0.4);
+  }
+}
+
+.dataTableRight {
+  text-align: right;
+}
+
+.dataTableCenter {
+  text-align: center;
+}
+
+.emptyRow {
+  padding: 32px s.$space-4;
+  text-align: center;
+  color: s.$text-dim;
+  font-size: s.$text-sm;
+}
+
+.loadingRow {
+  padding: 32px s.$space-4;
+  text-align: center;
+  color: s.$text-muted;
+  font-size: s.$text-sm;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: s.$space-2;
+}
+
+.spinIcon {
+  animation: spin 1s linear infinite;
+  width: 16px;
+  height: 16px;
+}
+
+// ── Buttons ───────────────────────────────────────────────
+.btnGhost {
+  padding: 8px 14px;
+  border-radius: s.$radius-md + 2px;
+  background-color: rgba(30, 41, 59, 0.8);
+  color: #cbd5e1;
+  font-size: s.$text-xs;
+  font-weight: 600;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: background s.$transition-fast;
+
+  &:hover {
+    background-color: rgba(51, 65, 85, 0.9);
+  }
+}
+
+.btnPrimary {
+  padding: 10px 18px;
+  border-radius: s.$radius-xl;
+  background: linear-gradient(135deg, s.$brand-red 0%, s.$brand-red-light 100%);
+  color: #fff;
+  font-size: s.$text-xs;
+  font-weight: 600;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  box-shadow: s.$shadow-glow-red;
+  transition: transform s.$transition-base, filter s.$transition-base, opacity s.$transition-fast;
+
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+    filter: brightness(1.08);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.btnSuccess {
+  padding: 10px 18px;
+  border-radius: s.$radius-xl;
+  background: s.$accent-green;
+  color: #fff;
+  font-size: s.$text-xs;
+  font-weight: 600;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: filter s.$transition-fast;
+
+  &:hover:not(:disabled) {
+    filter: brightness(1.08);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.btnDanger {
+  padding: 10px 18px;
+  border-radius: s.$radius-xl;
+  background-color: rgba(s.$accent-red, 0.2);
+  color: #fca5a5;
+  font-size: s.$text-xs;
+  font-weight: 600;
+  border: 1px solid rgba(s.$accent-red, 0.3);
+  cursor: pointer;
+  transition: background s.$transition-fast, color s.$transition-fast;
+
+  &:hover {
+    background-color: rgba(s.$accent-red, 0.3);
+    color: #fff;
+  }
+}
+
+.btnSm {
+  padding: 6px 10px;
+  font-size: 10px;
+}
+
+.iconBtn {
+  padding: 6px;
+  border-radius: s.$radius-md + 2px;
+  background-color: rgba(30, 41, 59, 0.8);
+  color: s.$text-muted;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background s.$transition-fast, color s.$transition-fast;
+
+  &:hover {
+    background-color: rgba(51, 65, 85, 0.9);
+    color: #fff;
+  }
+}
+
+// ── Pills (status) ─────────────────────────────────────────
+.pill {
+  padding: 3px 10px;
+  border-radius: s.$radius-full;
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-block;
+}
+
+.pillBlue {
+  background-color: rgba(s.$accent-blue, 0.15);
+  color: s.$accent-blue;
+  border: 1px solid rgba(s.$accent-blue, 0.3);
+}
+
+.pillEmerald {
+  background-color: rgba(s.$accent-green, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(s.$accent-green, 0.3);
+}
+
+.pillRose {
+  background-color: rgba(s.$accent-red, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(s.$accent-red, 0.3);
+}
+
+.pillAmber {
+  background-color: rgba(s.$accent-amber, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(s.$accent-amber, 0.3);
+}
+
+.pillSlate {
+  background-color: rgba(100, 116, 139, 0.15);
+  color: #94a3b8;
+  border: 1px solid rgba(100, 116, 139, 0.3);
+}
+
+.pillCyan {
+  background-color: rgba(s.$accent-cyan, 0.15);
+  color: s.$accent-cyan;
+  border: 1px solid rgba(s.$accent-cyan, 0.3);
+}
+
+.pillPurple {
+  background-color: rgba(s.$accent-purple, 0.15);
+  color: #c4b5fd;
+  border: 1px solid rgba(s.$accent-purple, 0.3);
+}
+
+// ── Pagination footer ─────────────────────────────────────
+.paginationFooter {
+  padding: s.$space-3 + 1;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+// ── Misc ──────────────────────────────────────────────────
+.flex {
+  display: flex;
+}
+
+.flexCol {
+  display: flex;
+  flex-direction: column;
+}
+
+.gap4 {
+  gap: s.$space-4;
+}
+
+.mt4 {
+  margin-top: s.$space-4;
+}
+
+.mb4 {
+  margin-bottom: s.$space-4;
+}
+
+.mutedText {
+  color: s.$text-muted;
+  font-size: s.$text-xs;
+}
+
+.mutedTextBigger {
+  color: s.$text-muted;
+  font-size: s.$text-sm;
+}
+
+.codeText {
+  font-family: s.$font-mono;
+  font-size: 12px;
+  color: #cbd5e1;
+}
+
+.codeTextSmall {
+  font-family: s.$font-mono;
+  font-size: 10px;
+  color: s.$text-muted;
+}

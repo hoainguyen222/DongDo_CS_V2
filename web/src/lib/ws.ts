@@ -112,8 +112,13 @@ export class WSClient {
     return false;
   }
 
+  /**
+   * sendTyping was removed - typing is now sent via REST API.
+   * This method is kept as a no-op for backward compatibility with any legacy callers.
+   * @deprecated Use REST API instead.
+   */
   public sendTyping(): void {
-    this.send('typing', '');
+    // Typing now sent via POST /api/chat/typing
   }
 
   public on(event: WSEventType | '*', handler: MessageHandler): () => void {

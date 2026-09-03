@@ -1,6 +1,14 @@
 /** @type {import('next').NextConfig} */
+const path = require('path');
+
 const nextConfig = {
   reactStrictMode: false,
+  // SCSS imports dùng `@/...` cần được resolve qua `tsconfig.paths`
+  // vì vậy ta hook vào webpack để handle các import SCSS với alias này.
+  webpack(config) {
+    config.resolve.alias['@'] = path.resolve(__dirname, 'src');
+    return config;
+  },
   async rewrites() {
     return [
       {

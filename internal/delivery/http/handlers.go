@@ -266,10 +266,10 @@ func (h *Handler) HandleGuestRegister(c *gin.Context) {
 // ============================================================
 
 type ChatRequest struct {
-	SessionID   string     `json:"session_id"`
-	CustomerName string    `json:"customer_name"`
-	Message     string     `json:"message" binding:"required"`
-	ClientMsgID *uuid.UUID `json:"client_msg_id"`
+	SessionID    string     `json:"session_id"`
+	CustomerName string     `json:"customer_name"`
+	Message      string     `json:"message" binding:"required"`
+	ClientMsgID  *uuid.UUID `json:"client_msg_id"`
 }
 
 func (h *Handler) HandleChat(c *gin.Context) {
@@ -426,7 +426,7 @@ func (h *Handler) HandleReplyCase(c *gin.Context) {
 }
 
 type ResolveRequest struct {
-	ResolutionNote string         `json:"resolution_note"`
+	ResolutionNote string          `json:"resolution_note"`
 	ExtractPairs   []domain.QAPair `json:"extract_pairs"`
 }
 
@@ -1125,6 +1125,46 @@ func (h *Handler) HandleDeleteCall(c *gin.Context) {
 }
 
 // ============================================================
+// Call Signaling & Chat Actions (REST API -> WebSocket)
+// ============================================================
+
+// HandleDeclineCall - Guest declines an incoming call via REST API
+type DeclineCallRequest struct {
+	SessionID string `json:"session_id" binding:"required"`
+}
+
+func (h *Handler) HandleDeclineCall(c *gin.Context) {
+	var req DeclineCallRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "Dữ liệu không hợp lệ"})
+		return
+	}
+	// Broadcast decline notification via WebSocket hub
+	_ = h.eventBus.PublishWS(c.Request.Context(), req.SessionID, domain.WSEventCallEnd, map[string]interface{}{
+		"declined": true,
+	}, "guest")
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// HandleSendTyping - Send typing indicator via REST API
+type TypingRequest struct {
+	SessionID string `json:"session_id" binding:"required"`
+}
+
+func (h *Handler) HandleSendTyping(c *gin.Context) {
+	var req TypingRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "Dữ liệu không hợp lệ"})
+		return
+	}
+	// Broadcast typing event to session via WebSocket
+	_ = h.eventBus.PublishWS(c.Request.Context(), req.SessionID, domain.WSEventTyping, map[string]interface{}{
+		"typing": true,
+	}, "guest")
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// ============================================================
 // System Errors Persistence Handlers
 // ============================================================
 
@@ -1164,4 +1204,20 @@ func (h *Handler) HandleMarkSystemErrorHandled(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Đã đánh dấu xử lý lỗi"})
+}
+
+// ============================================================
+// Bootstrap / First-time Setup Handlers
+// ============================================================
+
+// HandleBootstrapStatus returns whether the system needs initial setup (no users exist yet).
+func (h *Handler) HandleBootstrapStatus(c *gin.Context) {
+	// Check if any user exists
+	users, err := h.authUC.ListUsers(c.Request.Context())
+	needsSetup := err == nil && len(users) == 0
+	c.JSON(http.StatusOK, gin.H{
+		"needs_setup":  needsSetup,
+		"is_enabled":   os.Getenv("ENABLE_BOOTSTRAP") == "true",
+		"owner_exists": false,
+	})
 }

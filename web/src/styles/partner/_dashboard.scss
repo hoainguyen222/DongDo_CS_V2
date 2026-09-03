@@ -1,0 +1,376 @@
+// ============================================================
+// Dashboard Styles — Partner Dashboard View
+// ============================================================
+@import '../../styles/tokens/variables';
+@import '../../styles/mixins/index';
+
+// ── Dashboard control bar ──────────────────────────────────
+.dashboard-control-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $space-4;
+  @include card;
+  margin-bottom: $space-5;
+  flex-wrap: wrap;
+}
+
+// ── Search feature box ─────────────────────────────────────
+.search-feature-box {
+  position: relative;
+  flex: 1;
+  min-width: 280px;
+}
+
+.search-feature-input {
+  width: 100%;
+  background-color: $surface-input;
+  border: 1px solid $border-subtle;
+  border-radius: $radius-md;
+  color: #e2e8f0;
+  font-family: inherit;
+  font-size: $text-sm;
+  padding: $space-3 $space-4;
+  padding-left: 38px;
+  outline: none;
+  transition: border-color $transition-base, box-shadow $transition-base;
+
+  &:focus {
+    border-color: $accent-purple;
+    box-shadow: 0 0 0 3px rgba($accent-purple, 0.15);
+  }
+
+  &::placeholder { color: $text-dim; }
+}
+
+.search-icon-inside {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.search-results-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background-color: $bg-card-solid;
+  border: 1px solid rgba($accent-purple, 0.4);
+  border-radius: $radius-md;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+  z-index: $z-dropdown;
+  max-height: 280px;
+  overflow-y: auto;
+  display: block;
+}
+
+.search-result-item {
+  padding: $space-3 + 1 $space-4;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: $text-sm;
+  color: $text-main;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background $transition-fast;
+  user-select: none;
+
+  &:hover {
+    background-color: rgba($brand-navy-medium, 0.4);
+    color: #a5b4fc;
+  }
+}
+
+.search-result-badge {
+  margin-left: auto;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba($accent-purple, 0.2);
+  color: #c4b5fd;
+}
+
+// ── Date filter ─────────────────────────────────────────────
+.date-filter-box {
+  display: flex;
+  align-items: center;
+  gap: $space-2 + 2;
+  flex-wrap: wrap;
+}
+
+.date-input-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: $surface-input;
+  border: 1px solid $border-subtle;
+  border-radius: $radius-md;
+  padding: 4px $space-3;
+
+  span {
+    font-size: 12px;
+    color: $text-muted;
+  }
+}
+
+.date-picker-custom {
+  background: transparent;
+  border: none;
+  color: #e2e8f0;
+  font-family: inherit;
+  font-size: 12.5px;
+  outline: none;
+  color-scheme: dark;
+}
+
+.btn-filter-apply {
+  @include btn-purple;
+  font-size: 12px;
+  padding: $space-2 $space-4;
+
+  &:hover:not(:disabled) { opacity: 0.9; }
+}
+
+.btn-filter-reset {
+  @include btn-ghost;
+  font-size: 12px;
+  padding: $space-2 $space-3;
+}
+
+// ── Metrics row ─────────────────────────────────────────────
+.dashboard-grid {
+  display: flex;
+  flex-direction: column;
+  gap: $space-6;
+}
+
+.metrics-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: $space-4 + 2;
+
+  @media (max-width: $breakpoint-lg) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  @media (max-width: $breakpoint-sm) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.metric-card {
+  @include metric-card;
+}
+
+.metric-icon {
+  &.icon-blue { @include metric-icon(rgba($accent-blue, 0.12), $accent-blue); }
+  &.icon-purple { @include metric-icon(rgba($accent-purple, 0.12), #a855f7); }
+  &.icon-green { @include metric-icon(rgba($accent-green, 0.12), $accent-green); }
+  &.icon-amber { @include metric-icon(rgba($accent-amber, 0.12), $accent-amber); }
+}
+
+.metric-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.metric-label {
+  font-size: 12.5px;
+  color: $text-muted;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.metric-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: white;
+  margin: 4px 0;
+  line-height: 1.2;
+}
+
+.metric-trend {
+  font-size: 11.5px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+
+  &.trend-up { color: $accent-green; }
+  &.trend-down { color: $accent-red; }
+}
+
+// ── Charts row ──────────────────────────────────────────────
+.charts-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: $space-5;
+
+  @media (max-width: $breakpoint-lg) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.chart-card {
+  @include card;
+}
+
+.chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: $space-4 + 2;
+
+  h3 {
+    font-size: 15px;
+    font-weight: 700;
+    color: $text-main;
+  }
+}
+
+.status-pill {
+  padding: 3px 10px;
+  border-radius: $radius-full;
+  font-size: 11px;
+  font-weight: 600;
+
+  &.pill-blue { @include pill-blue; }
+  &.pill-green { @include pill-green; }
+  &.pill-amber { @include pill-amber; }
+  &.pill-purple { @include pill-purple; }
+  &.pill-red { @include pill-red; }
+  &.pill-slate { @include pill(rgba(100, 116, 139, 0.15), #94a3b8); }
+}
+
+// ── Recent completed chats ────────────────────────────────────
+.recent-completed-chats-list {
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: $space-2;
+  @include custom-scrollbar(4px);
+}
+
+.completed-chat-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $space-3 $space-3 + 1;
+  background: $surface-input;
+  border: 1px solid $border-subtle;
+  border-radius: $radius-md;
+  cursor: pointer;
+  transition: all $transition-base;
+
+  &:hover {
+    background: rgba($brand-navy-medium, 0.4);
+    border-color: rgba($accent-purple, 0.4);
+    transform: translateX(2px);
+  }
+}
+
+.completed-chat-left {
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  overflow: hidden;
+}
+
+.completed-chat-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba($accent-purple, 0.15);
+  border: 1px solid rgba($accent-purple, 0.3);
+  color: #c4b5fd;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.completed-chat-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.completed-chat-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #f1f5f9;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  .completed-chat-code {
+    font-size: 10.5px;
+    color: $text-dim;
+    font-weight: 400;
+  }
+}
+
+.completed-chat-preview {
+  font-size: 11.5px;
+  color: $text-muted;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+.completed-chat-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  flex-shrink: 0;
+  margin-left: $space-2;
+}
+
+.completed-chat-time {
+  font-size: 11px;
+  color: $text-dim;
+}
+
+.completed-chat-tag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+
+  &.tag-resolved {
+    background: rgba($accent-green, 0.15);
+    color: #34d399;
+  }
+
+  &.tag-handover {
+    background: rgba($accent-blue, 0.15);
+    color: $accent-blue;
+  }
+}
+
+// ── Report sub-nav ───────────────────────────────────────────
+.report-subnav {
+  display: flex;
+  align-items: center;
+  gap: $space-2;
+  margin-bottom: $space-6;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  @include custom-scrollbar(4px);
+
+  .report-tab-pill {
+    @include nav-pill;
+  }
+}

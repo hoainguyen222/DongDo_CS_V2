@@ -1,0 +1,365 @@
+// ============================================================
+// AdminLayout — Shell for /admin/* (sidebar + content area)
+// ============================================================
+@use '../../styles/_shared.scss' as s;
+
+.shell {
+  // dùng 100dvh (Dynamic Viewport Height) để không bị "jump" trên mobile Safari
+  // khi toolbar ẩn/hiện, fallback 100vh cho browser cũ
+  min-height: 100vh;
+  min-height: 100dvh;
+  height: 100dvh;
+  background-color: s.$bg-dark;
+  color: s.$text-main;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  overflow: hidden;
+
+  @media (min-width: s.$breakpoint-md) {
+    flex-direction: row;
+  }
+}
+
+.loadingShell {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: s.$space-4;
+  position: relative;
+  overflow: hidden;
+  background-color: s.$bg-dark;
+}
+
+.loadingBlobNavy {
+  position: absolute;
+  top: -10rem;
+  left: -10rem;
+  width: 24rem;
+  height: 24rem;
+  border-radius: 9999px;
+  background-color: rgba(s.$brand-navy, 0.4);
+  filter: blur(64px);
+  pointer-events: none;
+}
+
+.loadingBlobRed {
+  position: absolute;
+  bottom: -10rem;
+  right: -10rem;
+  width: 24rem;
+  height: 24rem;
+  border-radius: 9999px;
+  background-color: rgba(s.$brand-red, 0.3);
+  filter: blur(64px);
+  pointer-events: none;
+}
+
+.loadingContent {
+  text-align: center;
+  position: relative;
+  z-index: 10;
+}
+
+.loadingIconBox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: s.$space-4;
+  border-radius: s.$radius-xl;
+  background-color: rgba(s.$brand-navy, 0.6);
+  border: 1px solid rgba(s.$brand-red, 0.4);
+  margin-bottom: s.$space-4;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+}
+
+.loadingLogo {
+  height: 3.5rem;
+  width: auto;
+  object-fit: contain;
+}
+
+.loadingTitle {
+  color: #fff;
+  font-weight: 600;
+  animation: pulseDot 1.5s ease-in-out infinite;
+}
+
+.main {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-width: 0;
+}
+
+// ── Call Banners (full-page overlays) ─────────────────────
+.callBanner {
+  position: fixed;
+  top: s.$space-6;
+  right: s.$space-6;
+  z-index: 70;
+  background: linear-gradient(135deg, rgba(s.$brand-navy, 0.85) 0%, rgba(s.$brand-navy-light, 0.85) 100%);
+  backdrop-filter: blur(16px);
+  padding: s.$space-4;
+  border-radius: s.$radius-xl;
+  border: 2px solid s.$accent-red;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  gap: s.$space-4;
+  animation: bounce 2s infinite;
+}
+
+.callBannerIcon {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 9999px;
+  background-color: s.$accent-red;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  animation: pulseDot 1s ease-in-out infinite;
+}
+
+.callBannerText {
+  .callBannerLabel {
+    font-size: s.$text-xs;
+    font-weight: 600;
+    color: s.$accent-red;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .callBannerCaller {
+    font-size: s.$text-sm;
+    font-weight: 700;
+    color: #fff;
+  }
+}
+
+.callBannerActions {
+  display: flex;
+  align-items: center;
+  gap: s.$space-2;
+}
+
+.callAcceptBtn {
+  padding: s.$space-2 + 1 s.$space-3;
+  border-radius: s.$radius-md;
+  background: s.$accent-green;
+  color: #fff;
+  font-size: s.$text-xs;
+  font-weight: 600;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: s.$space-1;
+  transition: filter s.$transition-fast;
+
+  &:hover {
+    filter: brightness(1.08);
+  }
+}
+
+.callDeclineBtn {
+  padding: s.$space-2 + 1;
+  border-radius: s.$radius-md;
+  background: rgba(s.$brand-red, 0.6);
+  color: #fff;
+  font-size: s.$text-xs;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: filter s.$transition-fast;
+
+  &:hover {
+    filter: brightness(1.1);
+  }
+}
+
+.activeCallBar {
+  position: fixed;
+  bottom: s.$space-6;
+  right: s.$space-6;
+  z-index: 70;
+  background: linear-gradient(135deg, rgba(s.$brand-navy, 0.85) 0%, rgba(s.$brand-navy-light, 0.85) 100%);
+  backdrop-filter: blur(16px);
+  padding: s.$space-4;
+  border-radius: s.$radius-xl;
+  border: 1px solid rgba(s.$accent-green, 0.3);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  gap: s.$space-3;
+}
+
+.activeCallIcon {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 9999px;
+  background: rgba(s.$accent-green, 0.3);
+  border: 1px solid s.$accent-green;
+  color: s.$accent-green;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: pulseDot 1s ease-in-out infinite;
+}
+
+.activeCallText {
+  .activeCallLabel {
+    font-size: s.$text-xs;
+    color: s.$text-muted;
+  }
+
+  .activeCallDuration {
+    font-size: s.$text-sm;
+    font-weight: 700;
+    color: s.$accent-green;
+  }
+}
+
+.activeCallBtn {
+  padding: s.$space-2 + 1 s.$space-3;
+  border-radius: s.$radius-md;
+  background: rgba(30, 41, 59, 0.8);
+  color: s.$text-muted;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background s.$transition-fast;
+
+  &:hover {
+    background: rgba(51, 65, 85, 0.9);
+  }
+}
+
+.endCallBtn {
+  padding: s.$space-2 + 1 s.$space-3;
+  border-radius: s.$radius-md;
+  background: s.$accent-red;
+  color: #fff;
+  font-size: s.$text-xs;
+  font-weight: 600;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: s.$space-1;
+  transition: filter s.$transition-fast;
+
+  &:hover {
+    filter: brightness(1.08);
+  }
+}
+
+// ── Toast Error Banner (legacy, superseded by Providers/Toast) ─
+.toastBanner {
+  position: fixed;
+  top: s.$space-6;
+  right: s.$space-6;
+  z-index: 9999;
+  padding: s.$space-4;
+  border-radius: s.$radius-xl;
+  background: #180A12;
+  border: 2px solid s.$accent-red;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  color: #fff;
+  max-width: 28rem;
+  display: flex;
+  align-items: flex-start;
+  gap: s.$space-3;
+  backdrop-filter: blur(12px);
+  animation: bounce 2s infinite;
+}
+
+.toastIcon {
+  width: 2.5rem;
+  height: 2.5rem;
+  min-width: 2.5rem;        // cố định width, không bị giãn khi body wrap
+  min-height: 2.5rem;
+  border-radius: s.$radius-md;
+  background: s.$accent-red;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;           // không bền ép co lại khi text dài
+  align-self: flex-start;   // giữ icon ở top khi body nhiều dòng
+  animation: pulseDot 1.2s ease-in-out infinite;
+}
+
+.toastBody {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.toastTitle {
+  font-size: s.$text-xs;
+  font-weight: 700;
+  color: s.$accent-red;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+  // title giữ 1 dòng, quá dài thì ellipsis — không xuống dòng
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.toastHeading {
+  font-size: s.$text-xs;
+  font-weight: 600;
+  color: #fff;
+  margin-top: s.$space-1 / 2;
+  line-height: 1.4;
+  // cho phép heading wrap tự nhiên nhưng giới hạn 2 dòng
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.toastDetails {
+  font-size: 11px;
+  color: rgba(252, 165, 165, 0.85);
+  margin-top: s.$space-1;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.toastDetailLink {
+  margin-top: s.$space-2;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fda4af;
+  background: transparent;
+  border: none;
+  padding: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.toastCloseBtn {
+  color: s.$text-muted;
+  background: transparent;
+  border: none;
+  padding: s.$space-1;
+  cursor: pointer;
+  transition: color s.$transition-fast;
+
+  &:hover {
+    color: #fff;
+  }
+}

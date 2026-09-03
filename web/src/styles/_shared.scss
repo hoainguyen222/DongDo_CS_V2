@@ -1,0 +1,10 @@
+// ============================================================
+// _shared.scss — Single helper file imported by every *.module.scss
+// Pattern: `@use '@/styles/shared';`  ⇒ variables & mixins are global.
+// ============================================================
+
+// Tokens
+@import './tokens/variables';
+
+// Mixins (which themselves import tokens)
+@import './mixins/index';

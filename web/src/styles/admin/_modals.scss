@@ -1,0 +1,437 @@
+// ============================================================
+// Admin Modal Styles
+// ============================================================
+@import '../../styles/tokens/variables';
+@import '../../styles/mixins/index';
+
+// ── Modal backdrop ─────────────────────────────────────────
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: $z-modal-backdrop;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: $space-4;
+  animation: fadeIn 150ms ease both;
+}
+
+.modal-container {
+  width: 100%;
+  max-width: 600px;
+  @include glass-panel-brand;
+  border-radius: $radius-xl;
+  box-shadow: $shadow-elevated;
+  border: 1px solid rgba($brand-red, 0.15);
+  overflow: hidden;
+  animation: zoomIn 150ms ease both;
+
+  &.modal-lg { max-width: 800px; }
+  &.modal-xl { max-width: 1100px; }
+  &.modal-sm { max-width: 420px; }
+}
+
+.modal-header {
+  padding: $space-4 $space-5;
+  border-bottom: 1px solid rgba($brand-navy, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba($brand-navy-dark, 0.5);
+
+  .modal-title {
+    font-size: $text-lg;
+    font-weight: 700;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: $space-2;
+  }
+}
+
+.modal-close-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: $radius-sm;
+  background: transparent;
+  color: $text-muted;
+  border: none;
+  cursor: pointer;
+  transition: background $transition-fast, color $transition-fast;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: white;
+  }
+}
+
+.modal-body {
+  padding: $space-5;
+  max-height: calc(85vh - 140px);
+  overflow-y: auto;
+  @include custom-scrollbar(4px);
+}
+
+.modal-footer {
+  padding: $space-4 $space-5;
+  border-top: 1px solid rgba($brand-navy, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: $space-3;
+  background: rgba($brand-navy-dark, 0.3);
+}
+
+// ── Voice history modal ────────────────────────────────────
+.voice-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: $space-3;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.voice-call-item {
+  @include card;
+  padding: $space-4;
+
+  &:hover { background: rgba($brand-navy-medium, 0.4); }
+}
+
+.voice-call-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: $space-2;
+}
+
+.voice-call-caller {
+  font-size: $text-sm;
+  font-weight: 700;
+  color: $accent-green;
+  display: flex;
+  align-items: center;
+  gap: $space-2;
+}
+
+.voice-call-time {
+  font-size: 11px;
+  color: $text-dim;
+}
+
+.voice-call-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: $text-xs;
+  color: $text-muted;
+}
+
+// ── Resolve case modal ─────────────────────────────────────
+.resolve-case-header {
+  margin-bottom: $space-4;
+  padding-bottom: $space-4;
+  border-bottom: 1px solid rgba($brand-navy, 0.5);
+}
+
+.resolve-case-info {
+  font-size: 11px;
+  background: rgba($brand-navy-medium, 0.4);
+  padding: $space-3;
+  border-radius: $radius-md;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: $space-4;
+
+  .info-row {
+    display: flex;
+    align-items: center;
+    gap: $space-2;
+    margin-bottom: 4px;
+    &:last-child { margin-bottom: 0; }
+
+    .info-label { color: $text-dim; }
+    .info-value { color: white; font-weight: 500; }
+  }
+}
+
+.resolve-learn-toggle {
+  background: rgba($brand-navy-medium, 0.4);
+  padding: $space-3 + 1;
+  border-radius: $radius-md;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: $space-4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  .learn-label {
+    display: flex;
+    align-items: center;
+    gap: $space-2;
+    font-size: $text-sm;
+    font-weight: 600;
+    color: white;
+    cursor: pointer;
+  }
+
+  .learn-status {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: $radius-full;
+    font-weight: 600;
+
+    &.enabled {
+      background: rgba($accent-green, 0.1);
+      color: $accent-green;
+      border: 1px solid rgba($accent-green, 0.2);
+    }
+
+    &.disabled {
+      background: rgba($text-dim, 0.1);
+      color: $text-dim;
+      border: 1px solid rgba($text-dim, 0.2);
+    }
+  }
+}
+
+// ── QA pair editor ────────────────────────────────────────
+.qa-pair-list {
+  display: flex;
+  flex-direction: column;
+  gap: $space-3;
+  max-height: 45vh;
+  overflow-y: auto;
+  padding-right: $space-1;
+}
+
+.qa-pair-card {
+  background: rgba($brand-navy-dark, 0.6);
+  padding: $space-4;
+  border-radius: $radius-md;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: $space-3;
+}
+
+.qa-pair-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  .qa-pair-number {
+    font-size: 11px;
+    font-weight: 700;
+    color: rgba($accent-amber, 0.9);
+    background: rgba($accent-amber, 0.1);
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid rgba($accent-amber, 0.2);
+  }
+}
+
+// ── Edit customer modal ─────────────────────────────────────
+.customer-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: $space-4;
+}
+
+// ── Confirm dialog ─────────────────────────────────────────
+.confirm-backdrop {
+  @extend .modal-backdrop;
+  z-index: $z-toast + 10;
+}
+
+.confirm-dialog {
+  @extend .modal-container;
+  max-width: 420px;
+  z-index: $z-toast + 11;
+}
+
+.confirm-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: $radius-xl;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  &.confirm-icon-danger {
+    background: rgba($accent-red, 0.2);
+    border: 1px solid rgba($accent-red, 0.4);
+    color: #f87171;
+  }
+
+  &.confirm-icon-warning {
+    background: rgba($accent-amber, 0.2);
+    border: 1px solid rgba($accent-amber, 0.4);
+    color: #fbbf24;
+  }
+
+  &.confirm-icon-info {
+    background: rgba($accent-blue, 0.2);
+    border: 1px solid rgba($accent-blue, 0.4);
+    color: $accent-blue;
+  }
+}
+
+.confirm-title {
+  font-size: $text-lg;
+  font-weight: 700;
+  color: white;
+  margin-bottom: $space-2;
+}
+
+.confirm-message {
+  font-size: $text-sm;
+  color: #cbd5e1;
+  line-height: 1.6;
+  margin-bottom: $space-4;
+}
+
+.confirm-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: $space-3;
+  padding-top: $space-4;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+// ── Error center modal ──────────────────────────────────────
+.error-center-layout {
+  width: 100%;
+  max-width: 1100px;
+  background: $brand-navy-dark;
+  border: 1px solid $brand-navy;
+  border-radius: $radius-xl;
+  box-shadow: $shadow-elevated;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 85vh;
+}
+
+.error-center-sidebar {
+  width: 44%;
+  flex-shrink: 0;
+  background: rgba($brand-navy-dark, 0.8);
+  border-right: 1px solid $brand-navy;
+  overflow-y: auto;
+  @include custom-scrollbar(4px);
+
+  @media (max-width: $breakpoint-md) {
+    width: 100%;
+    max-height: 40vh;
+    border-right: none;
+    border-bottom: 1px solid $brand-navy;
+  }
+}
+
+.error-center-main {
+  flex: 1;
+  padding: $space-5;
+  overflow-y: auto;
+  @include custom-scrollbar(4px);
+}
+
+.error-item {
+  padding: $space-4;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  transition: background $transition-fast;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: $space-2;
+
+  &:hover { background: rgba($brand-navy-medium, 0.3); }
+
+  &.selected {
+    background: rgba($brand-navy, 0.6);
+    border-left: 3px solid $brand-red-light;
+  }
+}
+
+// ── Toast container ─────────────────────────────────────────
+.toast-container {
+  position: fixed;
+  bottom: $space-4;
+  right: $space-4;
+  z-index: $z-toast;
+  display: flex;
+  flex-direction: column;
+  gap: $space-2;
+  max-width: 380px;
+  width: 100%;
+  pointer-events: none;
+}
+
+.toast-item {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: $space-3;
+  padding: $space-4;
+  border-radius: $radius-xl;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  animation: slideInFromRight 200ms ease both;
+
+  &.toast-success {
+    background: rgba($accent-green, 0.9);
+    border: 1px solid rgba($accent-green, 0.4);
+    color: white;
+  }
+
+  &.toast-error {
+    background: rgba($accent-red, 0.9);
+    border: 1px solid rgba($accent-red, 0.4);
+    color: white;
+  }
+
+  &.toast-warning {
+    background: rgba($accent-amber, 0.9);
+    border: 1px solid rgba($accent-amber, 0.4);
+    color: $brand-navy-dark;
+  }
+
+  &.toast-info {
+    background: rgba($accent-blue, 0.9);
+    border: 1px solid rgba($accent-blue, 0.4);
+    color: white;
+  }
+}
+
+.toast-title {
+  font-size: $text-sm;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.toast-message {
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.toast-close {
+  background: transparent;
+  border: none;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+  padding: 2px;
+  transition: opacity $transition-fast;
+  flex-shrink: 0;
+
+  &:hover { opacity: 1; }
+}

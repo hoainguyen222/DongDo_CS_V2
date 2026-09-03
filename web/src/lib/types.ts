@@ -4,6 +4,19 @@ export type CaseStatus = 'AI_ACTIVE' | 'NEEDS_HUMAN_CS' | 'HUMAN_CS_ACTIVE' | 'R
 export type LearnStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 export type CallStatus = 'RINGING' | 'ACTIVE' | 'ENDED' | 'MISSED' | 'REJECTED';
 
+export type TabType =
+  | 'inbox'
+  | 'customers'
+  | 'calls'
+  | 'learning'
+  | 'knowledge'
+  | 'analytics'
+  | 'config'
+  | 'partner_dashboard'
+  | 'partner_analytics'
+  | 'partner_config'
+  | 'update_data_test';
+
 export interface User {
   id: number;
   username: string;
@@ -125,6 +138,7 @@ export type WSEventType =
   | 'stop_typing'
   | 'unread'
   | 'case_update'
+  | 'learning_update'
   | 'call_offer'
   | 'call_answer'
   | 'call_ice'

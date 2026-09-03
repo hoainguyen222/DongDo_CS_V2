@@ -1,0 +1,282 @@
+// ============================================================
+// AdminSidebar — Navigation shell + WebRTC/admin call widgets
+// ============================================================
+@use '../../styles/_shared.scss' as s;
+
+.aside {
+  width: 100%;
+  max-width: 280px;
+  background: s.$brand-navy-dark;
+  border-right: 1px solid rgba(s.$brand-navy, 0.5);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  align-self: stretch;
+
+  @media (max-width: s.$breakpoint-md) {
+    max-width: 100%;
+    border-right: none;
+    border-bottom: 1px solid rgba(s.$brand-navy, 0.5);
+  }
+}
+
+.logoBar {
+  padding: s.$space-5 s.$space-4;
+  border-bottom: 1px solid rgba(s.$brand-navy, 0.5);
+  display: flex;
+  align-items: center;
+  gap: s.$space-3;
+}
+
+.logoImg {
+  height: 40px;
+  width: auto;
+  object-fit: contain;
+}
+
+.logoText {
+  display: flex;
+  flex-direction: column;
+}
+
+.logoTitle {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.2;
+}
+
+.logoBadge {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(s.$brand-red-light, 0.9);
+  background: rgba(s.$brand-red-light, 0.1);
+  padding: 2px s.$space-2;
+  border-radius: 3px;
+  border: 1px solid rgba(s.$brand-red-light, 0.2);
+  letter-spacing: 0.05em;
+  margin-top: s.$space-1;
+  display: inline-block;
+}
+
+.nav {
+  padding: s.$space-3;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.section {
+  margin-bottom: s.$space-2;
+}
+
+.sectionTitle {
+  font-size: 10px;
+  font-weight: 700;
+  color: s.$text-dim;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: s.$space-2 s.$space-3;
+  margin-bottom: s.$space-1;
+}
+
+.navLink {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: s.$space-3 + 1 s.$space-3;
+  border-radius: s.$radius-md;
+  font-size: s.$text-sm;
+  font-weight: 500;
+  color: s.$text-muted;
+  text-decoration: none;
+  transition: background s.$transition-fast, color s.$transition-fast, border-left-color s.$transition-fast;
+  border-left: 3px solid transparent;
+  gap: s.$space-2;
+
+  &:hover {
+    background: rgba(s.$brand-navy-medium, 0.5);
+    color: #fff;
+  }
+}
+
+.navLinkActive {
+  background: rgba(s.$brand-navy, 0.6);
+  color: #fff;
+  border-left-color: s.$brand-red-light;
+  box-shadow: 0 0 12px rgba(s.$brand-red-light, 0.15);
+}
+
+.navLinkLeft {
+  display: flex;
+  align-items: center;
+  gap: s.$space-3;
+  min-width: 0;
+}
+
+.navLinkIcon {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.badge {
+  padding: 1px s.$space-2;
+  border-radius: s.$radius-full;
+  font-size: 10px;
+  font-weight: 700;
+  background: s.$brand-red-light;
+  color: #fff;
+  flex-shrink: 0;
+
+  &Rose {
+    background: s.$brand-red-light;
+    color: #fff;
+  }
+
+  &Emerald {
+    background: rgba(s.$accent-green, 0.2);
+    color: rgba(s.$accent-green, 0.9);
+    border: 1px solid rgba(s.$accent-green, 0.3);
+  }
+
+  &Amber {
+    background: rgba(s.$accent-amber, 0.2);
+    color: rgba(s.$accent-amber, 0.9);
+    border: 1px solid rgba(s.$accent-amber, 0.3);
+  }
+
+  &Cyan {
+    background: rgba(s.$accent-cyan, 0.2);
+    color: s.$accent-cyan;
+    border: 1px solid rgba(s.$accent-cyan, 0.3);
+  }
+}
+
+.badgePulse {
+  animation: pulseDot 1.5s ease-in-out infinite;
+}
+
+.footer {
+  padding: s.$space-3;
+  border-top: 1px solid rgba(s.$brand-navy, 0.5);
+}
+
+.userInfo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: s.$space-2 s.$space-3;
+  margin-bottom: s.$space-2;
+}
+
+.userText {
+  min-width: 0;
+}
+
+.userName {
+  font-size: s.$text-sm;
+  font-weight: 600;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 160px;
+}
+
+.userRole {
+  font-size: 11px;
+  color: s.$text-dim;
+  text-transform: capitalize;
+}
+
+.logoutBtn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: s.$radius-md;
+  background: rgba(30, 41, 59, 0.8);
+  color: s.$text-muted;
+  border: none;
+  transition: all s.$transition-fast;
+
+  &:hover {
+    background: rgba(51, 65, 85, 0.9);
+    color: #fff;
+  }
+}
+
+// ── Pagination ─────────────────────────────────────────────
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: s.$space-3;
+  padding-top: s.$space-3 + 1;
+  border-top: 1px solid rgba(s.$brand-navy, 0.5);
+  font-size: s.$text-xs;
+  color: s.$text-muted;
+  flex-wrap: wrap;
+}
+
+.paginationInfo {
+  display: flex;
+  align-items: center;
+  gap: s.$space-2;
+}
+
+.paginationSelect {
+  background: s.$surface-input;
+  border: 1px solid s.$border-subtle;
+  color: #fff;
+  border-radius: s.$radius-sm;
+  padding: 4px s.$space-2;
+  font-size: 11px;
+  cursor: pointer;
+
+  &:focus {
+    outline: none;
+    border-color: s.$brand-red-light;
+  }
+}
+
+.paginationControls {
+  display: flex;
+  align-items: center;
+  gap: s.$space-2 / 2;
+}
+
+.paginationBtn {
+  padding: 4px 10px;
+  border-radius: s.$radius-sm;
+  background: rgba(s.$brand-navy, 0.6);
+  border: 1px solid s.$border-subtle;
+  color: s.$text-muted;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all s.$transition-fast;
+
+  &:hover:not(:disabled) {
+    background: rgba(s.$brand-navy, 0.8);
+    color: #fff;
+  }
+
+  &:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+}
+
+.paginationCurrent {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(s.$brand-navy, 0.8);
+  border-radius: s.$radius-sm;
+}

@@ -152,7 +152,7 @@ func main() {
 	ragUC := usecase.NewRAGUseCase(qdrantClient, embedder, claudeClient, messageRepo, settingRepo, cfg.SystemPrompt, cfg.MemoryWindow, cfg.RetrieverK)
 	caseUC := usecase.NewCaseUseCase(guestRepo, caseRepo, messageRepo, learningRepo, settingRepo, qdrantClient, embedder, eventBus)
 	chatUC := usecase.NewChatUseCase(messageRepo, caseRepo, eventBus, stateMgr)
-	learningUC := usecase.NewLearningUseCase(learningRepo, settingRepo, qdrantClient, embedder)
+	learningUC := usecase.NewLearningUseCase(learningRepo, settingRepo, qdrantClient, embedder, eventBus)
 	voiceUC := usecase.NewVoiceUseCase(voiceRepo, caseRepo, eventBus)
 	analyticsUC := usecase.NewAnalyticsUseCase(analyticsRepo, settingRepo)
 	partnerUC := usecase.NewPartnerUseCase(partnerRepo, settingRepo)

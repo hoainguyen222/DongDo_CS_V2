@@ -1,0 +1,219 @@
+// ============================================================
+// AdminModals — Modal shells, voice history, toast error
+// ============================================================
+@use '../../styles/_shared.scss' as s;
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: s.$z-modal-backdrop;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: s.$space-4;
+  animation: fadeIn 150ms ease both;
+  overflow-y: auto;
+}
+
+.container {
+  width: 100%;
+  max-width: 600px;
+  background: linear-gradient(135deg, rgba(s.$brand-navy, 0.85) 0%, rgba(s.$brand-navy-light, 0.85) 100%);
+  backdrop-filter: blur(16px);
+  border-radius: s.$radius-xl;
+  box-shadow: s.$shadow-elevated;
+  border: 1px solid rgba(s.$brand-red, 0.15);
+  overflow: hidden;
+  animation: zoomIn 150ms ease both;
+  margin: auto;
+}
+
+.sizeLg {
+  max-width: 800px;
+}
+
+.sizeXl {
+  max-width: 1100px;
+}
+
+.sizeSm {
+  max-width: 420px;
+}
+
+.header {
+  padding: s.$space-4 s.$space-5;
+  border-bottom: 1px solid rgba(s.$brand-navy, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(s.$brand-navy-dark, 0.5);
+  flex-shrink: 0;
+}
+
+.headerTitle {
+  font-size: s.$text-lg;
+  font-weight: 700;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: s.$space-2;
+}
+
+.titleGroup {
+  display: flex;
+  align-items: center;
+  gap: s.$space-3;
+}
+
+.titleBadge {
+  width: 40px;
+  height: 40px;
+  border-radius: s.$radius-md;
+  background: rgba(s.$accent-green, 0.2);
+  border: 1px solid rgba(s.$accent-green, 0.3);
+  color: s.$accent-green;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.titleText {
+  display: flex;
+  flex-direction: column;
+}
+
+.titleSubtext {
+  font-size: s.$text-xs;
+  color: s.$text-muted;
+}
+
+.closeBtn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: s.$radius-sm;
+  background: transparent;
+  color: s.$text-muted;
+  border: none;
+  cursor: pointer;
+  transition: background s.$transition-fast, color s.$transition-fast;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+  }
+}
+
+.body {
+  padding: s.$space-5;
+  max-height: calc(85vh - 140px);
+  overflow-y: auto;
+  @include s.custom-scrollbar(4px);
+}
+
+.footer {
+  padding: s.$space-4 s.$space-5;
+  border-top: 1px solid rgba(s.$brand-navy, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: s.$space-3;
+  background: rgba(s.$brand-navy-dark, 0.3);
+  flex-shrink: 0;
+}
+
+// ── Voice History list ──────────────────────────────────────
+.voiceList {
+  display: flex;
+  flex-direction: column;
+  gap: s.$space-3;
+  max-height: 400px;
+  overflow-y: auto;
+  @include s.custom-scrollbar(4px);
+}
+
+.voiceItem {
+  background-color: s.$bg-card-solid;
+  border: 1px solid s.$border-subtle;
+  border-radius: s.$radius-lg;
+  padding: s.$space-4;
+  box-shadow: s.$shadow-card;
+  transition: background s.$transition-fast;
+
+  &:hover {
+    background: rgba(s.$brand-navy-medium, 0.4);
+  }
+}
+
+.voiceItemHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: s.$space-2;
+}
+
+.voiceItemCaller {
+  font-size: s.$text-sm;
+  font-weight: 700;
+  color: s.$accent-green;
+  display: flex;
+  align-items: center;
+  gap: s.$space-2;
+}
+
+.voiceItemTime {
+  font-size: 11px;
+  color: s.$text-dim;
+}
+
+.voiceItemMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: s.$text-xs;
+  color: s.$text-muted;
+}
+
+.voiceMetaStatus {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px s.$space-2;
+  border-radius: s.$radius-full;
+  background: rgba(s.$accent-green, 0.1);
+  color: s.$accent-green;
+  border: 1px solid rgba(s.$accent-green, 0.2);
+}
+
+.emptyState {
+  padding: 48px s.$space-4;
+  text-align: center;
+  color: s.$text-dim;
+  font-size: s.$text-sm;
+
+  svg {
+    width: 32px;
+    height: 32px;
+    margin-bottom: s.$space-2;
+    opacity: 0.6;
+  }
+}
+
+.loadingState {
+  padding: 48px s.$space-4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: s.$text-muted;
+  font-size: s.$text-xs;
+
+  svg {
+    animation: spin 1s linear infinite;
+    margin-bottom: s.$space-2;
+  }
+}

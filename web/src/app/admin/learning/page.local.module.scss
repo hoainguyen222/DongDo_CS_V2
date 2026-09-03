@@ -1,0 +1,70 @@
+// ============================================================
+// LearningPage local styles
+// ============================================================
+@use '../../../styles/_shared.scss' as s;
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: s.$space-3;
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: s.$space-2;
+}
+
+.itemRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: s.$space-3;
+}
+
+.itemBody {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.itemQuestion {
+  font-size: s.$text-xs;
+  font-weight: 700;
+  color: #fbbf24;
+  margin-bottom: s.$space-1;
+}
+
+.itemAnswer {
+  font-size: s.$text-xs;
+  color: #cbd5e1;
+  line-height: 1.6;
+}
+
+.itemButtons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: s.$space-3;
+  flex-shrink: 0;
+}
+
+.itemActions {
+  display: flex;
+  gap: s.$space-2;
+}
+
+.autoToggle {
+  display: flex;
+  align-items: center;
+  gap: s.$space-2;
+  cursor: pointer;
+  font-size: s.$text-xs;
+  font-weight: 600;
+  color: #fff;
+
+  input {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+  }
+}

@@ -21,13 +21,13 @@ const (
 )
 
 type User struct {
-	ID           int64    `json:"id"`
-	Username     string   `json:"username"`
-	PasswordHash string   `json:"-"`
-	Salt         string   `json:"-"`
-	FullName     string   `json:"full_name"`
-	Role         UserRole `json:"role"`
-	IsActive     bool     `json:"is_active"`
+	ID           int64     `json:"id"`
+	Username     string    `json:"username"`
+	PasswordHash string    `json:"-"`
+	Salt         string    `json:"-"`
+	FullName     string    `json:"full_name"`
+	Role         UserRole  `json:"role"`
+	IsActive     bool      `json:"is_active"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 
@@ -209,25 +209,26 @@ type AnalyticsStats struct {
 type WSEventType string
 
 const (
-	WSEventMessage    WSEventType = "message"
-	WSEventTyping     WSEventType = "typing"
-	WSEventStopTyping WSEventType = "stop_typing"
-	WSEventUnread     WSEventType = "unread"
-	WSEventCaseUpdate WSEventType = "case_update"
-	WSEventCallOffer  WSEventType = "call_offer"
-	WSEventCallAnswer WSEventType = "call_answer"
-	WSEventCallICE    WSEventType = "call_ice"
-	WSEventCallEnd    WSEventType = "call_end"
-	WSEventCallRing   WSEventType = "call_ring"
-	WSEventAIStatus   WSEventType = "ai_status"
+	WSEventMessage        WSEventType = "message"
+	WSEventTyping         WSEventType = "typing"
+	WSEventStopTyping     WSEventType = "stop_typing"
+	WSEventUnread         WSEventType = "unread"
+	WSEventCaseUpdate     WSEventType = "case_update"
+	WSEventLearningUpdate WSEventType = "learning_update"
+	WSEventCallOffer      WSEventType = "call_offer"
+	WSEventCallAnswer     WSEventType = "call_answer"
+	WSEventCallICE        WSEventType = "call_ice"
+	WSEventCallEnd        WSEventType = "call_end"
+	WSEventCallRing       WSEventType = "call_ring"
+	WSEventAIStatus       WSEventType = "ai_status"
 )
 
 type WSEvent struct {
-	Type      WSEventType    `json:"type"`
-	SessionID string         `json:"session_id"`
-	Payload   interface{}    `json:"payload"`
-	SenderID  string         `json:"sender_id,omitempty"`
-	Timestamp time.Time      `json:"timestamp"`
+	Type      WSEventType `json:"type"`
+	SessionID string      `json:"session_id"`
+	Payload   interface{} `json:"payload"`
+	SenderID  string      `json:"sender_id,omitempty"`
+	Timestamp time.Time   `json:"timestamp"`
 }
 
 // ============================================================
@@ -331,11 +332,11 @@ type DashboardAutomationTrendDaily struct {
 }
 
 type GeneralOverviewMetrics struct {
-	TotalCustomers   int    `json:"total_customers"`
-	TotalCases       int    `json:"total_cases"`
-	ResolvedCases    int    `json:"resolved_cases"`
-	OpenCases        int    `json:"open_cases"`
-	ResolutionRate   string `json:"resolution_rate"`
+	TotalCustomers int    `json:"total_customers"`
+	TotalCases     int    `json:"total_cases"`
+	ResolvedCases  int    `json:"resolved_cases"`
+	OpenCases      int    `json:"open_cases"`
+	ResolutionRate string `json:"resolution_rate"`
 }
 
 type AIPerformanceMetrics struct {
@@ -400,4 +401,3 @@ type SystemErrorRecord struct {
 	SuggestedFix string    `json:"suggested_fix"`
 	CreatedAt    time.Time `json:"created_at"`
 }
-

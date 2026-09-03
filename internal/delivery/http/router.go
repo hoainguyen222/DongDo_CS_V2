@@ -40,6 +40,7 @@ func SetupRouter(
 	// Public Guest & Chat Endpoints
 	r.POST("/guest/register", handler.HandleGuestRegister)
 	r.POST("/chat", handler.HandleChat)
+	r.POST("/api/chat/typing", handler.HandleSendTyping)
 	r.GET("/history/:session_id", handler.HandleGetHistory)
 
 	// Auth Endpoints
@@ -51,6 +52,7 @@ func SetupRouter(
 	// Voice Call Endpoints
 	r.POST("/api/voice/initiate", handler.HandleInitiateCall)
 	r.POST("/api/voice/end", handler.HandleEndCall)
+	r.POST("/api/voice/decline", handler.HandleDeclineCall)
 	r.POST("/api/voice/upload-recording", handler.HandleUploadRecording)
 	r.GET("/static/recordings/:filename", func(c *gin.Context) {
 		filename := filepath.Base(c.Param("filename"))
@@ -75,64 +77,64 @@ func SetupRouter(
 		admin.GET("/auth/me", handler.HandleGetMe)
 		admin.POST("/auth/logout", handler.HandleLogout)
 
-		// User Accounts Management
-		admin.GET("/api/admin/users", handler.HandleListUsers)
-		admin.POST("/api/admin/users", handler.HandleCreateUser)
-		admin.PUT("/api/admin/users/:username", handler.HandleUpdateUser)
-		admin.DELETE("/api/admin/users/:username", handler.HandleDeleteUser)
+		// User Accounts Management - Admin+ only
+		admin.GET("/api/admin/users", RequireRoles(RoleAdmin, RoleOwner), handler.HandleListUsers)
+		admin.POST("/api/admin/users", RequireRoles(RoleAdmin, RoleOwner), handler.HandleCreateUser)
+		admin.PUT("/api/admin/users/:username", RequireRoles(RoleAdmin, RoleOwner), handler.HandleUpdateUser)
+		admin.DELETE("/api/admin/users/:username", RequireRoles(RoleOwner), handler.HandleDeleteUser)
 
-		// Cases (Live Inbox)
+		// Cases (Live Inbox) - Staff+ can access
 		admin.GET("/api/admin/cases", handler.HandleListCases)
 		admin.POST("/api/admin/cases/:session_id/take", handler.HandleTakeCase)
 		admin.POST("/api/admin/cases/:session_id/reply", handler.HandleReplyCase)
 		admin.POST("/api/admin/cases/:session_id/resolve", handler.HandleResolveCase)
 		admin.PUT("/api/admin/cases/:session_id/customer", handler.HandleUpdateCaseCustomer)
-		admin.DELETE("/api/admin/cases/:session_id", handler.HandleDeleteCase)
-		admin.POST("/api/admin/cases/clear-all", handler.HandleClearAllCases)
+		admin.DELETE("/api/admin/cases/:session_id", RequireRoles(RoleAdmin, RoleOwner), handler.HandleDeleteCase)
+		admin.POST("/api/admin/cases/clear-all", RequireRoles(RoleAdmin, RoleOwner), handler.HandleClearAllCases)
 
-		// Customer Profiles Management
+		// Customer Profiles Management - Staff+ can access
 		admin.GET("/api/admin/customers", handler.HandleListCustomers)
-		admin.PUT("/api/admin/customers/:guest_id", handler.HandleUpdateCustomer)
-		admin.DELETE("/api/admin/customers/:guest_id", handler.HandleDeleteCustomer)
+		admin.PUT("/api/admin/customers/:guest_id", handler.HandleUpdateCaseCustomer)
+		admin.DELETE("/api/admin/customers/:guest_id", RequireRoles(RoleAdmin, RoleOwner), handler.HandleDeleteCustomer)
 
-		// Voice Call History
+		// Voice Call History - Staff+ can access
 		admin.GET("/api/admin/voice/calls", handler.HandleGetCalls)
-		admin.DELETE("/api/admin/voice/calls/:call_id", handler.HandleDeleteCall)
+		admin.DELETE("/api/admin/voice/calls/:call_id", RequireRoles(RoleAdmin, RoleOwner), handler.HandleDeleteCall)
 
-		// Continuous Learning Queue
+		// Continuous Learning Queue - Staff+ can access
 		admin.GET("/api/admin/learning/pending", handler.HandleListPendingLearning)
-		admin.PUT("/api/admin/learning/:item_id", handler.HandleUpdateLearning)
-		admin.POST("/api/admin/learning/approve/:item_id", handler.HandleApproveLearning)
-		admin.POST("/api/admin/learning/reject/:item_id", handler.HandleRejectLearning)
+		admin.PUT("/api/admin/learning/:item_id", RequireRoles(RoleAdmin, RoleOwner), handler.HandleUpdateLearning)
+		admin.POST("/api/admin/learning/approve/:item_id", RequireRoles(RoleAdmin, RoleOwner), handler.HandleApproveLearning)
+		admin.POST("/api/admin/learning/reject/:item_id", RequireRoles(RoleAdmin, RoleOwner), handler.HandleRejectLearning)
 		admin.GET("/api/admin/learning/settings", handler.HandleGetLearningSettings)
-		admin.POST("/api/admin/learning/settings", handler.HandleSetLearningSettings)
-		admin.POST("/api/admin/learning/reset", handler.HandleResetLearnedKnowledge)
+		admin.POST("/api/admin/learning/settings", RequireRoles(RoleAdmin, RoleOwner), handler.HandleSetLearningSettings)
+		admin.POST("/api/admin/learning/reset", RequireRoles(RoleAdmin, RoleOwner), handler.HandleResetLearnedKnowledge)
 
-		// Knowledge Base
+		// Knowledge Base - Staff+ can view, Admin+ can upload
 		admin.GET("/api/admin/knowledge", handler.HandleGetKnowledgeOverview)
-		admin.POST("/api/admin/knowledge/upload", handler.HandleUploadDocument)
+		admin.POST("/api/admin/knowledge/upload", RequireRoles(RoleAdmin, RoleOwner), handler.HandleUploadDocument)
 
-		// Analytics
+		// Analytics - Staff+ can view
 		admin.GET("/api/admin/analytics", handler.HandleGetAnalytics)
 
-		// System Configuration
-		admin.GET("/api/admin/config", handler.HandleGetConfig)
-		admin.POST("/api/admin/config", handler.HandleSaveConfig)
+		// System Configuration - Admin+ only
+		admin.GET("/api/admin/config", RequireRoles(RoleAdmin, RoleOwner), handler.HandleGetConfig)
+		admin.POST("/api/admin/config", RequireRoles(RoleAdmin, RoleOwner), handler.HandleSaveConfig)
 
-		// Partner Dashboard APIs
+		// Partner Dashboard APIs - Staff+ can view
 		admin.GET("/api/admin/partner/dashboard", handler.HandleGetDashboardData)
 
-		// Partner Config APIs
-		admin.GET("/api/admin/partner/config/templates", handler.HandleListQuickTemplates)
-		admin.POST("/api/admin/partner/config/templates", handler.HandleCreateQuickTemplate)
-		admin.PUT("/api/admin/partner/config/templates/:id", handler.HandleUpdateQuickTemplate)
-		admin.DELETE("/api/admin/partner/config/templates/:id", handler.HandleDeleteQuickTemplate)
-		admin.POST("/api/admin/partner/config/prompt-history", handler.HandleSaveSystemPromptHistory)
-		admin.GET("/api/admin/partner/config/permissions", handler.HandleListRolePermissions)
-		admin.POST("/api/admin/partner/config/permissions", handler.HandleUpsertRolePermission)
-		admin.GET("/api/admin/partner/config/audit-logs", handler.HandleListAuditLogs)
+		// Partner Config APIs - Admin+ for templates, Owner for audit logs
+		admin.GET("/api/admin/partner/config/templates", RequireRoles(RoleAdmin, RoleOwner), handler.HandleListQuickTemplates)
+		admin.POST("/api/admin/partner/config/templates", RequireRoles(RoleAdmin, RoleOwner), handler.HandleCreateQuickTemplate)
+		admin.PUT("/api/admin/partner/config/templates/:id", RequireRoles(RoleAdmin, RoleOwner), handler.HandleUpdateQuickTemplate)
+		admin.DELETE("/api/admin/partner/config/templates/:id", RequireRoles(RoleOwner), handler.HandleDeleteQuickTemplate)
+		admin.POST("/api/admin/partner/config/prompt-history", RequireRoles(RoleAdmin, RoleOwner), handler.HandleSaveSystemPromptHistory)
+		admin.GET("/api/admin/partner/config/permissions", RequireRoles(RoleAdmin, RoleOwner), handler.HandleListRolePermissions)
+		admin.POST("/api/admin/partner/config/permissions", RequireRoles(RoleAdmin, RoleOwner), handler.HandleUpsertRolePermission)
+		admin.GET("/api/admin/partner/config/audit-logs", RequireRoles(RoleOwner), handler.HandleListAuditLogs)
 
-		// Partner Reports APIs (7 Sub-reports)
+		// Partner Reports APIs (7 Sub-reports) - Staff+ can view
 		admin.GET("/api/admin/partner/reports/overview", handler.HandleGetGeneralOverviewReport)
 		admin.GET("/api/admin/partner/reports/ai-performance", handler.HandleGetAIPerformanceReport)
 		admin.GET("/api/admin/partner/reports/staff-performance", handler.HandleGetStaffPerformanceReport)
@@ -142,10 +144,10 @@ func SetupRouter(
 		admin.GET("/api/admin/partner/reports/issue-analysis", handler.HandleGetIssueAnalysisReport)
 		admin.GET("/api/admin/partner/reports/ai-learning", handler.HandleGetAILearningReportStats)
 
-		// System Errors Management
-		admin.GET("/api/admin/system-errors", handler.HandleListSystemErrors)
-		admin.POST("/api/admin/system-errors", handler.HandleCreateSystemError)
-		admin.PUT("/api/admin/system-errors/:id/handled", handler.HandleMarkSystemErrorHandled)
+		// System Errors Management - Admin+ only
+		admin.GET("/api/admin/system-errors", RequireRoles(RoleAdmin, RoleOwner), handler.HandleListSystemErrors)
+		admin.POST("/api/admin/system-errors", RequireRoles(RoleAdmin, RoleOwner), handler.HandleCreateSystemError)
+		admin.PUT("/api/admin/system-errors/:id/handled", RequireRoles(RoleAdmin, RoleOwner), handler.HandleMarkSystemErrorHandled)
 	}
 
 	return r

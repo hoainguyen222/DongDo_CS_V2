@@ -9,12 +9,19 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@hookform/resolvers": "^5.9.1",
+    "@tanstack/react-query": "^5.72.0",
+    "@tanstack/react-table": "^8.21.3",
+    "@tanstack/react-virtual": "^3.13.6",
     "lucide-react": "^0.428.0",
     "next": "^14.2.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-hook-form": "^7.55.0",
     "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "zod": "^3.24.0",
+    "zustand": "^5.0.4"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",
@@ -22,7 +29,7 @@
     "@types/react-dom": "^18",
     "autoprefixer": "^10.5.4",
     "postcss": "^8.5.26",
-    "tailwindcss": "^3.4.19",
+    "sass": "^1.86.0",
     "typescript": "^5.9.3"
   }
 }

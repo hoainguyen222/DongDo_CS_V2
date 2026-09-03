@@ -22,7 +22,12 @@ RUN apk --no-cache add ca-certificates tzdata
 
 COPY --from=builder /app/server /app/server
 COPY --from=builder /app/ingest /app/ingest
+# Both migration directories are needed:
+#   - db/migrations/ is the source of truth (used by `make migrate-*` CLI)
+#   - internal/repository/postgres/migrations/ is the embedded copy
+#     that the running server reads via //go:embed
 COPY --from=builder /app/db/migrations /app/db/migrations
+COPY --from=builder /app/internal/repository/postgres/migrations /app/internal/repository/postgres/migrations
 COPY --from=builder /app/tailieu /app/tailieu
 
 ENV PORT=8080

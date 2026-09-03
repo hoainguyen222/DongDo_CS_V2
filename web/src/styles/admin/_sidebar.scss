@@ -1,0 +1,307 @@
+// ============================================================
+// Admin Sidebar Styles
+// ============================================================
+@import '../../styles/tokens/variables';
+@import '../../styles/mixins/index';
+
+// ── Admin sidebar ────────────────────────────────────────────
+.admin-sidebar {
+  width: 100%;
+  max-width: 280px;
+  background: $brand-navy-dark;
+  border-right: 1px solid rgba($brand-navy, 0.5);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+
+  @media (max-width: $breakpoint-md) {
+    max-width: 100%;
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid rgba($brand-navy, 0.5);
+  }
+}
+
+.admin-sidebar-logo {
+  padding: $space-5 $space-4;
+  border-bottom: 1px solid rgba($brand-navy, 0.5);
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+
+  .logo-img {
+    height: 40px;
+    width: auto;
+    object-fit: contain;
+  }
+
+  .logo-text {
+    .logo-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: white;
+      line-height: 1.2;
+    }
+
+    .logo-badge {
+      font-size: 10px;
+      font-weight: 600;
+      color: rgba($brand-red-light, 0.9);
+      background: rgba($brand-red-light, 0.1);
+      padding: 2px 6px;
+      border-radius: 3px;
+      border: 1px solid rgba($brand-red-light, 0.2);
+      letter-spacing: 0.05em;
+      margin-top: 2px;
+      display: inline-block;
+    }
+  }
+}
+
+// ── Nav items ───────────────────────────────────────────────
+.admin-sidebar-nav {
+  padding: $space-3;
+  flex: 1;
+  overflow-y: auto;
+  @include custom-scrollbar(4px);
+}
+
+.admin-nav-section {
+  margin-bottom: $space-2;
+}
+
+.admin-nav-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: $text-dim;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: $space-2 $space-3;
+  margin-bottom: $space-1;
+}
+
+.admin-nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $space-3 $space-3 + 1;
+  border-radius: $radius-md;
+  font-size: $text-sm;
+  font-weight: 500;
+  color: $text-muted;
+  text-decoration: none;
+  transition: background $transition-fast, color $transition-fast, border-left-color $transition-fast;
+  border-left: 3px solid transparent;
+  gap: $space-2;
+
+  &:hover {
+    background: rgba($brand-navy-medium, 0.5);
+    color: white;
+  }
+
+  &.active {
+    background: rgba($brand-navy, 0.6);
+    color: white;
+    border-left-color: $brand-red-light;
+    box-shadow: 0 0 12px rgba($brand-red-light, 0.15);
+  }
+
+  .nav-item-left {
+    display: flex;
+    align-items: center;
+    gap: $space-3;
+  }
+
+  .nav-item-icon {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .nav-badge {
+    padding: 1px 6px;
+    border-radius: $radius-full;
+    font-size: 10px;
+    font-weight: 700;
+    background: $brand-red-light;
+    color: white;
+    flex-shrink: 0;
+
+    &.badge-green {
+      background: rgba($accent-green, 0.2);
+      color: rgba($accent-green, 0.9);
+    }
+
+    &.badge-amber {
+      background: rgba($accent-amber, 0.2);
+      color: rgba($accent-amber, 0.9);
+    }
+
+    &.badge-blue {
+      background: rgba($accent-blue, 0.2);
+      color: $accent-blue;
+    }
+
+    &.badge-cyan {
+      background: rgba($accent-cyan, 0.2);
+      color: $accent-cyan;
+    }
+  }
+}
+
+// ── User footer ─────────────────────────────────────────────
+.admin-sidebar-footer {
+  padding: $space-3;
+  border-top: 1px solid rgba($brand-navy, 0.5);
+}
+
+.admin-user-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $space-2 $space-3;
+  margin-bottom: $space-2;
+
+  .user-name {
+    font-size: $text-sm;
+    font-weight: 600;
+    color: white;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 160px;
+  }
+
+  .user-role {
+    font-size: 11px;
+    color: $text-dim;
+    text-transform: capitalize;
+  }
+}
+
+.admin-logout-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: $space-2;
+  padding: $space-3;
+  border-radius: $radius-md;
+  background: rgba($brand-red, 0.15);
+  color: rgba($brand-red-light, 0.8);
+  border: 1px solid rgba($brand-red, 0.2);
+  font-size: $text-sm;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all $transition-fast;
+
+  &:hover {
+    background: rgba($brand-red, 0.25);
+    color: white;
+    border-color: rgba($brand-red-light, 0.4);
+  }
+}
+
+// ── Active call bar (floating) ─────────────────────────────
+.active-call-bar {
+  position: fixed;
+  bottom: $space-6;
+  right: $space-6;
+  z-index: $z-toast;
+  @include glass-panel-brand;
+  padding: $space-4;
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  border: 1px solid rgba($accent-green, 0.3);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.incoming-call-banner {
+  position: fixed;
+  top: $space-6;
+  right: $space-6;
+  z-index: $z-toast + 1;
+  @include glass-panel-brand;
+  padding: $space-4;
+  display: flex;
+  align-items: center;
+  gap: $space-4;
+  border: 2px solid $accent-red;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  animation: bounce 2s infinite;
+}
+
+// ── Pagination ────────────────────────────────────────────────
+.admin-pagination {
+  display: flex;
+  flex-direction: column;
+  sm-flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: $space-3;
+  padding-top: $space-3 + 1;
+  border-top: 1px solid rgba($brand-navy, 0.5);
+  font-size: $text-xs;
+  color: $text-muted;
+
+  .pagination-info {
+    display: flex;
+    align-items: center;
+    gap: $space-2;
+
+    select {
+      background: $surface-input;
+      border: 1px solid $border-subtle;
+      color: white;
+      border-radius: $radius-sm;
+      padding: 4px 8px;
+      font-size: 11px;
+      cursor: pointer;
+
+      &:focus {
+        outline: none;
+        border-color: $brand-red-light;
+      }
+    }
+  }
+
+  .pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+
+    button {
+      padding: 4px 10px;
+      border-radius: $radius-sm;
+      background: rgba($brand-navy, 0.6);
+      border: 1px solid $border-subtle;
+      color: $text-muted;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all $transition-fast;
+
+      &:hover:not(:disabled) {
+        background: rgba($brand-navy, 0.8);
+        color: white;
+      }
+
+      &:disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+      }
+    }
+
+    .pagination-current {
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      color: white;
+      background: rgba($brand-navy, 0.8);
+      border-radius: $radius-sm;
+    }
+  }
+}
