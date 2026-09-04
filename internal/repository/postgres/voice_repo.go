@@ -87,6 +87,14 @@ func (r *VoiceCallRepo) End(ctx context.Context, id int64, durationSeconds int, 
 	return nil
 }
 
+func (r *VoiceCallRepo) MarkMissed(ctx context.Context, id int64) error {
+	if err := r.db.Voice.MarkMissedCall(ctx, id); err != nil {
+		r.logger.Error().Err(err).Int64("call_id", id).Msg("MarkMissedCall failed")
+		return err
+	}
+	return nil
+}
+
 func (r *VoiceCallRepo) SetTranscript(ctx context.Context, id int64, transcript string) error {
 	if err := r.db.Voice.SetCallTranscript(ctx, voicedb.SetCallTranscriptParams{
 		Transcript: pgtype.Text{String: transcript, Valid: transcript != ""},

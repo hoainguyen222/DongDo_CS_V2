@@ -100,6 +100,7 @@ export const api = {
   deleteVoiceCall: voiceApi.delete,
   endCall: voiceApi.endCall,
   declineCall: voiceApi.declineCall,
+  markMissedCall: voiceApi.markMissed,
 
   // Learning
   listPendingLearning: (
@@ -126,6 +127,7 @@ export const api = {
   getKnowledgeOverview: knowledgeApi.overview,
   getKnowledge: knowledgeApi.overview,
   uploadDocument: knowledgeApi.upload,
+  deleteKnowledgeDocument: knowledgeApi.deleteDocument,
 
   // Analytics
   getAnalytics: analyticsApi.getStats,

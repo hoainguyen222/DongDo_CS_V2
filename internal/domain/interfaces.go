@@ -76,6 +76,7 @@ type VoiceCallRepository interface {
 	Create(ctx context.Context, call *VoiceCall) (*VoiceCall, error)
 	UpdateStatus(ctx context.Context, id int64, status CallStatus) error
 	End(ctx context.Context, id int64, durationSeconds int, recordingURL string) error
+	MarkMissed(ctx context.Context, id int64) error
 	SetTranscript(ctx context.Context, id int64, transcript string) error
 	GetBySession(ctx context.Context, sessionID string) ([]*VoiceCall, error)
 	ListAll(ctx context.Context) ([]*VoiceCall, error)

@@ -44,3 +44,10 @@ WHERE id = $1;
 
 -- name: DeleteCall :exec
 DELETE FROM voice_calls WHERE id = $1;
+
+-- name: MarkMissedCall :exec
+UPDATE voice_calls
+SET status = 'MISSED'::call_status,
+    duration_seconds = 0,
+    ended_at         = NOW()
+WHERE id = $1;

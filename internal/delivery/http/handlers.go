@@ -882,6 +882,51 @@ func (h *Handler) HandleUploadDocument(c *gin.Context) {
 	})
 }
 
+func (h *Handler) HandleDeleteKnowledgeDocument(c *gin.Context) {
+	filename := c.Query("filename")
+	if filename == "" {
+		// Try to get from path param
+		filename = c.Param("filename")
+	}
+
+	if filename == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "Tên file không được để trống"})
+		return
+	}
+
+	// Delete chunks from vector store by source
+	deletedChunks := 0
+	if h.vectorStore != nil {
+		var err error
+		deletedChunks, err = h.vectorStore.DeleteBySource(c.Request.Context(), filename)
+		if err != nil {
+			Logger.Error().Str("filename", filename).Err(err).Msg("Failed to delete chunks from vector store")
+			c.JSON(http.StatusInternalServerError, gin.H{"detail": "Lỗi xóa chunks: " + err.Error()})
+			return
+		}
+	}
+
+	// Delete the file from disk
+	filePath := filepath.Join(h.docsDir, filename)
+	if _, err := os.Stat(filePath); err == nil {
+		if err := os.Remove(filePath); err != nil {
+			Logger.Error().Str("filename", filename).Err(err).Msg("Failed to delete document file")
+			c.JSON(http.StatusInternalServerError, gin.H{"detail": "Lỗi xóa file: " + err.Error()})
+			return
+		}
+	}
+
+	Logger.Info().Str("filename", filename).Int("deleted_chunks", deletedChunks).
+		Msg("Knowledge document and its chunks deleted")
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":        true,
+		"filename":       filename,
+		"deleted_chunks": deletedChunks,
+		"message":        fmt.Sprintf("Đã xóa tài liệu '%s' và %d chunks khỏi vector store.", filename, deletedChunks),
+	})
+}
+
 // ============================================================
 // Analytics & Config Handlers
 // ============================================================
@@ -989,6 +1034,29 @@ func (h *Handler) HandleEndCall(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Cuộc gọi đã kết thúc"})
+}
+
+type MarkMissedRequest struct {
+	CallID    int64  `json:"call_id" binding:"required"`
+	SessionID string `json:"session_id" binding:"required"`
+}
+
+func (h *Handler) HandleMarkMissedCall(c *gin.Context) {
+	var req MarkMissedRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		Logger.Warn().Err(err).Msg("Mark missed call validation failed")
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "Dữ liệu không hợp lệ"})
+		return
+	}
+
+	err := h.voiceUC.MarkMissedCall(c.Request.Context(), req.CallID, req.SessionID)
+	if err != nil {
+		Logger.Error().Int64("call_id", req.CallID).Err(err).Msg("Failed to mark call as missed")
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Cuộc gọi đã được đánh dấu là gọi nhỡ"})
 }
 
 func (h *Handler) HandleUploadRecording(c *gin.Context) {

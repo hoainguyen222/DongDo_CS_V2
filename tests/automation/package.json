@@ -1,0 +1,50 @@
+{
+  "name": "dongdo-cs-automation-tests",
+  "version": "1.0.0",
+  "description": "Automation tests for CSKH (Customer Service) system - DongDo Partners",
+  "main": "run-all-tests.ts",
+  "scripts": {
+    "test": "ts-node run-all-tests.ts",
+    "test:all": "ts-node run-all-tests.ts --all",
+    "test:guest": "ts-node run-all-tests.ts --guest",
+    "test:message": "ts-node run-all-tests.ts --message",
+    "test:ws": "ts-node run-all-tests.ts --ws",
+    "test:ai": "ts-node run-all-tests.ts --ai",
+    "test:team": "ts-node run-all-tests.ts --team",
+    "test:count": "ts-node run-all-tests.ts --all --count 20",
+    "smoke": "node quick-smoke-test.js",
+    "batch": "ts-node batch-runner.ts",
+    "batch:chat": "ts-node batch-runner.ts --test chat",
+    "batch:cs": "ts-node batch-runner.ts --test cs",
+    "batch:mixed": "ts-node batch-runner.ts --test mixed",
+    "batch:parallel": "ts-node batch-runner.ts --agents 5 --parallel",
+    "batch:sequential": "ts-node batch-runner.ts --agents 5 --sequential",
+    "batch:scenario": "ts-node batch-runner.ts --scenario medium_load",
+    "batch:smoke": "ts-node batch-runner.ts --scenario smoke_test --agents 2",
+    "batch:light": "ts-node batch-runner.ts --scenario light_load --agents 5",
+    "batch:medium": "ts-node batch-runner.ts --scenario medium_load --agents 10",
+    "batch:heavy": "ts-node batch-runner.ts --scenario heavy_load --agents 15",
+    "batch:stress": "ts-node batch-runner.ts --scenario stress_test --agents 20"
+  },
+  "keywords": [
+    "automation",
+    "testing",
+    "websocket",
+    "load-test",
+    "cskh",
+    "chat",
+    "batch",
+    "parallel"
+  ],
+  "author": "DongDo Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.0",
+    "ws": "^8.14.0"
+  }
+}

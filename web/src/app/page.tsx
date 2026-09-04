@@ -6,10 +6,10 @@ import { Send, Sparkles, Phone, PhoneOff, Mic, MicOff, Lock, MessageSquarePlus, 
 import { WSClient } from '@/lib/ws';
 import { WebRTCManager } from '@/lib/webrtc';
 import { GuestRegisterForm } from '@/components/forms/GuestRegisterForm';
-import { MarkdownRenderer } from '@/components/MarkdownRenderer';
-import { useUIStore } from '@/lib/stores/uiStore';
-import { useGuestStore } from '@/lib/stores/guestStore';
 import { useAuthStore } from '@/lib/stores/authStore';
+import { useUIStore } from '@/lib/stores/uiStore';
+import { MarkdownRenderer } from '@/components/MarkdownRenderer';
+import { useGuestStore } from '@/lib/stores/guestStore';
 import { useRouter } from 'next/navigation';
 import styles from './page.module.scss';
 
@@ -231,6 +231,8 @@ export default function CustomerChatPage() {
     return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
   };
 
+  const { openConfirm } = useUIStore();
+
   const handleStartCall = async () => {
     if (!guest || !wsRef.current) return;
     setIsCallActive(true);
@@ -261,6 +263,19 @@ export default function CustomerChatPage() {
     );
     rtcRef.current = rtc;
     await rtc.startCall();
+  };
+
+  const confirmStartCall = () => {
+    openConfirm({
+      title: 'Xác nhận gọi CSKH',
+      message: 'Bạn có muốn gọi cho chuyên viên chăm sóc khách hàng? Họ sẽ nghe máy để hỗ trợ bạn.',
+      confirmText: 'Gọi ngay',
+      cancelText: 'Hủy',
+      variant: 'info',
+      onConfirm: () => {
+        handleStartCall();
+      },
+    });
   };
 
   const handleEndCall = async (broadcast = true) => {
@@ -459,7 +474,7 @@ export default function CustomerChatPage() {
 
         <div className={styles.headerActions}>
           <button
-            onClick={handleStartCall}
+            onClick={confirmStartCall}
             disabled={isCallActive}
             className={styles.btnCallHeader}
             title="Đàm thoại trực tiếp qua Internet miễn phí"

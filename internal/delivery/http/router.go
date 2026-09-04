@@ -156,6 +156,7 @@ func SetupRouter(
 		// Voice Call History - Staff+ can access
 		admin.GET("/api/admin/voice/calls", handler.HandleGetCalls)
 		admin.DELETE("/api/admin/voice/calls/:call_id", RequireRoles(RoleAdmin, RoleOwner), handler.HandleDeleteCall)
+		admin.POST("/api/voice/missed", handler.HandleMarkMissedCall)
 
 		// Continuous Learning Queue - Staff+ can access
 		admin.GET("/api/admin/learning/pending", handler.HandleListPendingLearning)
@@ -166,9 +167,10 @@ func SetupRouter(
 		admin.POST("/api/admin/learning/settings", RequireRoles(RoleAdmin, RoleOwner), handler.HandleSetLearningSettings)
 		admin.POST("/api/admin/learning/reset", RequireRoles(RoleAdmin, RoleOwner), handler.HandleResetLearnedKnowledge)
 
-		// Knowledge Base - Staff+ can view, Admin+ can upload
+		// Knowledge Base - Staff+ can view, Admin+ can upload/delete
 		admin.GET("/api/admin/knowledge", handler.HandleGetKnowledgeOverview)
 		admin.POST("/api/admin/knowledge/upload", RequireRoles(RoleAdmin, RoleOwner), handler.HandleUploadDocument)
+		admin.DELETE("/api/admin/knowledge/document", RequireRoles(RoleAdmin, RoleOwner), handler.HandleDeleteKnowledgeDocument)
 
 		// Analytics - Staff+ can view
 		admin.GET("/api/admin/analytics", handler.HandleGetAnalytics)

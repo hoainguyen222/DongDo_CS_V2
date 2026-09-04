@@ -363,3 +363,162 @@
     color: #fff;
   }
 }
+
+// ── Team Agent Guest Call Banner ──────────────────────────
+.teamAgentBanner {
+  position: fixed;
+  bottom: s.$space-6;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 70;
+  background: linear-gradient(135deg, rgba(s.$brand-navy, 0.95) 0%, rgba(s.$brand-navy-light, 0.9) 100%);
+  backdrop-filter: blur(16px);
+  padding: s.$space-4;
+  border-radius: s.$radius-xl;
+  border: 2px solid s.$accent-cyan;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  gap: s.$space-4;
+  animation: slideUpMobile 0.3s ease-out;
+  max-width: 90vw;
+
+  @media (min-width: s.$breakpoint-md) {
+    left: s.$space-6;
+    transform: none;
+    max-width: 420px;
+    animation: slideUpDesktop 0.3s ease-out;
+  }
+}
+
+.teamAgentIcon {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, s.$accent-cyan, s.$accent-blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.teamAgentText {
+  flex: 1;
+  min-width: 0;
+
+  .teamAgentLabel {
+    font-size: s.$text-xs;
+    font-weight: 600;
+    color: s.$accent-cyan;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .teamAgentGuest {
+    font-size: s.$text-sm;
+    font-weight: 700;
+    color: #fff;
+    margin-top: 2px;
+  }
+
+  .teamAgentSession {
+    font-size: 11px;
+    color: s.$text-muted;
+    margin-top: 2px;
+    font-family: monospace;
+  }
+}
+
+.teamAgentActions {
+  display: flex;
+  align-items: center;
+  gap: s.$space-2;
+}
+
+.teamAgentBtn {
+  padding: s.$space-2 + 1 s.$space-3;
+  border-radius: s.$radius-md;
+  background: s.$accent-cyan;
+  color: #fff;
+  font-size: s.$text-xs;
+  font-weight: 600;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: s.$space-1;
+  transition: filter s.$transition-fast;
+  white-space: nowrap;
+
+  &:hover {
+    filter: brightness(1.1);
+  }
+}
+
+.teamAgentDismissBtn {
+  padding: s.$space-2 + 1;
+  border-radius: s.$radius-md;
+  background: rgba(100, 116, 139, 0.5);
+  color: #fff;
+  font-size: s.$text-xs;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background s.$transition-fast;
+
+  &:hover {
+    background: rgba(100, 116, 139, 0.8);
+  }
+}
+
+// Animation for mobile (centered)
+@keyframes slideUpMobile {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+// Animation for desktop (left-aligned)
+@keyframes slideUpDesktop {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+// Mobile: centered
+.teamAgentBanner {
+  position: fixed;
+  bottom: s.$space-6;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 70;
+  background: linear-gradient(135deg, rgba(s.$brand-navy, 0.95) 0%, rgba(s.$brand-navy-light, 0.9) 100%);
+  backdrop-filter: blur(16px);
+  padding: s.$space-4;
+  border-radius: s.$radius-xl;
+  border: 2px solid s.$accent-cyan;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  gap: s.$space-4;
+  animation: slideUpMobile 0.3s ease-out;
+  max-width: 90vw;
+
+  @media (min-width: s.$breakpoint-md) {
+    left: s.$space-6;
+    transform: none;
+    max-width: 420px;
+    animation: slideUpDesktop 0.3s ease-out;
+  }
+}

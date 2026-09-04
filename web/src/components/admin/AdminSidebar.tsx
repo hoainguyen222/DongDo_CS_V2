@@ -10,8 +10,10 @@ import {
   Mic,
   MicOff,
   PhoneOff,
+  Users,
+  X,
+  Headphones,
 } from 'lucide-react';
-import { useAuthStore } from '@/lib/stores/authStore';
 import { WSClient } from '@/lib/ws';
 import { WebRTCManager } from '@/lib/webrtc';
 import styles from './AdminSidebar.module.scss';
@@ -448,14 +450,48 @@ export function AdminSidebar({
 }
 
 // ── WebRTC Hook for Admin ───────────────────────────────────
+const MISSED_CALL_TIMEOUT = 60; // seconds before marking as missed
+
 export function useAdminWebRTC(wsRef: React.RefObject<WSClient | null>, sessionId: string, onCallEnd: () => void) {
   const rtcRef = useRef<WebRTCManager | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const callTimerRef = useRef<any>(null);
+  const missedCallTimerRef = useRef<any>(null);
   const [isCallActive, setIsCallActive] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
-  const [incomingCall, setIncomingCall] = useState<{ session_id: string; caller_id: string; offer?: any } | null>(null);
+  const [incomingCall, setIncomingCall] = useState<{ session_id: string; caller_id: string; call_id?: number; offer?: any } | null>(null);
+  const [isMissedCall, setIsMissedCall] = useState(false);
+
+  const clearMissedCallTimer = useCallback(() => {
+    if (missedCallTimerRef.current) {
+      clearTimeout(missedCallTimerRef.current);
+      missedCallTimerRef.current = null;
+    }
+  }, []);
+
+  const startMissedCallTimer = useCallback((callSessionId: string, _callerId: string, callId?: number) => {
+    clearMissedCallTimer();
+    setIsMissedCall(false);
+    missedCallTimerRef.current = setTimeout(async () => {
+      // Mark as missed call if no one answered
+      setIsMissedCall(true);
+      try {
+        const { api } = await import('@/lib/api');
+        // Use the dedicated markMissedCall API to set status to MISSED
+        if (callId) {
+          await api.markMissedCall(callId, callSessionId);
+        } else {
+          await api.endCall(callSessionId, 0); // Fallback: 0 duration = missed
+        }
+      } catch (_) {}
+      // Auto-clear after showing
+      setTimeout(() => {
+        setIncomingCall(null);
+        setIsMissedCall(false);
+      }, 5000);
+    }, MISSED_CALL_TIMEOUT * 1000);
+  }, [clearMissedCallTimer]);
 
   const startCallTimer = useCallback(() => {
     clearInterval(callTimerRef.current);
@@ -467,9 +503,11 @@ export function useAdminWebRTC(wsRef: React.RefObject<WSClient | null>, sessionI
 
   const handleAnswerCall = useCallback(async () => {
     if (!incomingCall || !wsRef.current) return;
+    clearMissedCallTimer();
     const callData = { ...incomingCall };
     setIsCallActive(true);
     setIncomingCall(null);
+    setIsMissedCall(false);
     startCallTimer();
     const rtc = new WebRTCManager(wsRef.current, callData.session_id, (state: any) => {
       if (state === 'connected') startCallTimer();
@@ -488,27 +526,33 @@ export function useAdminWebRTC(wsRef: React.RefObject<WSClient | null>, sessionI
     });
     rtcRef.current = rtc;
     if (callData.offer) await rtc.handleOffer(callData.offer);
-  }, [incomingCall, wsRef, startCallTimer, onCallEnd]);
+  }, [incomingCall, wsRef, startCallTimer, onCallEnd, clearMissedCallTimer]);
 
   const handleDeclineCall = useCallback(() => {
+    clearMissedCallTimer();
     const { voiceApi } = require('@/lib/api');
     voiceApi.declineCall(incomingCall?.session_id || '').catch(() => {});
     setIncomingCall(null);
-  }, [incomingCall]);
+    setIsMissedCall(false);
+  }, [incomingCall, clearMissedCallTimer]);
 
   const handleEndCall = useCallback(async () => {
+    clearMissedCallTimer();
     setIsCallActive(false);
     setIncomingCall(null);
     clearInterval(callTimerRef.current);
     setCallDuration(0);
+    setIsMissedCall(false);
     if (rtcRef.current) {
       await rtcRef.current.endCall(false, callDuration).catch(() => {}); // local cleanup only
       rtcRef.current = null;
     }
     const { voiceApi } = require('@/lib/api');
-    await voiceApi.endCall(sessionId, callDuration).catch(() => {});
+    // Use incomingCall.session_id if available, otherwise fall back to the provided sessionId
+    const targetSessionId = incomingCall?.session_id || sessionId;
+    await voiceApi.endCall(targetSessionId, callDuration).catch(() => {});
     onCallEnd();
-  }, [callDuration, sessionId, onCallEnd]);
+  }, [callDuration, sessionId, incomingCall, onCallEnd, clearMissedCallTimer]);
 
   const toggleMute = useCallback(() => {
     if (rtcRef.current) {
@@ -526,18 +570,37 @@ export function useAdminWebRTC(wsRef: React.RefObject<WSClient | null>, sessionI
       const sID = event.payload?.session_id || event.session_id;
       const cID = event.payload?.caller_id || event.sender_id || 'Khách hàng';
       const offerData = event.payload?.offer || event.payload;
-      if (sID) setIncomingCall({ session_id: sID, caller_id: cID, offer: offerData });
+      if (sID) {
+        // If already in a call, send busy notification
+        if (isCallActive) {
+          // Admin is busy, caller will get no answer
+          return;
+        }
+        const callId = event.payload?.call_id || event.call_id;
+        setIncomingCall({ session_id: sID, caller_id: cID, call_id: callId, offer: offerData });
+        // Start missed call timer with call_id for proper missed call marking
+        startMissedCallTimer(sID, cID, callId);
+      }
     });
 
     wsRef.current.on('call_offer', (event: any) => {
       const sID = event.payload?.session_id || event.session_id;
       const cID = event.payload?.caller_id || event.sender_id || 'Khách hàng';
-      if (sID) setIncomingCall({ session_id: sID, caller_id: cID, offer: event.payload });
+      if (sID) {
+        // If already in a call, ignore (already handled by call_ring)
+        if (!isCallActive && !incomingCall) {
+          const callId = event.payload?.call_id || event.call_id;
+          setIncomingCall({ session_id: sID, caller_id: cID, call_id: callId, offer: event.payload });
+          startMissedCallTimer(sID, cID, callId);
+        }
+      }
     });
 
     wsRef.current.on('call_end', async () => {
       setIsCallActive(false);
       setIncomingCall(null);
+      setIsMissedCall(false);
+      clearMissedCallTimer();
       clearInterval(callTimerRef.current);
       setCallDuration(0);
       rtcRef.current = null;
@@ -546,8 +609,9 @@ export function useAdminWebRTC(wsRef: React.RefObject<WSClient | null>, sessionI
 
     return () => {
       clearInterval(callTimerRef.current);
+      clearMissedCallTimer();
     };
-  }, [wsRef, onCallEnd]);
+  }, [wsRef, onCallEnd, isCallActive, incomingCall, startMissedCallTimer, clearMissedCallTimer]);
 
   return {
     rtcRef,
@@ -556,9 +620,111 @@ export function useAdminWebRTC(wsRef: React.RefObject<WSClient | null>, sessionI
     callDuration,
     isMuted,
     incomingCall,
+    isMissedCall,
     handleAnswerCall,
     handleDeclineCall,
     handleEndCall,
     toggleMute,
   };
+}
+
+// ── Types for Team Agent Guest Call Notifications ────────────
+export interface TeamAgentGuestCall {
+  session_id: string;
+  guest_name: string;
+  guest_id: string;
+  call_id?: number;
+  timestamp: string;
+}
+
+// ── Hook for Team Agent Guest Call Notifications ────────────
+export function useTeamAgentNotifications(
+  wsRef: React.RefObject<WSClient | null>,
+  onTakeCall?: (sessionId: string, guestName: string) => void
+) {
+  const [pendingGuestCalls, setPendingGuestCalls] = useState<TeamAgentGuestCall[]>([]);
+
+  useEffect(() => {
+    if (!wsRef.current) return;
+
+    const handleTeamAgentCall = (event: any) => {
+      const guestCall: TeamAgentGuestCall = {
+        session_id: event.payload?.session_id || event.session_id,
+        guest_name: event.payload?.guest_name || event.guest_name || 'Khách hàng',
+        guest_id: event.payload?.guest_id || event.guest_id || '',
+        call_id: event.payload?.call_id || event.call_id,
+        timestamp: event.payload?.timestamp || event.timestamp || new Date().toISOString(),
+      };
+      // Avoid duplicates
+      setPendingGuestCalls((prev) => {
+        if (prev.some((c) => c.session_id === guestCall.session_id)) return prev;
+        return [...prev, guestCall];
+      });
+    };
+
+    const unsubscribe = wsRef.current.on('team_agent_call', handleTeamAgentCall);
+
+    return () => {
+      unsubscribe();
+    };
+  }, [wsRef]);
+
+  const dismissCall = useCallback((sessionId: string) => {
+    setPendingGuestCalls((prev) => prev.filter((c) => c.session_id !== sessionId));
+  }, []);
+
+  const handleTakeCall = useCallback((call: TeamAgentGuestCall) => {
+    onTakeCall?.(call.session_id, call.guest_name);
+    dismissCall(call.session_id);
+  }, [onTakeCall, dismissCall]);
+
+  return {
+    pendingGuestCalls,
+    dismissCall,
+    handleTakeCall,
+  };
+}
+
+// ── Team Agent Guest Call Banner Component ──────────────────
+export function TeamAgentGuestCallBanner({
+  call,
+  onTakeCall,
+  onDismiss,
+}: {
+  call: TeamAgentGuestCall;
+  onTakeCall: (call: TeamAgentGuestCall) => void;
+  onDismiss: (sessionId: string) => void;
+}) {
+  const sessionPreview = call.session_id.length > 12
+    ? call.session_id.slice(0, 12) + '...'
+    : call.session_id;
+
+  return (
+    <div className={styles.teamAgentBanner}>
+      <div className={styles.teamAgentIcon}>
+        <Headphones style={{ width: 20, height: 20 }} />
+      </div>
+      <div className={styles.teamAgentText}>
+        <div className={styles.teamAgentLabel}>Khách hàng đang chờ</div>
+        <div className={styles.teamAgentGuest}>{call.guest_name}</div>
+        <div className={styles.teamAgentSession}>{sessionPreview}</div>
+      </div>
+      <div className={styles.teamAgentActions}>
+        <button
+          onClick={() => onTakeCall(call)}
+          className={styles.teamAgentBtn}
+        >
+          <Phone style={{ width: 14, height: 14 }} />
+          <span>Nhận cuộc gọi</span>
+        </button>
+        <button
+          onClick={() => onDismiss(call.session_id)}
+          className={styles.teamAgentDismissBtn}
+          aria-label="Bỏ qua thông báo"
+        >
+          <X style={{ width: 16, height: 16 }} />
+        </button>
+      </div>
+    </div>
+  );
 }

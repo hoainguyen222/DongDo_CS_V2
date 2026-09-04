@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"runtime"
-	"strings"
 	"time"
 
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/config"
@@ -18,7 +17,6 @@ import (
 	infraQdrant "github.com/hoainguyen222/DongDo_CS_V2/internal/infra/qdrant"
 	infraRedis "github.com/hoainguyen222/DongDo_CS_V2/internal/infra/redis"
 	repoPostgres "github.com/hoainguyen222/DongDo_CS_V2/internal/repository/postgres"
-	repoSqlite "github.com/hoainguyen222/DongDo_CS_V2/internal/repository/sqlite"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/usecase"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/worker"
 	"github.com/hoainguyen222/DongDo_CS_V2/pkg/graceful"
@@ -62,7 +60,7 @@ func main() {
 
 	sm := graceful.NewShutdownManager(15 * time.Second)
 
-	// 1. Initialize Database (PostgreSQL with auto SQLite fallback)
+	// 1. Initialize Database (PostgreSQL)
 	var userRepo domain.UserRepository
 	var sessionRepo domain.SessionRepository
 	var guestRepo domain.GuestRepository
@@ -74,79 +72,45 @@ func main() {
 	var analyticsRepo domain.AnalyticsRepository
 	var partnerRepo domain.PartnerRepository
 
-	usePostgres := cfg.DatabaseURL != "" && strings.HasPrefix(cfg.DatabaseURL, "postgres://")
-	dbLabel := "sqlite"
-
-	if usePostgres {
-		var pgDB *repoPostgres.DB
-		var err error
-		for attempt := 1; attempt <= 15; attempt++ {
-			pgDB, err = repoPostgres.NewDB(ctx, cfg.DatabaseURL)
-			if err == nil {
-				break
-			}
-			if attempt == 1 {
-				logger.Warn().
-					Str("type", "postgresql").
-					Err(err).
-					Msg("Waiting for PostgreSQL")
-			}
-			if attempt == 15 {
-				logger.Error().
-					Str("type", "postgresql").
-					Err(err).
-					Msg("PostgreSQL connection failed after all retries; falling back to SQLite")
-			}
-			time.Sleep(1 * time.Second)
+	var pgDB *repoPostgres.DB
+	var err error
+	for attempt := 1; attempt <= 15; attempt++ {
+		pgDB, err = repoPostgres.NewDB(ctx, cfg.DatabaseURL)
+		if err == nil {
+			break
 		}
-
-		if err != nil {
-			usePostgres = false
-		} else {
-			dbLabel = "postgresql"
-			sm.Register("PostgreSQL Connection Pool", func(ctx context.Context) error {
-				pgDB.Close()
-				return nil
-			})
-			userRepo = repoPostgres.NewUserRepo(pgDB)
-			sessionRepo = repoPostgres.NewSessionRepo(pgDB)
-			guestRepo = repoPostgres.NewGuestRepo(pgDB)
-			messageRepo = repoPostgres.NewMessageRepo(pgDB)
-			caseRepo = repoPostgres.NewCaseRepo(pgDB)
-			learningRepo = repoPostgres.NewLearningRepo(pgDB)
-			settingRepo = repoPostgres.NewSettingRepo(pgDB)
-			voiceRepo = repoPostgres.NewVoiceCallRepo(pgDB)
-			analyticsRepo = repoPostgres.NewAnalyticsRepo(pgDB)
-			partnerRepo = repoPostgres.NewPartnerRepo(pgDB)
-		}
-	}
-
-	if !usePostgres {
-		sqliteDB, err := repoSqlite.NewDB("chat_history.db")
-		if err != nil {
-			logger.Fatal().
-				Str("type", "sqlite").
+		if attempt == 1 {
+			logger.Warn().
+				Str("type", "postgresql").
 				Err(err).
-				Msg("Failed to initialize SQLite")
+				Msg("Waiting for PostgreSQL")
 		}
-
-		sm.Register("SQLite Database", func(ctx context.Context) error {
-			return sqliteDB.Close()
-		})
-		userRepo = repoSqlite.NewUserRepo(sqliteDB)
-		sessionRepo = repoSqlite.NewSessionRepo(sqliteDB)
-		guestRepo = repoSqlite.NewGuestRepo(sqliteDB)
-		messageRepo = repoSqlite.NewMessageRepo(sqliteDB)
-		caseRepo = repoSqlite.NewCaseRepo(sqliteDB)
-		learningRepo = repoSqlite.NewLearningRepo(sqliteDB)
-		settingRepo = repoSqlite.NewSettingRepo(sqliteDB)
-		voiceRepo = repoSqlite.NewVoiceCallRepo(sqliteDB)
-		analyticsRepo = repoSqlite.NewAnalyticsRepo(sqliteDB)
-		partnerRepo = repoSqlite.NewPartnerRepo(sqliteDB)
+		if attempt == 15 {
+			logger.Fatal().
+				Str("type", "postgresql").
+				Err(err).
+				Msg("PostgreSQL connection failed after all retries")
+		}
+		time.Sleep(1 * time.Second)
 	}
+
+	sm.Register("PostgreSQL Connection Pool", func(ctx context.Context) error {
+		pgDB.Close()
+		return nil
+	})
+	userRepo = repoPostgres.NewUserRepo(pgDB)
+	sessionRepo = repoPostgres.NewSessionRepo(pgDB)
+	guestRepo = repoPostgres.NewGuestRepo(pgDB)
+	messageRepo = repoPostgres.NewMessageRepo(pgDB)
+	caseRepo = repoPostgres.NewCaseRepo(pgDB)
+	learningRepo = repoPostgres.NewLearningRepo(pgDB)
+	settingRepo = repoPostgres.NewSettingRepo(pgDB)
+	voiceRepo = repoPostgres.NewVoiceCallRepo(pgDB)
+	analyticsRepo = repoPostgres.NewAnalyticsRepo(pgDB)
+	partnerRepo = repoPostgres.NewPartnerRepo(pgDB)
 
 	logger.Info().
-		Str("type", dbLabel).
+		Str("type", "postgresql").
 		Msg("Database connected")
 
 	// 2. Initialize Redis (Event Bus & State)

@@ -61,6 +61,19 @@ const deleteCall = `-- name: DeleteCall :exec
 DELETE FROM voice_calls WHERE id = $1
 `
 
+const markMissedCall = `-- name: MarkMissedCall :exec
+UPDATE voice_calls
+SET status = 'MISSED'::call_status,
+    duration_seconds = 0,
+    ended_at         = NOW()
+WHERE id = $1
+`
+
+func (q *Queries) MarkMissedCall(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, markMissedCall, id)
+	return err
+}
+
 func (q *Queries) DeleteCall(ctx context.Context, id int64) error {
 	_, err := q.db.Exec(ctx, deleteCall, id)
 	return err

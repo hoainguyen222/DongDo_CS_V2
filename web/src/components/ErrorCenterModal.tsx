@@ -34,7 +34,7 @@ export const generateSuggestedFix = (source: string, errorMsg: string): string =
   }
 
   if (msgLower.includes('failed to connect') || msgLower.includes('networkerror') || msgLower.includes('csdl') || msgLower.includes('connection refused')) {
-    return `🔌 **Nguyên nhân:** Lỗi kết nối đến Backend Server (Golang API / PostgreSQL / SQLite).
+    return `🔌 **Nguyên nhân:** Lỗi kết nối đến Backend Server (Golang API / PostgreSQL).
 👉 **Đề xuất hướng xử lý:**
 1. Kiểm tra xem tiến trình Golang Backend (cmd/server/main.go) có đang chạy trên port 8080 hay không.
 2. Kiểm tra trạng thái dịch vụ PostgreSQL / Redis / Qdrant trong Docker Container.

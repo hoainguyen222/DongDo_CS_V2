@@ -1,0 +1,204 @@
+{
+  "name": "dongdo-cs-automation-tests",
+  "version": "1.0.0",
+  "description": "Automation test suite for CSKH system - DongDo Partners",
+  
+  "servers": {
+    "local": {
+      "api": "http://localhost:8080",
+      "ws": "ws://localhost:8080"
+    },
+    "staging": {
+      "api": "https://staging-api.dongdo.com",
+      "ws": "wss://staging-api.dongdo.com"
+    },
+    "production": {
+      "api": "https://api.dongdo.com",
+      "ws": "wss://api.dongdo.com"
+    }
+  },
+
+  "test_defaults": {
+    "max_concurrent_guests": 50,
+    "max_concurrent_messages": 100,
+    "request_timeout_ms": 30000,
+    "ai_response_timeout_ms": 60000,
+    "message_delay_ms": 100,
+    "max_retries": 3,
+    "retry_delay_ms": 1000
+  },
+
+  "agent_users": [
+    {
+      "id": "agent_001",
+      "username": "cskh_agent_1",
+      "password": "AgentPass123!",
+      "full_name": "Nguyễn Văn Agent 1",
+      "role": "cs_agent",
+      "enabled": true
+    },
+    {
+      "id": "agent_002",
+      "username": "cskh_agent_2",
+      "password": "AgentPass123!",
+      "full_name": "Trần Thị Agent 2",
+      "role": "cs_agent",
+      "enabled": true
+    },
+    {
+      "id": "agent_003",
+      "username": "cskh_agent_3",
+      "password": "AgentPass123!",
+      "full_name": "Lê Văn Agent 3",
+      "role": "cs_agent",
+      "enabled": true
+    },
+    {
+      "id": "agent_004",
+      "username": "cskh_agent_4",
+      "password": "AgentPass123!",
+      "full_name": "Phạm Thị Agent 4",
+      "role": "cs_agent",
+      "enabled": true
+    },
+    {
+      "id": "agent_005",
+      "username": "cskh_agent_5",
+      "password": "AgentPass123!",
+      "full_name": "Hoàng Văn Agent 5",
+      "role": "cs_agent",
+      "enabled": true
+    },
+    {
+      "id": "admin_001",
+      "username": "admin",
+      "password": "admin123",
+      "full_name": "Quản trị viên",
+      "role": "owner",
+      "enabled": true
+    }
+  ],
+
+  "test_scenarios": {
+    "smoke_test": {
+      "guest_count": 1,
+      "messages_per_guest": 2,
+      "ai_questions": [
+        "Hàng hóa phái sinh là gì?"
+      ]
+    },
+    "light_load": {
+      "guest_count": 10,
+      "messages_per_guest": 5,
+      "ai_questions": [
+        "Hàng hóa phái sinh là gì?",
+        "Cách nạp tiền vào tài khoản?",
+        "Giới thiệu về DDP Invest"
+      ]
+    },
+    "medium_load": {
+      "guest_count": 25,
+      "messages_per_guest": 8,
+      "concurrent_agents": 3
+    },
+    "heavy_load": {
+      "guest_count": 50,
+      "messages_per_guest": 10,
+      "concurrent_agents": 5
+    },
+    "stress_test": {
+      "guest_count": 100,
+      "messages_per_guest": 5,
+      "concurrent_agents": 10,
+      "burst_messages": true
+    }
+  },
+
+  "ai_test_questions": [
+    {
+      "id": "q001",
+      "category": "product",
+      "question": "Hàng hóa phái sinh là gì?",
+      "expected_keywords": ["phái sinh", "commodity", "hợp đồng"]
+    },
+    {
+      "id": "q002",
+      "category": "account",
+      "question": "Cách nạp tiền vào tài khoản?",
+      "expected_keywords": ["nạp", "tiền", "tài khoản"]
+    },
+    {
+      "id": "q003",
+      "category": "product",
+      "question": "Giới thiệu về DDP Invest",
+      "expected_keywords": ["DDP", "đầu tư", "nền tảng"]
+    },
+    {
+      "id": "q004",
+      "category": "trading",
+      "question": "Quản lý rủi ro khi giao dịch",
+      "expected_keywords": ["rủi ro", "quản lý", "dừng lỗ"]
+    },
+    {
+      "id": "q005",
+      "category": "trading",
+      "question": "Phí giao dịch là bao nhiêu?",
+      "expected_keywords": ["phí", "giao dịch", "hoa hồng"]
+    },
+    {
+      "id": "q006",
+      "category": "account",
+      "question": "Làm sao để rút tiền?",
+      "expected_keywords": ["rút", "tiền", "tài khoản"]
+    },
+    {
+      "id": "q007",
+      "category": "trading",
+      "question": "Thời gian giao dịch là khi nào?",
+      "expected_keywords": ["giờ", "giao dịch", "thị trường"]
+    },
+    {
+      "id": "q008",
+      "category": "product",
+      "question": "Có ứng dụng mobile không?",
+      "expected_keywords": ["app", "mobile", "điện thoại"]
+    }
+  ],
+
+  "human_cs_triggers": [
+    {
+      "id": "trigger_001",
+      "pattern": "tôi cần hỗ trợ",
+      "expected_action": "escalate_to_human"
+    },
+    {
+      "id": "trigger_002",
+      "pattern": "không hiểu",
+      "expected_action": "escalate_to_human"
+    },
+    {
+      "id": "trigger_003",
+      "pattern": "giúp tôi",
+      "expected_action": "escalate_to_human"
+    },
+    {
+      "id": "trigger_004",
+      "pattern": "cần người thật",
+      "expected_action": "escalate_to_human"
+    },
+    {
+      "id": "trigger_005",
+      "pattern": "chuyên viên",
+      "expected_action": "escalate_to_human"
+    }
+  ],
+
+  "reporting": {
+    "save_reports": true,
+    "report_directory": "./reports",
+    "report_format": "json",
+    "include_screenshots": false,
+    "console_output": true,
+    "verbose": false
+  }
+}
