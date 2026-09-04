@@ -19,7 +19,33 @@ import (
 	"github.com/google/uuid"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/usecase"
+	"github.com/rs/zerolog"
 )
+
+// Logger is a global logger instance for the http package
+var Logger zerolog.Logger
+
+// InitLogger initializes the global zerolog logger
+func InitLogger(level string) {
+	zerolog.TimeFieldFormat = time.RFC3339
+	zerolog.TimestampFieldName = "timestamp"
+	zerolog.LevelFieldName = "level"
+	zerolog.MessageFieldName = "message"
+
+	lvl, err := zerolog.ParseLevel(strings.ToLower(level))
+	if err != nil {
+		lvl = zerolog.InfoLevel
+	}
+
+	Logger = zerolog.New(os.Stdout).
+		With().
+		Timestamp().
+		Str("service", "http-handler").
+		Logger().
+		Level(lvl)
+}
+
+// getClientIP was removed for log reduction (callers no longer need it).
 
 type Handler struct {
 	authUC      *usecase.AuthUseCase
@@ -34,6 +60,7 @@ type Handler struct {
 	embedder    domain.Embedder
 	docsDir     string
 	eventBus    domain.EventBus
+	logger      zerolog.Logger
 }
 
 func NewHandler(
@@ -63,6 +90,7 @@ func NewHandler(
 		embedder:    embedder,
 		docsDir:     docsDir,
 		eventBus:    eventBus,
+		logger:      Logger.With().Str("component", "handler").Logger(),
 	}
 }
 
@@ -78,6 +106,7 @@ type LoginRequest struct {
 func (h *Handler) HandleLogin(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		Logger.Warn().Err(err).Msg("Login validation failed")
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu"})
 		return
 	}
@@ -85,9 +114,12 @@ func (h *Handler) HandleLogin(c *gin.Context) {
 	req.Username = strings.ToLower(strings.TrimSpace(req.Username))
 	user, err := h.authUC.Login(c.Request.Context(), req.Username, req.Password)
 	if err != nil {
+		Logger.Warn().Str("username", req.Username).Err(err).Msg("Login failed")
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": err.Error()})
 		return
 	}
+
+	Logger.Info().Str("user", user.Username).Msg("Login success")
 
 	c.JSON(http.StatusOK, gin.H{
 		"token":     user.Token,
@@ -122,6 +154,7 @@ type CreateUserReq struct {
 func (h *Handler) HandleListUsers(c *gin.Context) {
 	users, err := h.authUC.ListUsers(c.Request.Context())
 	if err != nil {
+		Logger.Error().Err(err).Msg("Failed to list users")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Lỗi lấy danh sách tài khoản: " + err.Error()})
 		return
 	}
@@ -131,6 +164,7 @@ func (h *Handler) HandleListUsers(c *gin.Context) {
 func (h *Handler) HandleCreateUser(c *gin.Context) {
 	var req CreateUserReq
 	if err := c.ShouldBindJSON(&req); err != nil {
+		Logger.Warn().Err(err).Msg("Create user validation failed")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu không hợp lệ"})
 		return
 	}
@@ -149,12 +183,14 @@ func (h *Handler) HandleCreateUser(c *gin.Context) {
 
 	performer := c.MustGet("user").(*domain.SessionUser)
 	if role == domain.RoleOwner && strings.ToLower(string(performer.Role)) != "owner" {
+		Logger.Warn().Msg("Create user forbidden: insufficient permissions for owner role")
 		c.JSON(http.StatusForbidden, gin.H{"error": "Chỉ có tài khoản Owner mới có quyền cấp vai trò Owner cho người khác!"})
 		return
 	}
 
 	username := strings.ToLower(strings.TrimSpace(req.Email))
 	if username == "" {
+		Logger.Warn().Msg("Create user validation failed: email/username is empty")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Email/Username không được để trống"})
 		return
 	}
@@ -164,9 +200,12 @@ func (h *Handler) HandleCreateUser(c *gin.Context) {
 
 	user, err := h.authUC.CreateUser(c.Request.Context(), username, req.Password, req.FullName, role)
 	if err != nil {
+		Logger.Error().Str("username", username).Err(err).Msg("Failed to create user")
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	Logger.Info().Str("user", user.Username).Msg("User created")
 
 	c.JSON(http.StatusOK, user)
 }
@@ -174,14 +213,19 @@ func (h *Handler) HandleCreateUser(c *gin.Context) {
 func (h *Handler) HandleDeleteUser(c *gin.Context) {
 	username := c.Param("username")
 	if username == "" {
+		Logger.Warn().Msg("Delete user validation failed: username is empty")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Tên đăng nhập không hợp lệ"})
 		return
 	}
 	performer := c.MustGet("user").(*domain.SessionUser)
 	if err := h.authUC.DeleteUser(c.Request.Context(), string(performer.Role), username); err != nil {
+		Logger.Error().Str("target", username).Err(err).Msg("Failed to delete user")
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	Logger.Info().Str("user", username).Msg("User deleted")
+
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Đã xóa tài khoản thành công"})
 }
 
@@ -195,12 +239,14 @@ type UpdateUserReq struct {
 func (h *Handler) HandleUpdateUser(c *gin.Context) {
 	username := c.Param("username")
 	if username == "" {
+		Logger.Warn().Msg("Update user validation failed: username is empty")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Tên đăng nhập không hợp lệ"})
 		return
 	}
 
 	var req UpdateUserReq
 	if err := c.ShouldBindJSON(&req); err != nil {
+		Logger.Warn().Err(err).Msg("Update user validation failed")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu không hợp lệ"})
 		return
 	}
@@ -219,15 +265,19 @@ func (h *Handler) HandleUpdateUser(c *gin.Context) {
 
 	performer := c.MustGet("user").(*domain.SessionUser)
 	if role == domain.RoleOwner && strings.ToLower(string(performer.Role)) != "owner" {
+		Logger.Warn().Msg("Update user forbidden: insufficient permissions for owner role")
 		c.JSON(http.StatusForbidden, gin.H{"error": "Chỉ có tài khoản Owner mới có quyền cấp vai trò Owner cho người khác!"})
 		return
 	}
 
 	user, err := h.authUC.UpdateUser(c.Request.Context(), string(performer.Role), username, req.FullName, role, req.IsActive, req.Password)
 	if err != nil {
+		Logger.Error().Str("target", username).Err(err).Msg("Failed to update user")
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	Logger.Info().Str("user", user.Username).Msg("User updated")
 
 	c.JSON(http.StatusOK, user)
 }
@@ -243,13 +293,13 @@ func (h *Handler) HandleGuestRegister(c *gin.Context) {
 
 	guest, token, err := h.authUC.RegisterGuest(c.Request.Context(), req.DisplayName, req.Phone)
 	if err != nil {
+		Logger.Error().Err(err).Msg("Failed to register guest")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "Lỗi tạo phiên khách hàng: " + err.Error()})
 		return
 	}
 
 	sessionID := "session-" + guest.GuestID.String()[:8] + "-" + strconv.FormatInt(time.Now().UnixMilli(), 10)
 
-	// Initialize case record with phone
 	_, _ = h.caseUC.InitCase(c.Request.Context(), sessionID, &guest.GuestID, req.DisplayName, req.Phone)
 
 	c.JSON(http.StatusOK, gin.H{
@@ -275,6 +325,7 @@ type ChatRequest struct {
 func (h *Handler) HandleChat(c *gin.Context) {
 	var req ChatRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		Logger.Warn().Err(err).Msg("Chat validation failed: message is empty")
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "Tin nhắn không được để trống"})
 		return
 	}
@@ -291,6 +342,7 @@ func (h *Handler) HandleChat(c *gin.Context) {
 
 	msg, err := h.chatUC.SendGuestMessage(c.Request.Context(), sessionID, custName, req.Message, req.ClientMsgID)
 	if err != nil {
+		Logger.Error().Str("session_id", sessionID).Err(err).Msg("Failed to send guest message")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
@@ -306,6 +358,7 @@ func (h *Handler) HandleGetHistory(c *gin.Context) {
 	sessionID := c.Param("session_id")
 	messages, chatCase, err := h.chatUC.GetHistory(c.Request.Context(), sessionID)
 	if err != nil {
+		Logger.Error().Str("session_id", sessionID).Err(err).Msg("Failed to get chat history")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
@@ -343,6 +396,7 @@ func (h *Handler) HandleListCases(c *gin.Context) {
 
 	allCases, err := h.caseUC.ListCases(c.Request.Context(), statusFilter)
 	if err != nil {
+		Logger.Error().Err(err).Msg("Failed to list cases")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
@@ -395,9 +449,12 @@ func (h *Handler) HandleTakeCase(c *gin.Context) {
 
 	err := h.caseUC.TakeCase(c.Request.Context(), sessionID, user.Username, user.FullName)
 	if err != nil {
+		Logger.Error().Str("session_id", sessionID).Err(err).Msg("Failed to take case")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
+
+	Logger.Info().Str("session_id", sessionID).Str("user", user.Username).Msg("Case taken")
 
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Đã tiếp nhận case thành công"})
 }
@@ -412,12 +469,14 @@ func (h *Handler) HandleReplyCase(c *gin.Context) {
 
 	var req ReplyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		Logger.Warn().Str("session_id", sessionID).Err(err).Msg("Reply case validation failed")
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "Tin nhắn không được để trống"})
 		return
 	}
 
 	_, err := h.chatUC.SendCSReply(c.Request.Context(), sessionID, user.Username, user.FullName, req.Message)
 	if err != nil {
+		Logger.Error().Str("session_id", sessionID).Err(err).Msg("Failed to send CS reply")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
@@ -439,9 +498,12 @@ func (h *Handler) HandleResolveCase(c *gin.Context) {
 
 	autoLearned, count, err := h.caseUC.ResolveCase(c.Request.Context(), sessionID, user.Username, user.FullName, req.ResolutionNote, req.ExtractPairs)
 	if err != nil {
+		Logger.Error().Str("session_id", sessionID).Err(err).Msg("Failed to resolve case")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
+
+	Logger.Info().Str("session_id", sessionID).Str("user", user.Username).Int("learned_count", count).Msg("Case resolved")
 
 	c.JSON(http.StatusOK, gin.H{
 		"success":       true,
@@ -455,9 +517,13 @@ func (h *Handler) HandleDeleteCase(c *gin.Context) {
 	sessionID := c.Param("session_id")
 	err := h.caseUC.DeleteCase(c.Request.Context(), sessionID)
 	if err != nil {
+		Logger.Error().Str("session_id", sessionID).Err(err).Msg("Failed to delete case")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
+
+	Logger.Info().Str("session_id", sessionID).Msg("Case deleted")
+
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Đã xóa case thành công"})
 }
 
@@ -470,12 +536,14 @@ func (h *Handler) HandleUpdateCaseCustomer(c *gin.Context) {
 	sessionID := c.Param("session_id")
 	var req UpdateCustomerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		Logger.Warn().Str("session_id", sessionID).Err(err).Msg("Update case customer validation failed")
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "Dữ liệu không hợp lệ"})
 		return
 	}
 
 	err := h.caseUC.UpdateCustomerInfo(c.Request.Context(), sessionID, req.CustomerName, req.CustomerPhone)
 	if err != nil {
+		Logger.Error().Str("session_id", sessionID).Err(err).Msg("Failed to update case customer")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
@@ -486,9 +554,13 @@ func (h *Handler) HandleUpdateCaseCustomer(c *gin.Context) {
 func (h *Handler) HandleClearAllCases(c *gin.Context) {
 	err := h.caseUC.ClearAllCases(c.Request.Context())
 	if err != nil {
+		Logger.Error().Err(err).Msg("Failed to clear all cases")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
+
+	Logger.Warn().Msg("All cases cleared")
+
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Đã xóa toàn bộ danh sách case thành công"})
 }
 
@@ -505,6 +577,7 @@ func (h *Handler) HandleListCustomers(c *gin.Context) {
 
 	allCustomers, err := h.caseUC.ListCustomers(c.Request.Context())
 	if err != nil {
+		Logger.Error().Err(err).Msg("Failed to list customers")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
@@ -555,12 +628,14 @@ func (h *Handler) HandleUpdateCustomer(c *gin.Context) {
 	guestID := c.Param("guest_id")
 	var req UpdateCustomerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		Logger.Warn().Str("guest_id", guestID).Err(err).Msg("Update customer validation failed")
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "Dữ liệu không hợp lệ"})
 		return
 	}
 
 	err := h.caseUC.UpdateCustomer(c.Request.Context(), guestID, req.CustomerName, req.CustomerPhone)
 	if err != nil {
+		Logger.Error().Str("guest_id", guestID).Err(err).Msg("Failed to update customer")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
@@ -572,6 +647,7 @@ func (h *Handler) HandleDeleteCustomer(c *gin.Context) {
 	guestID := c.Param("guest_id")
 	err := h.caseUC.DeleteCustomer(c.Request.Context(), guestID)
 	if err != nil {
+		Logger.Error().Str("guest_id", guestID).Err(err).Msg("Failed to delete customer")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
@@ -595,6 +671,7 @@ func (h *Handler) HandleListPendingLearning(c *gin.Context) {
 
 	items, err := h.learningUC.ListPending(c.Request.Context())
 	if err != nil {
+		Logger.Error().Err(err).Msg("Failed to list pending learning items")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
@@ -638,15 +715,18 @@ func (h *Handler) HandleUpdateLearning(c *gin.Context) {
 
 	var req UpdateLearningRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		Logger.Warn().Int64("item_id", id).Err(err).Msg("Update learning validation failed")
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "Dữ liệu không hợp lệ"})
 		return
 	}
 
 	err := h.learningUC.UpdateContent(c.Request.Context(), id, req.Question, req.Answer)
 	if err != nil {
+		Logger.Error().Int64("item_id", id).Err(err).Msg("Failed to update learning content")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
+
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Đã cập nhật nội dung mẩu tri thức"})
 }
 
@@ -671,9 +751,11 @@ func (h *Handler) HandleApproveLearning(c *gin.Context) {
 	}
 
 	if err != nil {
+		Logger.Error().Int64("item_id", id).Err(err).Msg("Failed to approve learning item")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
+
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": fmt.Sprintf("Đã phê duyệt và nạp tri thức vào Qdrant thành công bởi %s!", approverName)})
 }
 
@@ -689,9 +771,11 @@ func (h *Handler) HandleRejectLearning(c *gin.Context) {
 
 	err := h.learningUC.Reject(c.Request.Context(), id, approverName)
 	if err != nil {
+		Logger.Error().Int64("item_id", id).Err(err).Msg("Failed to reject learning item")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
+
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Đã từ chối mẩu tri thức"})
 }
 
@@ -705,11 +789,13 @@ func (h *Handler) HandleSetLearningSettings(c *gin.Context) {
 		AutoLearningEnabled bool `json:"auto_learning_enabled"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
+		Logger.Warn().Err(err).Msg("Set learning settings validation failed")
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "Dữ liệu không hợp lệ"})
 		return
 	}
 
 	_ = h.learningUC.SetSettings(c.Request.Context(), req.AutoLearningEnabled)
+
 	c.JSON(http.StatusOK, gin.H{
 		"success":               true,
 		"auto_learning_enabled": req.AutoLearningEnabled,
@@ -720,9 +806,13 @@ func (h *Handler) HandleSetLearningSettings(c *gin.Context) {
 func (h *Handler) HandleResetLearnedKnowledge(c *gin.Context) {
 	count, err := h.learningUC.ResetLearnedKnowledge(c.Request.Context())
 	if err != nil {
+		Logger.Error().Err(err).Msg("Failed to reset learned knowledge")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
+
+	Logger.Warn().Int("deleted_count", count).Msg("Learned knowledge reset")
+
 	c.JSON(http.StatusOK, gin.H{
 		"success":       true,
 		"deleted_count": count,
@@ -765,11 +855,13 @@ func (h *Handler) HandleGetKnowledgeOverview(c *gin.Context) {
 func (h *Handler) HandleUploadDocument(c *gin.Context) {
 	file, err := c.FormFile("file")
 	if err != nil {
+		Logger.Warn().Err(err).Msg("Upload document validation failed: no file selected")
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "Vui lòng chọn file tải lên"})
 		return
 	}
 
 	if !strings.HasSuffix(strings.ToLower(file.Filename), ".docx") {
+		Logger.Warn().Str("filename", file.Filename).Msg("Upload document rejected: invalid file format")
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "Chỉ hỗ trợ định dạng file Microsoft Word (.docx)"})
 		return
 	}
@@ -778,6 +870,7 @@ func (h *Handler) HandleUploadDocument(c *gin.Context) {
 	savePath := filepath.Join(h.docsDir, file.Filename)
 
 	if err := c.SaveUploadedFile(file, savePath); err != nil {
+		Logger.Error().Str("filename", file.Filename).Err(err).Msg("Failed to save uploaded document")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "Lỗi lưu file: " + err.Error()})
 		return
 	}
@@ -796,6 +889,7 @@ func (h *Handler) HandleUploadDocument(c *gin.Context) {
 func (h *Handler) HandleGetAnalytics(c *gin.Context) {
 	stats, err := h.analyticsUC.GetDashboardStats(c.Request.Context())
 	if err != nil {
+		Logger.Error().Err(err).Msg("Failed to get analytics")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
@@ -820,12 +914,14 @@ type ConfigSaveRequest struct {
 func (h *Handler) HandleSaveConfig(c *gin.Context) {
 	var req ConfigSaveRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		Logger.Warn().Err(err).Msg("Save config validation failed")
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "Dữ liệu cấu hình không hợp lệ"})
 		return
 	}
 
 	err := h.analyticsUC.SaveSystemConfig(c.Request.Context(), req.SystemPrompt, req.LLMModel, req.Temperature)
 	if err != nil {
+		Logger.Error().Err(err).Msg("Failed to save system config")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
@@ -848,6 +944,7 @@ type InitiateCallRequest struct {
 func (h *Handler) HandleInitiateCall(c *gin.Context) {
 	var req InitiateCallRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		Logger.Warn().Err(err).Msg("Initiate call validation failed")
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "Dữ liệu cuộc gọi không hợp lệ"})
 		return
 	}
@@ -861,6 +958,7 @@ func (h *Handler) HandleInitiateCall(c *gin.Context) {
 		req.CalleeID,
 	)
 	if err != nil {
+		Logger.Error().Str("session_id", req.SessionID).Err(err).Msg("Failed to initiate call")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
@@ -878,12 +976,14 @@ type EndCallRequest struct {
 func (h *Handler) HandleEndCall(c *gin.Context) {
 	var req EndCallRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		Logger.Warn().Err(err).Msg("End call validation failed")
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "Dữ liệu kết thúc cuộc gọi không hợp lệ"})
 		return
 	}
 
 	err := h.voiceUC.EndCall(c.Request.Context(), req.CallID, req.SessionID, req.DurationSeconds, req.RecordingURL)
 	if err != nil {
+		Logger.Error().Int64("call_id", req.CallID).Err(err).Msg("Failed to end call")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
@@ -894,6 +994,7 @@ func (h *Handler) HandleEndCall(c *gin.Context) {
 func (h *Handler) HandleUploadRecording(c *gin.Context) {
 	file, err := c.FormFile("audio")
 	if err != nil {
+		Logger.Warn().Err(err).Msg("Upload recording validation failed: no audio file")
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "Không có file ghi âm"})
 		return
 	}
@@ -910,13 +1011,13 @@ func (h *Handler) HandleUploadRecording(c *gin.Context) {
 	savePath := filepath.Join(recordingsDir, filename)
 
 	if err := c.SaveUploadedFile(file, savePath); err != nil {
+		Logger.Error().Str("session_id", sessionID).Err(err).Msg("Failed to save recording file")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "Lỗi lưu file ghi âm: " + err.Error()})
 		return
 	}
 
 	recordingURL := "/static/recordings/" + filename
 
-	// Update call record in database
 	var callID int64
 	if callIDStr != "" {
 		callID, _ = strconv.ParseInt(callIDStr, 10, 64)
@@ -946,12 +1047,10 @@ func (h *Handler) HandleUploadRecording(c *gin.Context) {
 				custName = chatCase.CustomerName
 			}
 
-			// If client transcript is empty, try backend AI transcription on the saved audio file
 			if trans == "" && filePath != "" {
 				trans = transcribeAudioFile(filePath)
 			}
 
-			// Save transcript to call record if available
 			if trans != "" && cID > 0 {
 				_ = h.voiceUC.SetTranscript(ctx, cID, trans)
 			}
@@ -1037,14 +1136,12 @@ func transcribeAudioFile(filePath string) string {
 func extractQAFromVoiceTranscript(customerName, transcript string, durationSeconds int) (string, string) {
 	trimmed := strings.TrimSpace(transcript)
 
-	// 1. If we have actual spoken transcript from audio transcription or speech recognition
 	if len(trimmed) > 5 {
 		question := fmt.Sprintf("Nội dung tư vấn cuộc gọi thoại với khách hàng %s", customerName)
 		answer := fmt.Sprintf("Văn bản lời thoại ghi âm cuộc gọi (%d giây):\n\n%s", durationSeconds, trimmed)
 		return question, answer
 	}
 
-	// 2. Fallback when speech was not recognized / silent call
 	question := fmt.Sprintf("Nội dung cuộc gọi tư vấn với khách hàng %s (%d giây)", customerName, durationSeconds)
 	answer := fmt.Sprintf("Cuộc gọi thoại đàm thoại %d giây. Bản ghi âm chưa nhận diện được văn bản lời thoại. Chuyên viên CSKH vui lòng nhập/chỉnh sửa nội dung tư vấn thực tế tại đây trước khi phê duyệt cho AI học.", durationSeconds)
 	return question, answer
@@ -1071,6 +1168,7 @@ func (h *Handler) HandleGetCalls(c *gin.Context) {
 	}
 
 	if err != nil {
+		Logger.Error().Err(err).Msg("Failed to get calls")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
@@ -1109,11 +1207,13 @@ func (h *Handler) HandleDeleteCall(c *gin.Context) {
 	callIDStr := c.Param("call_id")
 	callID, err := strconv.ParseInt(callIDStr, 10, 64)
 	if err != nil {
+		Logger.Warn().Err(err).Msg("Delete call validation failed: invalid call ID")
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "ID cuộc gọi không hợp lệ"})
 		return
 	}
 
 	if err := h.voiceUC.DeleteCall(c.Request.Context(), callID); err != nil {
+		Logger.Error().Int64("call_id", callID).Err(err).Msg("Failed to delete call")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "Lỗi xóa lịch sử cuộc gọi: " + err.Error()})
 		return
 	}
@@ -1136,13 +1236,14 @@ type DeclineCallRequest struct {
 func (h *Handler) HandleDeclineCall(c *gin.Context) {
 	var req DeclineCallRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		Logger.Warn().Err(err).Msg("Decline call validation failed")
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "Dữ liệu không hợp lệ"})
 		return
 	}
-	// Broadcast decline notification via WebSocket hub
 	_ = h.eventBus.PublishWS(c.Request.Context(), req.SessionID, domain.WSEventCallEnd, map[string]interface{}{
 		"declined": true,
 	}, "guest")
+
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
@@ -1154,13 +1255,14 @@ type TypingRequest struct {
 func (h *Handler) HandleSendTyping(c *gin.Context) {
 	var req TypingRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		Logger.Warn().Err(err).Msg("Send typing validation failed")
 		c.JSON(http.StatusBadRequest, gin.H{"detail": "Dữ liệu không hợp lệ"})
 		return
 	}
-	// Broadcast typing event to session via WebSocket
 	_ = h.eventBus.PublishWS(c.Request.Context(), req.SessionID, domain.WSEventTyping, map[string]interface{}{
 		"typing": true,
 	}, "guest")
+
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
@@ -1171,6 +1273,7 @@ func (h *Handler) HandleSendTyping(c *gin.Context) {
 func (h *Handler) HandleListSystemErrors(c *gin.Context) {
 	errors, err := h.partnerUC.ListSystemErrors(c.Request.Context())
 	if err != nil {
+		Logger.Error().Err(err).Msg("Failed to list system errors")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -1180,29 +1283,37 @@ func (h *Handler) HandleListSystemErrors(c *gin.Context) {
 func (h *Handler) HandleCreateSystemError(c *gin.Context) {
 	var req domain.SystemErrorRecord
 	if err := c.ShouldBindJSON(&req); err != nil {
+		Logger.Warn().Err(err).Msg("Create system error validation failed")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Dữ liệu không hợp lệ"})
 		return
 	}
 
 	created, err := h.partnerUC.CreateSystemError(c.Request.Context(), &req)
 	if err != nil {
+		Logger.Error().Err(err).Msg("Failed to create system error")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	Logger.Warn().Str("error_id", created.ID).Msg("System error created")
+
 	c.JSON(http.StatusOK, created)
 }
 
 func (h *Handler) HandleMarkSystemErrorHandled(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
+		Logger.Warn().Msg("Mark system error handled validation failed: ID is empty")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Mã lỗi không hợp lệ"})
 		return
 	}
 
 	if err := h.partnerUC.MarkSystemErrorHandled(c.Request.Context(), id); err != nil {
+		Logger.Error().Str("error_id", id).Err(err).Msg("Failed to mark system error as handled")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Đã đánh dấu xử lý lỗi"})
 }
 
@@ -1212,9 +1323,9 @@ func (h *Handler) HandleMarkSystemErrorHandled(c *gin.Context) {
 
 // HandleBootstrapStatus returns whether the system needs initial setup (no users exist yet).
 func (h *Handler) HandleBootstrapStatus(c *gin.Context) {
-	// Check if any user exists
 	users, err := h.authUC.ListUsers(c.Request.Context())
 	needsSetup := err == nil && len(users) == 0
+
 	c.JSON(http.StatusOK, gin.H{
 		"needs_setup":  needsSetup,
 		"is_enabled":   os.Getenv("ENABLE_BOOTSTRAP") == "true",

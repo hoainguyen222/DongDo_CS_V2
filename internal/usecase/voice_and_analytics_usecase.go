@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
+	"github.com/rs/zerolog"
 )
 
 // ============================================================
@@ -16,6 +17,7 @@ type VoiceUseCase struct {
 	voiceRepo domain.VoiceCallRepository
 	caseRepo  domain.CaseRepository
 	eventBus  domain.EventBus
+	logger    zerolog.Logger
 }
 
 func NewVoiceUseCase(voiceRepo domain.VoiceCallRepository, caseRepo domain.CaseRepository, eventBus domain.EventBus) *VoiceUseCase {
@@ -23,6 +25,7 @@ func NewVoiceUseCase(voiceRepo domain.VoiceCallRepository, caseRepo domain.CaseR
 		voiceRepo: voiceRepo,
 		caseRepo:  caseRepo,
 		eventBus:  eventBus,
+		logger:    zerolog.New(nil).With().Timestamp().Str("usecase", "voice").Logger(),
 	}
 }
 
@@ -39,10 +42,11 @@ func (uc *VoiceUseCase) InitiateCall(ctx context.Context, sessionID string, call
 
 	createdCall, err := uc.voiceRepo.Create(ctx, call)
 	if err != nil {
+		uc.logger.Error().Err(err).Str("session_id", sessionID).
+			Msg("failed to create voice call record")
 		return nil, fmt.Errorf("failed to create voice call record: %w", err)
 	}
 
-	// Update case status to indicate incoming call without overwriting customer name if CS is caller
 	targetCustomerName := ""
 	targetCustomerPhone := ""
 	existingCase, _ := uc.caseRepo.Get(ctx, sessionID)
@@ -55,7 +59,6 @@ func (uc *VoiceUseCase) InitiateCall(ctx context.Context, sessionID string, call
 
 	_, _ = uc.caseRepo.Upsert(ctx, sessionID, nil, targetCustomerName, targetCustomerPhone, domain.StatusNeedsHumanCS, "", "📞 Đang yêu cầu cuộc gọi thoại...")
 
-	// Broadcast ringing event to callee
 	targetChannel := sessionID
 	if callerType == domain.CallerGuest {
 		targetChannel = "admin_inbox"
@@ -68,27 +71,33 @@ func (uc *VoiceUseCase) InitiateCall(ctx context.Context, sessionID string, call
 		"caller_id":   callerID,
 	}, callerID)
 
+	uc.logger.Info().Int64("call_id", createdCall.ID).Str("session_id", sessionID).
+		Str("caller_type", string(callerType)).Str("caller_id", callerID).
+		Msg("voice call initiated")
+
 	return createdCall, nil
 }
 
 func (uc *VoiceUseCase) EndCall(ctx context.Context, callID int64, sessionID string, durationSeconds int, recordingURL string) error {
-	err := uc.voiceRepo.End(ctx, callID, durationSeconds, recordingURL)
-	if err != nil {
+	if err := uc.voiceRepo.End(ctx, callID, durationSeconds, recordingURL); err != nil {
+		uc.logger.Error().Err(err).Int64("call_id", callID).
+			Msg("failed to end voice call")
 		return err
 	}
 
-	// Update case status & last message when call ends
 	if sessionID != "" {
 		lastMsg := fmt.Sprintf("📞 Cuộc gọi thoại đã kết thúc (%d giây)", durationSeconds)
 		if durationSeconds <= 0 {
 			lastMsg = "📞 Cuộc gọi thoại đã kết thúc"
 		}
+
 		existingCase, _ := uc.caseRepo.Get(ctx, sessionID)
 		if existingCase != nil {
 			status := existingCase.Status
 			if status == domain.StatusNeedsHumanCS {
 				status = domain.StatusHumanCSActive
 			}
+
 			_, _ = uc.caseRepo.Upsert(ctx, sessionID, existingCase.GuestID, existingCase.CustomerName, existingCase.CustomerPhone, status, existingCase.AssignedCS, lastMsg)
 		}
 	}
@@ -107,23 +116,48 @@ func (uc *VoiceUseCase) EndCall(ctx context.Context, callID int64, sessionID str
 		"session_id": sessionID,
 	}, "system")
 
+	uc.logger.Info().Int64("call_id", callID).Str("session_id", sessionID).
+		Int("duration_seconds", durationSeconds).
+		Msg("voice call ended")
+
 	return nil
 }
 
 func (uc *VoiceUseCase) GetCallsBySession(ctx context.Context, sessionID string) ([]*domain.VoiceCall, error) {
-	return uc.voiceRepo.GetBySession(ctx, sessionID)
+	calls, err := uc.voiceRepo.GetBySession(ctx, sessionID)
+	if err != nil {
+		uc.logger.Error().Err(err).Str("session_id", sessionID).
+			Msg("failed to fetch voice calls")
+		return nil, err
+	}
+	return calls, nil
 }
 
 func (uc *VoiceUseCase) ListAllCalls(ctx context.Context) ([]*domain.VoiceCall, error) {
-	return uc.voiceRepo.ListAll(ctx)
+	calls, err := uc.voiceRepo.ListAll(ctx)
+	if err != nil {
+		uc.logger.Error().Err(err).Msg("failed to list voice calls")
+		return nil, err
+	}
+	return calls, nil
 }
 
 func (uc *VoiceUseCase) SetTranscript(ctx context.Context, id int64, transcript string) error {
-	return uc.voiceRepo.SetTranscript(ctx, id, transcript)
+	if err := uc.voiceRepo.SetTranscript(ctx, id, transcript); err != nil {
+		uc.logger.Error().Err(err).Int64("call_id", id).
+			Msg("failed to set transcript")
+		return err
+	}
+	return nil
 }
 
 func (uc *VoiceUseCase) DeleteCall(ctx context.Context, id int64) error {
-	return uc.voiceRepo.Delete(ctx, id)
+	if err := uc.voiceRepo.Delete(ctx, id); err != nil {
+		uc.logger.Error().Err(err).Int64("call_id", id).
+			Msg("failed to delete voice call")
+		return err
+	}
+	return nil
 }
 
 // ============================================================
@@ -133,17 +167,24 @@ func (uc *VoiceUseCase) DeleteCall(ctx context.Context, id int64) error {
 type AnalyticsUseCase struct {
 	analyticsRepo domain.AnalyticsRepository
 	settingRepo   domain.SettingRepository
+	logger        zerolog.Logger
 }
 
 func NewAnalyticsUseCase(analyticsRepo domain.AnalyticsRepository, settingRepo domain.SettingRepository) *AnalyticsUseCase {
 	return &AnalyticsUseCase{
 		analyticsRepo: analyticsRepo,
 		settingRepo:   settingRepo,
+		logger:        zerolog.New(nil).With().Timestamp().Str("usecase", "analytics").Logger(),
 	}
 }
 
 func (uc *AnalyticsUseCase) GetDashboardStats(ctx context.Context) (*domain.AnalyticsStats, error) {
-	return uc.analyticsRepo.GetStats(ctx)
+	stats, err := uc.analyticsRepo.GetStats(ctx)
+	if err != nil {
+		uc.logger.Error().Err(err).Msg("failed to fetch dashboard stats")
+		return nil, err
+	}
+	return stats, nil
 }
 
 func (uc *AnalyticsUseCase) GetSystemConfig(ctx context.Context, defaultPrompt, defaultModel string, defaultTemp float64) (prompt, model string, temp float64, err error) {
@@ -168,5 +209,6 @@ func (uc *AnalyticsUseCase) SaveSystemConfig(ctx context.Context, prompt, model 
 	_ = uc.settingRepo.Set(ctx, "system_prompt", prompt)
 	_ = uc.settingRepo.Set(ctx, "llm_model", model)
 	_ = uc.settingRepo.Set(ctx, "temperature", fmt.Sprintf("%.1f", temp))
+
 	return nil
 }

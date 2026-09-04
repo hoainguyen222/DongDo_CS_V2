@@ -3,41 +3,47 @@ package worker
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"os"
 	"time"
 
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/delivery/ws"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
 	infraRedis "github.com/hoainguyen222/DongDo_CS_V2/internal/infra/redis"
+	"github.com/rs/zerolog"
 )
 
 type WSWorker struct {
 	eventBus *infraRedis.EventBusService
 	hub      *ws.Hub
 	consumer string
+	logger   zerolog.Logger
 }
 
 func NewWSWorker(eventBus *infraRedis.EventBusService, hub *ws.Hub, consumerName string) *WSWorker {
+	logger := zerolog.New(os.Stderr).With().Timestamp().Logger()
+	logger = logger.With().Str("component", "ws_worker").Str("consumer", consumerName).Logger()
+
 	return &WSWorker{
 		eventBus: eventBus,
 		hub:      hub,
 		consumer: consumerName,
+		logger:   logger,
 	}
 }
 
 // Start runs the worker loop consuming from stream:ws with consumer group ws_group.
 func (w *WSWorker) Start(ctx context.Context) {
-	log.Println("🚀 Started WS Worker...")
+	w.logger.Info().Msg("WS Worker started")
+	defer w.logger.Info().Msg("WS Worker stopped")
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("🛑 WS Worker stopped")
 			return
 		default:
-			// Read with 2-second block timeout
 			messages, err := w.eventBus.ReadStreamGroup(ctx, infraRedis.StreamWS, infraRedis.GroupWS, w.consumer, 10, 2*time.Second)
 			if err != nil {
+				w.logger.Error().Err(err).Msg("Error reading from WS stream")
 				time.Sleep(500 * time.Millisecond)
 				continue
 			}
@@ -59,11 +65,11 @@ func (w *WSWorker) Start(ctx context.Context) {
 					Timestamp: time.Now(),
 				}
 
-				// Broadcast to session or admin inbox
 				w.hub.BroadcastToSession(sessionID, event)
 
-				// XACK after successful dispatch
-				_ = w.eventBus.AckMessage(ctx, infraRedis.StreamWS, infraRedis.GroupWS, xmsg.ID)
+				if err := w.eventBus.AckMessage(ctx, infraRedis.StreamWS, infraRedis.GroupWS, xmsg.ID); err != nil {
+					w.logger.Error().Err(err).Msg("Failed to acknowledge WS message")
+				}
 			}
 		}
 	}

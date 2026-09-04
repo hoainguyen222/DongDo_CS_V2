@@ -3,11 +3,12 @@ package qdrant
 import (
 	"context"
 	"fmt"
-	"log"
+	"os"
 
 	"github.com/google/uuid"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
 	qdrantPb "github.com/qdrant/go-client/qdrant"
+	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -18,12 +19,18 @@ type Client struct {
 	conn       *grpc.ClientConn
 	points     qdrantPb.PointsClient
 	collection qdrantPb.CollectionsClient
+	logger     zerolog.Logger
 }
 
 func NewClient(ctx context.Context, host string, port int, vectorSize uint64) (*Client, error) {
+	logger := zerolog.New(os.Stderr).With().Timestamp().Logger()
+	logger = logger.With().Str("component", "qdrant_client").Logger()
+
 	addr := fmt.Sprintf("%s:%d", host, port)
+
 	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
+		logger.Error().Err(err).Msg("Failed to connect to Qdrant")
 		return nil, fmt.Errorf("failed to connect to Qdrant at %s: %w", addr, err)
 	}
 
@@ -31,13 +38,13 @@ func NewClient(ctx context.Context, host string, port int, vectorSize uint64) (*
 		conn:       conn,
 		points:     qdrantPb.NewPointsClient(conn),
 		collection: qdrantPb.NewCollectionsClient(conn),
+		logger:     logger,
 	}
 
-	// Ensure collection exists
 	if err := c.ensureCollection(ctx, vectorSize); err != nil {
-		log.Printf("⚠️ Qdrant collection check warning: %v", err)
+		logger.Warn().Err(err).Msg("Qdrant collection check/creation warning")
 	} else {
-		log.Printf("✅ Connected to Qdrant at %s (Collection: %s)", addr, CollectionName)
+		logger.Info().Str("address", addr).Str("collection", CollectionName).Msg("Connected to Qdrant")
 	}
 
 	return c, nil
@@ -45,7 +52,12 @@ func NewClient(ctx context.Context, host string, port int, vectorSize uint64) (*
 
 func (c *Client) Close() error {
 	if c.conn != nil {
-		return c.conn.Close()
+		err := c.conn.Close()
+		if err != nil {
+			c.logger.Error().Err(err).Msg("Error closing Qdrant connection")
+			return err
+		}
+		c.logger.Info().Msg("Qdrant connection closed")
 	}
 	return nil
 }
@@ -62,7 +74,6 @@ func (c *Client) ensureCollection(ctx context.Context, vectorSize uint64) error 
 		return nil // Collection already exists
 	}
 
-	// Create collection
 	_, err = c.collection.Create(ctx, &qdrantPb.CreateCollection{
 		CollectionName: CollectionName,
 		VectorsConfig: &qdrantPb.VectorsConfig{
@@ -75,10 +86,12 @@ func (c *Client) ensureCollection(ctx context.Context, vectorSize uint64) error 
 		},
 	})
 	if err != nil {
+		c.logger.Error().Err(err).Msg("Failed to create Qdrant collection")
 		return fmt.Errorf("failed to create Qdrant collection %s: %w", CollectionName, err)
 	}
 
-	log.Printf("📦 Created Qdrant collection: %s (size: %d, distance: Cosine)", CollectionName, vectorSize)
+	c.logger.Info().Str("collection", CollectionName).Msg("Qdrant collection created")
+
 	return nil
 }
 
@@ -100,6 +113,7 @@ func (c *Client) Search(ctx context.Context, queryVector []float32, limit int, s
 		ScoreThreshold: &scoreThreshold,
 	})
 	if err != nil {
+		c.logger.Error().Err(err).Msg("Qdrant search failed")
 		return nil, fmt.Errorf("qdrant search failed: %w", err)
 	}
 
@@ -145,6 +159,7 @@ func (c *Client) Search(ctx context.Context, queryVector []float32, limit int, s
 // Upsert adds or updates points in Qdrant.
 func (c *Client) Upsert(ctx context.Context, docs []*domain.KnowledgeDocument, vectors [][]float32) error {
 	if len(docs) != len(vectors) {
+		c.logger.Error().Msg("Length mismatch in Upsert")
 		return fmt.Errorf("length mismatch: %d docs vs %d vectors", len(docs), len(vectors))
 	}
 
@@ -184,12 +199,17 @@ func (c *Client) Upsert(ctx context.Context, docs []*domain.KnowledgeDocument, v
 		CollectionName: CollectionName,
 		Points:         points,
 	})
-	return err
+	if err != nil {
+		c.logger.Error().Err(err).Msg("Qdrant upsert failed")
+		return err
+	}
+
+	return nil
 }
 
 // DeleteBySource deletes points matching a source filter.
 func (c *Client) DeleteBySource(ctx context.Context, source string) (int, error) {
-	res, err := c.points.Delete(ctx, &qdrantPb.DeletePoints{
+	_, err := c.points.Delete(ctx, &qdrantPb.DeletePoints{
 		CollectionName: CollectionName,
 		Points: &qdrantPb.PointsSelector{
 			PointsSelectorOneOf: &qdrantPb.PointsSelector_Filter{
@@ -213,9 +233,10 @@ func (c *Client) DeleteBySource(ctx context.Context, source string) (int, error)
 		},
 	})
 	if err != nil {
+		c.logger.Error().Err(err).Str("source", source).Msg("Qdrant delete by source failed")
 		return 0, err
 	}
-	_ = res
+
 	return 1, nil
 }
 
@@ -225,7 +246,9 @@ func (c *Client) Count(ctx context.Context) (int64, error) {
 		CollectionName: CollectionName,
 	})
 	if err != nil {
+		c.logger.Error().Err(err).Msg("Qdrant count failed")
 		return 0, err
 	}
+
 	return int64(res.Result.Count), nil
 }

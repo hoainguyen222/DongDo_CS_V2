@@ -10,7 +10,55 @@ import (
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/delivery/ws"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/usecase"
+	"github.com/rs/zerolog"
 )
+
+// RequestLogMiddleware logs all incoming HTTP requests with timing information
+func RequestLogMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Process request
+		c.Next()
+
+		// Skip noisy successful requests
+		if c.Writer.Status() < 400 {
+			return
+		}
+
+		var userID string
+		if user, exists := c.Get("user"); exists {
+			if u, ok := user.(*domain.SessionUser); ok {
+				userID = u.Username
+			}
+		}
+
+		Logger.Warn().
+			Str("method", c.Request.Method).
+			Str("path", c.Request.URL.Path).
+			Int("status", c.Writer.Status()).
+			Str("user_id", userID).
+			Msg("HTTP request failed")
+	}
+}
+
+// RecoveryLogMiddleware recovers from panics and logs them
+func RecoveryLogMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		defer func() {
+			if err := recover(); err != nil {
+				Logger.Error().
+					Str("method", c.Request.Method).
+					Str("path", c.Request.URL.Path).
+					Interface("panic", err).
+					Msg("Panic recovered in HTTP handler")
+
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+					"error": "Internal server error",
+				})
+			}
+		}()
+		c.Next()
+	}
+}
 
 // SetupRouter initializes Gin engine with middlewares and routes.
 func SetupRouter(
@@ -25,7 +73,14 @@ func SetupRouter(
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 
-	r.Use(gin.Recovery())
+	// Initialize zerolog if not already done
+	if Logger.GetLevel() == zerolog.NoLevel {
+		InitLogger("info")
+	}
+
+	// Apply logging and recovery middlewares
+	r.Use(RecoveryLogMiddleware())
+	r.Use(RequestLogMiddleware())
 	r.Use(gin.Logger())
 	r.Use(CORSMiddleware())
 
@@ -60,6 +115,7 @@ func SetupRouter(
 		filePath := filepath.Join(recordingsDir, filename)
 
 		if _, err := os.Stat(filePath); os.IsNotExist(err) {
+			Logger.Warn().Str("filename", filename).Msg("Recording file not found")
 			c.JSON(http.StatusNotFound, gin.H{"error": "File ghi âm không tồn tại"})
 			return
 		}
@@ -181,12 +237,19 @@ func AuthMiddleware(authUC *usecase.AuthUseCase) gin.HandlerFunc {
 		}
 
 		if token == "" {
+			Logger.Warn().
+				Str("path", c.Request.URL.Path).
+				Msg("Auth failed: no token")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"detail": "Vui lòng đăng nhập để sử dụng tính năng này."})
 			return
 		}
 
 		user, err := authUC.VerifyToken(c.Request.Context(), token)
 		if err != nil || user == nil {
+			Logger.Warn().
+				Str("path", c.Request.URL.Path).
+				Err(err).
+				Msg("Auth failed: invalid token")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"detail": "Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại."})
 			return
 		}

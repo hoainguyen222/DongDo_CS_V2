@@ -10,6 +10,7 @@ import (
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
 	authdb "github.com/hoainguyen222/DongDo_CS_V2/internal/repository/sqlcdb/auth"
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog"
 )
 
 // ============================================================
@@ -18,12 +19,16 @@ import (
 
 // SessionRepo persists auth sessions via sqlc-generated auth queries.
 type SessionRepo struct {
-	db *DB
+	db     *DB
+	logger zerolog.Logger
 }
 
 // NewSessionRepo constructs a SessionRepo using the shared DB handle.
 func NewSessionRepo(db *DB) *SessionRepo {
-	return &SessionRepo{db: db}
+	return &SessionRepo{
+		db:     db,
+		logger: logger.With().Str("repo", "session").Logger(),
+	}
 }
 
 // Create persists a new session and returns the materialized row.
@@ -34,8 +39,10 @@ func (r *SessionRepo) Create(ctx context.Context, token, username string, expire
 		ExpiresAt: expiresAt,
 	})
 	if err != nil {
+		r.logger.Error().Err(err).Str("username", username).Msg("CreateSession failed")
 		return nil, err
 	}
+
 	return &domain.Session{
 		ID:        s.ID,
 		Token:     s.Token,
@@ -55,8 +62,10 @@ func (r *SessionRepo) Verify(ctx context.Context, token string) (*domain.Session
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
+		r.logger.Error().Err(err).Msg("VerifySession failed")
 		return nil, err
 	}
+
 	return &domain.SessionUser{
 		Username: row.Username,
 		FullName: row.FullName,
@@ -67,15 +76,35 @@ func (r *SessionRepo) Verify(ctx context.Context, token string) (*domain.Session
 
 // Delete removes a single session by token.
 func (r *SessionRepo) Delete(ctx context.Context, token string) error {
-	return r.db.Auth.DeleteSession(ctx, token)
+	if err := r.db.Auth.DeleteSession(ctx, token); err != nil {
+		r.logger.Error().Err(err).Msg("DeleteSession failed")
+		return err
+	}
+	return nil
 }
 
 // DeleteExpired removes all sessions whose expires_at is in the past.
 func (r *SessionRepo) DeleteExpired(ctx context.Context) error {
-	return r.db.Auth.DeleteExpiredSessions(ctx)
+	if err := r.db.Auth.DeleteExpiredSessions(ctx); err != nil {
+		r.logger.Error().Err(err).Msg("DeleteExpiredSessions failed")
+		return err
+	}
+	return nil
 }
 
 // DeleteByUsername removes every session belonging to a username.
 func (r *SessionRepo) DeleteByUsername(ctx context.Context, username string) error {
-	return r.db.Auth.DeleteUserSessions(ctx, username)
+	if err := r.db.Auth.DeleteUserSessions(ctx, username); err != nil {
+		r.logger.Error().Err(err).Str("username", username).Msg("DeleteUserSessions failed")
+		return err
+	}
+	return nil
+}
+
+// min returns the minimum of two integers.
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

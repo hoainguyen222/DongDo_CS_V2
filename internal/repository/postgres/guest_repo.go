@@ -9,6 +9,7 @@ import (
 	chatdb "github.com/hoainguyen222/DongDo_CS_V2/internal/repository/sqlcdb/chat"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/rs/zerolog"
 )
 
 // ============================================================
@@ -17,12 +18,16 @@ import (
 
 // GuestRepo persists guest (pre-chat) records via sqlc-generated chat queries.
 type GuestRepo struct {
-	db *DB
+	db     *DB
+	logger zerolog.Logger
 }
 
 // NewGuestRepo constructs a GuestRepo using the shared DB handle.
 func NewGuestRepo(db *DB) *GuestRepo {
-	return &GuestRepo{db: db}
+	return &GuestRepo{
+		db:     db,
+		logger: logger.With().Str("repo", "guest").Logger(),
+	}
 }
 
 // Create inserts a new guest record and returns the materialized row.
@@ -33,8 +38,10 @@ func (r *GuestRepo) Create(ctx context.Context, guestID uuid.UUID, displayName, 
 		Phone:       textFromString(phone),
 	})
 	if err != nil {
+		r.logger.Error().Err(err).Str("guest_id", guestID.String()).Msg("CreateGuest failed")
 		return nil, err
 	}
+
 	return &domain.Guest{
 		ID:          g.ID,
 		GuestID:     g.GuestID,
@@ -51,8 +58,10 @@ func (r *GuestRepo) GetByID(ctx context.Context, guestID uuid.UUID) (*domain.Gue
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
+		r.logger.Error().Err(err).Str("guest_id", guestID.String()).Msg("GetGuestByID failed")
 		return nil, err
 	}
+
 	return &domain.Guest{
 		ID:          g.ID,
 		GuestID:     g.GuestID,
@@ -66,8 +75,10 @@ func (r *GuestRepo) GetByID(ctx context.Context, guestID uuid.UUID) (*domain.Gue
 func (r *GuestRepo) List(ctx context.Context) ([]*domain.CustomerProfile, error) {
 	rows, err := r.db.Chat.ListGuestsWithLastCase(ctx)
 	if err != nil {
+		r.logger.Error().Err(err).Msg("ListGuestsWithLastCase failed")
 		return nil, err
 	}
+
 	profiles := make([]*domain.CustomerProfile, 0, len(rows))
 	for _, row := range rows {
 		profiles = append(profiles, &domain.CustomerProfile{
@@ -82,6 +93,7 @@ func (r *GuestRepo) List(ctx context.Context) ([]*domain.CustomerProfile, error)
 			UpdatedAt:     row.UpdatedAt,
 		})
 	}
+
 	return profiles, nil
 }
 
@@ -93,22 +105,30 @@ func (r *GuestRepo) Update(ctx context.Context, guestID uuid.UUID, displayName, 
 		DisplayName: displayName,
 		Phone:       textFromString(phone),
 	}); err != nil {
+		r.logger.Error().Err(err).Str("guest_id", guestID.String()).Msg("UpdateGuest failed")
 		return err
 	}
 
 	// Best-effort sync of active chat cases; ignore failures to preserve
 	// original behavior where the chat_cases update was non-fatal.
-	_ = r.db.Chat.SyncActiveCasesForGuest(ctx, chatdb.SyncActiveCasesForGuestParams{
+	if err := r.db.Chat.SyncActiveCasesForGuest(ctx, chatdb.SyncActiveCasesForGuestParams{
 		GuestID:       pgtype.UUID{Bytes: guestID, Valid: true},
 		CustomerName:  displayName,
 		CustomerPhone: phone,
-	})
+	}); err != nil {
+		r.logger.Warn().Err(err).Str("guest_id", guestID.String()).Msg("sync active cases failed (non-fatal)")
+	}
+
 	return nil
 }
 
 // Delete removes a guest by guest_id.
 func (r *GuestRepo) Delete(ctx context.Context, guestID uuid.UUID) error {
-	return r.db.Chat.DeleteGuest(ctx, guestID)
+	if err := r.db.Chat.DeleteGuest(ctx, guestID); err != nil {
+		r.logger.Error().Err(err).Str("guest_id", guestID.String()).Msg("DeleteGuest failed")
+		return err
+	}
+	return nil
 }
 
 // stringFromInterface converts an interface{} (typically a string from a

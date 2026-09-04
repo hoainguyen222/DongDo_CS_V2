@@ -1,39 +1,47 @@
 package ws
 
 import (
-	"log"
+	"os"
 	"sync"
 
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
+	"github.com/rs/zerolog"
 )
 
 // Hub maintains the set of active WebSocket clients and broadcasts messages to sessions.
 type Hub struct {
-	// Registered clients mapped by sessionID -> set of clients
 	sessions map[string]map[*Client]bool
 
-	// Inbound messages from clients
 	broadcast chan *domain.WSEvent
 
-	// Register requests from clients
 	register chan *Client
 
-	// Unregister requests from clients
 	unregister chan *Client
 
 	mu sync.RWMutex
+
+	logger zerolog.Logger
 }
 
 func NewHub() *Hub {
+	logger := zerolog.New(os.Stderr).With().Timestamp().Logger()
+	logger = logger.With().Str("component", "ws_hub").Logger()
+
+	logger.Info().Msg("WebSocket Hub initialized")
+
 	return &Hub{
 		sessions:   make(map[string]map[*Client]bool),
 		broadcast:  make(chan *domain.WSEvent, 256),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
+		logger:     logger,
 	}
 }
 
 func (h *Hub) Run() {
+	h.logger.Info().Msg("WebSocket Hub started")
+	defer h.logger.Info().Msg("WebSocket Hub stopped")
+
 	for {
 		select {
 		case client := <-h.register:
@@ -43,31 +51,28 @@ func (h *Hub) Run() {
 			}
 			h.sessions[client.sessionID][client] = true
 			h.mu.Unlock()
-			log.Printf("🔌 WS Client connected: %s (session: %s)", client.userID, client.sessionID)
 
 		case client := <-h.unregister:
 			h.mu.Lock()
 			if clients, ok := h.sessions[client.sessionID]; ok {
 				if _, ok := clients[client]; ok {
 					delete(clients, client)
-					// Đóng channel an toàn — dùng recover để chống "close of closed channel"
-					// trong trường hợp hub đã close ở drop path trước đó (defensive).
+
 					func() {
 						defer func() {
 							if r := recover(); r != nil {
-								log.Printf("⚠️ WS hub: recover on close client.send for session=%s user=%s",
-									client.sessionID, client.userID)
+								h.logger.Warn().Interface("recover", r).Msg("Recovered from close of closed client channel")
 							}
 						}()
 						close(client.send)
 					}()
+
 					if len(clients) == 0 {
 						delete(h.sessions, client.sessionID)
 					}
 				}
 			}
 			h.mu.Unlock()
-			log.Printf("🔌 WS Client disconnected: %s (session: %s)", client.userID, client.sessionID)
 
 		case event := <-h.broadcast:
 			h.BroadcastToSession(event.SessionID, event)
@@ -89,7 +94,6 @@ func (h *Hub) BroadcastToSessionExcept(sessionID string, event *domain.WSEvent, 
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	// 1. Direct session clients
 	if clients, ok := h.sessions[sessionID]; ok {
 		for client := range clients {
 			if excludeUserID != "" && client.userID == excludeUserID {
@@ -98,13 +102,14 @@ func (h *Hub) BroadcastToSessionExcept(sessionID string, event *domain.WSEvent, 
 			select {
 			case client.send <- event:
 			default:
-				log.Printf("⚠️ WS hub: client.send buffer full, dropping event type=%s for session=%s user=%s",
-					event.Type, sessionID, client.userID)
+				h.logger.Warn().
+					Str("event_type", string(event.Type)).
+					Str("session_id", sessionID).
+					Msg("WS hub: client buffer full, dropping event")
 			}
 		}
 	}
 
-	// 2. Broadcast to admin_inbox cho message/case_update/typing/call events
 	if sessionID != "admin_inbox" {
 		isBroadcastToAdmin := event.Type == domain.WSEventMessage ||
 			event.Type == domain.WSEventCaseUpdate ||
@@ -116,15 +121,17 @@ func (h *Hub) BroadcastToSessionExcept(sessionID string, event *domain.WSEvent, 
 
 		if isBroadcastToAdmin {
 			if adminClients, ok := h.sessions["admin_inbox"]; ok {
-				for client := range adminClients {
-					if excludeUserID != "" && client.userID == excludeUserID {
+				for adminClient := range adminClients {
+					if excludeUserID != "" && adminClient.userID == excludeUserID {
 						continue
 					}
 					select {
-					case client.send <- event:
+					case adminClient.send <- event:
 					default:
-						log.Printf("⚠️ WS hub: admin_inbox buffer full, dropping event type=%s for user=%s",
-							event.Type, client.userID)
+						h.logger.Warn().
+							Str("event_type", string(event.Type)).
+							Str("target", "admin_inbox").
+							Msg("WS hub: admin_inbox buffer full, dropping event")
 					}
 				}
 			}

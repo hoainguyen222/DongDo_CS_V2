@@ -6,7 +6,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
-	"log"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -16,22 +16,66 @@ import (
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
 	infraEmbedding "github.com/hoainguyen222/DongDo_CS_V2/internal/infra/embedding"
 	infraQdrant "github.com/hoainguyen222/DongDo_CS_V2/internal/infra/qdrant"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
+const (
+	serviceName    = "dongdo-cs-ingest"
+	serviceVersion = "2.0.0"
+)
+
+func init() {
+	// Configure zerolog for production
+	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+}
+
 func main() {
-	log.Println("============================================================")
-	log.Println("🚀 ĐÔNG ĐÔ CS V2 - Document Ingestion Pipeline (Qdrant)")
-	log.Println("============================================================")
+	// Initialize logger with structured fields
+	logger := log.Output(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}).
+		With().
+		Timestamp().
+		Str("service", serviceName).
+		Str("version", serviceVersion).
+		Logger()
+
+	ctx := context.Background()
 
 	cfg := config.Load()
-	ctx := context.Background()
+
+	logger.Info().
+		Str("service", serviceName).
+		Str("version", serviceVersion).
+		Str("qdrant_host", cfg.QdrantHost).
+		Str("documents_dir", cfg.DocumentsDir).
+		Msg("Document ingestion pipeline starting")
+
+	startTime := time.Now()
 
 	// 1. Connect to Qdrant
 	qdrantClient, err := infraQdrant.NewClient(ctx, cfg.QdrantHost, cfg.QdrantPort, 384)
 	if err != nil {
-		log.Fatalf("❌ Failed to connect to Qdrant: %v", err)
+		logger.Fatal().
+			Err(err).
+			Msg("Failed to connect to Qdrant")
 	}
-	defer qdrantClient.Close()
+
+	logger.Info().
+		Str("host", cfg.QdrantHost).
+		Int("port", cfg.QdrantPort).
+		Msg("Connected to Qdrant")
+
+	// Register cleanup
+	go func() {
+		<-ctx.Done()
+		if err := qdrantClient.Close(); err != nil {
+			logger.Error().
+				Err(err).
+				Msg("Error closing Qdrant connection")
+		}
+	}()
 
 	// 2. Initialize Embedder
 	embedder := infraEmbedding.NewEmbedder(cfg.EmbeddingModel)
@@ -39,31 +83,61 @@ func main() {
 	// 3. Find .docx files
 	docsDir := cfg.DocumentsDir
 	files, err := filepath.Glob(filepath.Join(docsDir, "*.docx"))
-	if err != nil || len(files) == 0 {
-		log.Printf("⚠️ No .docx files found in directory: %s", docsDir)
+	if err != nil {
+		logger.Error().
+			Str("directory", docsDir).
+			Err(err).
+			Msg("Error scanning directory")
 		return
 	}
 
-	log.Printf("📂 Found %d document(s) in %s\n", len(files), docsDir)
+	if len(files) == 0 {
+		logger.Warn().
+			Str("directory", docsDir).
+			Msg("No .docx files found in directory")
+		return
+	}
+
+	logger.Info().
+		Str("directory", docsDir).
+		Int("file_count", len(files)).
+		Msg("Found documents to ingest")
 
 	totalChunks := 0
+	totalChars := 0
+	totalErrors := 0
+	processedFiles := 0
 
 	for _, fpath := range files {
 		fname := filepath.Base(fpath)
-		log.Printf("📄 Reading: %s", fname)
 
 		text, err := extractTextFromDocx(fpath)
-		if err != nil || strings.TrimSpace(text) == "" {
-			log.Printf("   ⚠️ Failed to read or empty: %v", err)
+		if err != nil {
+			logger.Error().
+				Str("file", fname).
+				Err(err).
+				Msg("Failed to read document")
+			totalErrors++
 			continue
 		}
 
-		log.Printf("   ✅ Extracted %d characters", len(text))
+		text = strings.TrimSpace(text)
+		if text == "" {
+			logger.Warn().
+				Str("file", fname).
+				Msg("Document is empty")
+			totalErrors++
+			continue
+		}
 
+		charCount := len(text)
+		totalChars += charCount
+
+		// Split text into chunks
 		chunks := splitText(text, cfg.ChunkSize, cfg.ChunkOverlap)
-		log.Printf("   ✂️ Created %d chunks", len(chunks))
+		chunkCount := len(chunks)
 
-		// Embed and Upsert
+		// Create knowledge documents with metadata
 		docs := make([]*domain.KnowledgeDocument, len(chunks))
 		for i, chunk := range chunks {
 			docs[i] = &domain.KnowledgeDocument{
@@ -71,40 +145,57 @@ func main() {
 				Content: chunk,
 				Source:  fname,
 				Metadata: map[string]interface{}{
-					"source":      fname,
-					"chunk_id":    fmt.Sprintf("%d", i),
-					"ingested_at": time.Now().Format(time.RFC3339),
-					"type":        "knowledge_base",
+					"source":       fname,
+					"chunk_id":     fmt.Sprintf("%d", i),
+					"total_chunks": fmt.Sprintf("%d", chunkCount),
+					"ingested_at":  time.Now().Format(time.RFC3339),
+					"type":         "knowledge_base",
 				},
 			}
 		}
 
+		// Generate embeddings
 		vectors, err := embedder.EmbedBatch(ctx, chunks)
 		if err != nil {
-			log.Printf("   ❌ Embedding failed: %v", err)
+			logger.Error().
+				Str("file", fname).
+				Err(err).
+				Msg("Embedding failed")
+			totalErrors++
 			continue
 		}
 
+		// Upsert to Qdrant
 		err = qdrantClient.Upsert(ctx, docs, vectors)
 		if err != nil {
-			log.Printf("   ❌ Qdrant upsert failed: %v", err)
+			logger.Error().
+				Str("file", fname).
+				Err(err).
+				Msg("Qdrant upsert failed")
+			totalErrors++
 			continue
 		}
 
-		log.Printf("   📦 Ingested %d chunks into Qdrant", len(chunks))
-		totalChunks += len(chunks)
+		totalChunks += chunkCount
+		processedFiles++
 	}
 
-	log.Println("============================================================")
-	log.Printf("✅ INGEST COMPLETE! Total %d chunks stored in Qdrant.", totalChunks)
-	log.Println("============================================================")
+	// Summary
+	logger.Info().
+		Int("files_processed", processedFiles).
+		Int("total_files", len(files)).
+		Int("total_chunks", totalChunks).
+		Int("total_characters", totalChars).
+		Int("error_count", totalErrors).
+		Dur("total_duration_ms", time.Since(startTime)).
+		Msg("Ingest complete")
 }
 
 // extractTextFromDocx extracts all paragraphs from a .docx file (word/document.xml in zip).
 func extractTextFromDocx(filepath string) (string, error) {
 	r, err := zip.OpenReader(filepath)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to open docx file: %w", err)
 	}
 	defer r.Close()
 
@@ -113,7 +204,7 @@ func extractTextFromDocx(filepath string) (string, error) {
 		if f.Name == "word/document.xml" {
 			docXML, err = f.Open()
 			if err != nil {
-				return "", err
+				return "", fmt.Errorf("failed to open document.xml: %w", err)
 			}
 			break
 		}

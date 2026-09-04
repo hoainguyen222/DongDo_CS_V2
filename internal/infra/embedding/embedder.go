@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/rs/zerolog"
 )
 
 type EmbedderService struct {
@@ -18,18 +20,33 @@ type EmbedderService struct {
 	model      string
 	vectorSize int
 	httpClient *http.Client
+	logger     zerolog.Logger
 }
 
 func NewEmbedder(model string) *EmbedderService {
+	logger := zerolog.New(os.Stderr).With().Timestamp().Logger()
+	logger = logger.With().Str("component", "embedder").Logger()
+
 	if model == "" {
 		model = "sentence-transformers/all-MiniLM-L6-v2"
 	}
+
+	apiURL := os.Getenv("EMBEDDING_API_URL")
+	apiKey := os.Getenv("OPENAI_API_KEY")
+
+	logger.Info().
+		Str("model", model).
+		Bool("has_custom_api", apiURL != "").
+		Bool("has_openai_key", apiKey != "").
+		Msg("Embedder service initialized")
+
 	return &EmbedderService{
-		apiURL:     os.Getenv("EMBEDDING_API_URL"), // Optional custom embedding service
-		apiKey:     os.Getenv("OPENAI_API_KEY"),
+		apiURL:     apiURL,
+		apiKey:     apiKey,
 		model:      model,
 		vectorSize: 384,
 		httpClient: &http.Client{Timeout: 10 * time.Second},
+		logger:     logger,
 	}
 }
 
@@ -39,23 +56,22 @@ func (e *EmbedderService) EmbedText(ctx context.Context, text string) ([]float32
 		return make([]float32, e.vectorSize), nil
 	}
 
-	// 1. If custom embedding API is configured (e.g. TEI / FastEmbed / Infinity container)
 	if e.apiURL != "" {
 		vec, err := e.callCustomAPI(ctx, text)
 		if err == nil {
 			return vec, nil
 		}
+		e.logger.Warn().Err(err).Msg("Custom embedding API failed")
 	}
 
-	// 2. If OpenAI API key is configured
 	if e.apiKey != "" {
 		vec, err := e.callOpenAI(ctx, text)
 		if err == nil {
 			return vec, nil
 		}
+		e.logger.Warn().Err(err).Msg("OpenAI embedding API failed")
 	}
 
-	// 3. Built-in hash-based semantic feature vector (deterministic offline fallback)
 	return e.generateDeterministicVector(text), nil
 }
 
@@ -65,18 +81,23 @@ func (e *EmbedderService) EmbedBatch(ctx context.Context, texts []string) ([][]f
 	for i, t := range texts {
 		vec, err := e.EmbedText(ctx, t)
 		if err != nil {
+			e.logger.Error().Err(err).Msg("Batch embedding error")
 			return nil, err
 		}
 		results[i] = vec
 	}
+
 	return results, nil
 }
 
 func (e *EmbedderService) callCustomAPI(ctx context.Context, text string) ([]float32, error) {
-	reqBody, _ := json.Marshal(map[string]interface{}{
+	reqBody, err := json.Marshal(map[string]interface{}{
 		"inputs": text,
 		"model":  e.model,
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", e.apiURL, bytes.NewReader(reqBody))
 	if err != nil {
@@ -92,16 +113,18 @@ func (e *EmbedderService) callCustomAPI(ctx context.Context, text string) ([]flo
 
 	var vector []float32
 	if err := json.NewDecoder(resp.Body).Decode(&vector); err != nil {
+		e.logger.Error().Err(err).Msg("Failed to decode custom API response")
 		return nil, err
 	}
+
 	return vector, nil
 }
 
 func (e *EmbedderService) callOpenAI(ctx context.Context, text string) ([]float32, error) {
 	reqBody, _ := json.Marshal(map[string]interface{}{
-		"input":          text,
-		"model":          "text-embedding-3-small",
-		"dimensions":     e.vectorSize,
+		"input":      text,
+		"model":      "text-embedding-3-small",
+		"dimensions": e.vectorSize,
 	})
 
 	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.openai.com/v1/embeddings", bytes.NewReader(reqBody))
@@ -124,6 +147,7 @@ func (e *EmbedderService) callOpenAI(ctx context.Context, text string) ([]float3
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil || len(result.Data) == 0 {
+		e.logger.Error().Err(err).Msg("Failed to decode OpenAI embedding response")
 		return nil, fmt.Errorf("invalid openai response")
 	}
 
@@ -144,7 +168,6 @@ func (e *EmbedderService) generateDeterministicVector(text string) []float32 {
 		}
 	}
 
-	// L2 normalization
 	var norm float64
 	for _, v := range vec {
 		norm += float64(v * v)
@@ -174,4 +197,12 @@ func splitWords(s string) []string {
 		words = append(words, string(cur))
 	}
 	return words
+}
+
+// truncateString truncates a string to the specified length
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }

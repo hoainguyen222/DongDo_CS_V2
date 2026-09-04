@@ -4,16 +4,21 @@ import (
 	"context"
 
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
+	"github.com/rs/zerolog"
 )
 
 // AnalyticsRepo implements domain.AnalyticsRepository using sqlc-generated analytics queries.
 type AnalyticsRepo struct {
-	db *DB
+	db     *DB
+	logger zerolog.Logger
 }
 
 // NewAnalyticsRepo constructs an AnalyticsRepo using the shared DB handle.
 func NewAnalyticsRepo(db *DB) *AnalyticsRepo {
-	return &AnalyticsRepo{db: db}
+	return &AnalyticsRepo{
+		db:     db,
+		logger: logger.With().Str("repo", "analytics").Logger(),
+	}
 }
 
 // GetStats returns aggregate analytics statistics. The AIServiceRate is computed
@@ -21,6 +26,7 @@ func NewAnalyticsRepo(db *DB) *AnalyticsRepo {
 func (r *AnalyticsRepo) GetStats(ctx context.Context) (*domain.AnalyticsStats, error) {
 	row, err := r.db.Analytics.GetAnalyticsStats(ctx)
 	if err != nil {
+		r.logger.Error().Err(err).Msg("GetAnalyticsStats failed")
 		return nil, err
 	}
 

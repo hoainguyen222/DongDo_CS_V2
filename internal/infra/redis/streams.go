@@ -5,19 +5,20 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
 	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog"
 )
 
 const (
-	StreamWS = "stream:ws"
-	StreamAI = "stream:ai"
-	StreamDB = "stream:db"
-	StreamDLQ = "stream:dlq"
+	StreamWS   = "stream:ws"
+	StreamAI   = "stream:ai"
+	StreamDB   = "stream:db"
+	StreamDLQ  = "stream:dlq"
 
 	GroupWS = "ws_group"
 	GroupAI = "ai_group"
@@ -30,16 +31,23 @@ const (
 type EventBusService struct {
 	client *Client
 	hub    domain.HubBroadcaster
+	logger zerolog.Logger
 }
 
 func NewEventBus(client *Client) *EventBusService {
-	eb := &EventBusService{client: client}
+	logger := zerolog.New(os.Stderr).With().Timestamp().Logger()
+	logger = logger.With().Str("component", "event_bus").Logger()
+
+	eb := &EventBusService{client: client, logger: logger}
 	eb.initGroups(context.Background())
 	return eb
 }
 
 func (eb *EventBusService) SetHub(hub domain.HubBroadcaster) {
 	eb.hub = hub
+	if hub == nil {
+		eb.logger.Warn().Msg("Hub broadcaster is nil - local broadcast disabled")
+	}
 }
 
 func (eb *EventBusService) initGroups(ctx context.Context) {
@@ -55,7 +63,7 @@ func (eb *EventBusService) initGroups(ctx context.Context) {
 	for _, s := range streams {
 		err := eb.client.rdb.XGroupCreateMkStream(ctx, s.stream, s.group, "0").Err()
 		if err != nil && !isBusyGroupErr(err) {
-			log.Printf("⚠️ Warning creating consumer group %s on %s: %v", s.group, s.stream, err)
+			eb.logger.Warn().Err(err).Str("stream", s.stream).Msg("Consumer group create warning")
 		}
 	}
 }
@@ -78,9 +86,9 @@ func (eb *EventBusService) PublishWS(ctx context.Context, sessionID string, even
 		})
 	}
 
-	// 2. Stream to Redis
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
+		eb.logger.Error().Err(err).Msg("Failed to marshal WS payload")
 		return fmt.Errorf("failed to marshal WS payload: %w", err)
 	}
 
@@ -98,8 +106,12 @@ func (eb *EventBusService) PublishWS(ctx context.Context, sessionID string, even
 	}
 
 	if eb.client != nil && eb.client.rdb != nil {
-		return eb.client.rdb.XAdd(ctx, args).Err()
+		if err := eb.client.rdb.XAdd(ctx, args).Err(); err != nil {
+			eb.logger.Error().Err(err).Msg("Failed to publish to Redis stream")
+			return err
+		}
 	}
+
 	return nil
 }
 
@@ -123,13 +135,19 @@ func (eb *EventBusService) PublishAIJob(ctx context.Context, sessionID string, q
 		},
 	}
 
-	return eb.client.rdb.XAdd(ctx, args).Err()
+	if err := eb.client.rdb.XAdd(ctx, args).Err(); err != nil {
+		eb.logger.Error().Err(err).Msg("Failed to publish AI job")
+		return err
+	}
+
+	return nil
 }
 
 // PublishDBJob publishes a message to the database batch write stream.
 func (eb *EventBusService) PublishDBJob(ctx context.Context, msg *domain.Message) error {
 	msgBytes, err := json.Marshal(msg)
 	if err != nil {
+		eb.logger.Error().Err(err).Msg("Failed to marshal DB message")
 		return fmt.Errorf("failed to marshal DB message: %w", err)
 	}
 
@@ -144,7 +162,12 @@ func (eb *EventBusService) PublishDBJob(ctx context.Context, msg *domain.Message
 		},
 	}
 
-	return eb.client.rdb.XAdd(ctx, args).Err()
+	if err := eb.client.rdb.XAdd(ctx, args).Err(); err != nil {
+		eb.logger.Error().Err(err).Msg("Failed to publish DB job")
+		return err
+	}
+
+	return nil
 }
 
 // ReadStreamGroup reads messages from a stream using consumer group.
@@ -161,6 +184,7 @@ func (eb *EventBusService) ReadStreamGroup(ctx context.Context, stream, group, c
 		if errors.Is(err, redis.Nil) {
 			return nil, nil
 		}
+		eb.logger.Error().Err(err).Str("stream", stream).Msg("Error reading from stream group")
 		return nil, err
 	}
 
@@ -173,7 +197,12 @@ func (eb *EventBusService) ReadStreamGroup(ctx context.Context, stream, group, c
 
 // AckMessage acknowledges a processed stream message.
 func (eb *EventBusService) AckMessage(ctx context.Context, stream, group string, messageIDs ...string) error {
-	return eb.client.rdb.XAck(ctx, stream, group, messageIDs...).Err()
+	if err := eb.client.rdb.XAck(ctx, stream, group, messageIDs...).Err(); err != nil {
+		eb.logger.Error().Err(err).Str("stream", stream).Msg("Failed to acknowledge messages")
+		return err
+	}
+
+	return nil
 }
 
 // AutoClaimPending claims pending messages that exceeded minIdle time.
@@ -187,7 +216,12 @@ func (eb *EventBusService) AutoClaimPending(ctx context.Context, stream, group, 
 		Count:    count,
 	}).Result()
 
-	return res, nextStart, err
+	if err != nil {
+		eb.logger.Error().Err(err).Str("stream", stream).Msg("Failed to auto-claim pending messages")
+		return nil, "", err
+	}
+
+	return res, nextStart, nil
 }
 
 // MoveToDLQ moves a failed message to the Dead Letter Queue.
@@ -208,5 +242,16 @@ func (eb *EventBusService) MoveToDLQ(ctx context.Context, originalStream, messag
 		Values: dlqValues,
 	}
 
-	return eb.client.rdb.XAdd(ctx, args).Err()
+	if err := eb.client.rdb.XAdd(ctx, args).Err(); err != nil {
+		eb.logger.Error().Err(err).Msg("CRITICAL: Failed to move message to DLQ")
+		return err
+	}
+
+	eb.logger.Warn().
+		Str("original_stream", originalStream).
+		Str("message_id", messageID).
+		Str("reason", reason).
+		Msg("Message moved to DLQ")
+
+	return nil
 }

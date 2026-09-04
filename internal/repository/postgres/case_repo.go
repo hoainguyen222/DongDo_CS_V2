@@ -9,15 +9,20 @@ import (
 	chatdb "github.com/hoainguyen222/DongDo_CS_V2/internal/repository/sqlcdb/chat"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/rs/zerolog"
 )
 
 // CaseRepo implements domain.CaseRepository using sqlc-generated chatdb queries.
 type CaseRepo struct {
-	db *DB
+	db     *DB
+	logger zerolog.Logger
 }
 
 func NewCaseRepo(db *DB) *CaseRepo {
-	return &CaseRepo{db: db}
+	return &CaseRepo{
+		db:     db,
+		logger: logger.With().Str("repo", "case").Logger(),
+	}
 }
 
 // upsertCaseRowToDomain converts an UpsertCaseRow (returned by UpsertCase) to domain entity.
@@ -152,6 +157,7 @@ func (r *CaseRepo) Upsert(
 		LastMessage:   pgtype.Text{String: lastMessage, Valid: lastMessage != ""},
 	})
 	if err != nil {
+		r.logger.Error().Err(err).Str("session_id", sessionID).Msg("UpsertCase failed")
 		return nil, err
 	}
 
@@ -163,6 +169,7 @@ func (r *CaseRepo) List(ctx context.Context, statusFilter domain.CaseStatus) ([]
 	if statusFilter != "" {
 		rows, err := r.db.Chat.ListCasesByStatus(ctx, statusFilter)
 		if err != nil {
+			r.logger.Error().Err(err).Str("status_filter", string(statusFilter)).Msg("ListCasesByStatus failed")
 			return nil, err
 		}
 		out := make([]*domain.ChatCase, 0, len(rows))
@@ -174,6 +181,7 @@ func (r *CaseRepo) List(ctx context.Context, statusFilter domain.CaseStatus) ([]
 
 	rows, err := r.db.Chat.ListCases(ctx)
 	if err != nil {
+		r.logger.Error().Err(err).Msg("ListCases failed")
 		return nil, err
 	}
 	out := make([]*domain.ChatCase, 0, len(rows))
@@ -190,34 +198,52 @@ func (r *CaseRepo) Get(ctx context.Context, sessionID string) (*domain.ChatCase,
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
+		r.logger.Error().Err(err).Str("session_id", sessionID).Msg("GetCase failed")
 		return nil, err
 	}
+
 	return getCaseRowToDomain(&row), nil
 }
 
 // Assign moves the case to HUMAN_CS_ACTIVE and records the assigned CS username.
 func (r *CaseRepo) Assign(ctx context.Context, sessionID, csUsername string) error {
-	return r.db.Chat.AssignCase(ctx, chatdb.AssignCaseParams{
+	if err := r.db.Chat.AssignCase(ctx, chatdb.AssignCaseParams{
 		AssignedCs: pgtype.Text{String: csUsername, Valid: csUsername != ""},
 		SessionID:  sessionID,
-	})
+	}); err != nil {
+		r.logger.Error().Err(err).Str("session_id", sessionID).Msg("AssignCase failed")
+		return err
+	}
+	return nil
 }
 
 // Resolve marks the case as RESOLVED with a resolution note.
 func (r *CaseRepo) Resolve(ctx context.Context, sessionID, csUsername, resolutionNote string) error {
-	return r.db.Chat.ResolveCase(ctx, chatdb.ResolveCaseParams{
+	if err := r.db.Chat.ResolveCase(ctx, chatdb.ResolveCaseParams{
 		AssignedCs:     pgtype.Text{String: csUsername, Valid: csUsername != ""},
 		ResolutionNote: pgtype.Text{String: resolutionNote, Valid: resolutionNote != ""},
 		SessionID:      sessionID,
-	})
+	}); err != nil {
+		r.logger.Error().Err(err).Str("session_id", sessionID).Msg("ResolveCase failed")
+		return err
+	}
+	return nil
 }
 
 // Delete removes a single case by sessionID.
 func (r *CaseRepo) Delete(ctx context.Context, sessionID string) error {
-	return r.db.Chat.DeleteCase(ctx, sessionID)
+	if err := r.db.Chat.DeleteCase(ctx, sessionID); err != nil {
+		r.logger.Error().Err(err).Str("session_id", sessionID).Msg("DeleteCase failed")
+		return err
+	}
+	return nil
 }
 
 // DeleteAll removes all cases.
 func (r *CaseRepo) DeleteAll(ctx context.Context) error {
-	return r.db.Chat.DeleteAllCases(ctx)
+	if err := r.db.Chat.DeleteAllCases(ctx); err != nil {
+		r.logger.Error().Err(err).Msg("DeleteAllCases failed")
+		return err
+	}
+	return nil
 }

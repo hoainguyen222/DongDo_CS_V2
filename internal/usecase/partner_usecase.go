@@ -5,17 +5,20 @@ import (
 	"time"
 
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
+	"github.com/rs/zerolog"
 )
 
 type PartnerUseCase struct {
 	partnerRepo domain.PartnerRepository
 	settingRepo domain.SettingRepository
+	logger      zerolog.Logger
 }
 
 func NewPartnerUseCase(partnerRepo domain.PartnerRepository, settingRepo domain.SettingRepository) *PartnerUseCase {
 	return &PartnerUseCase{
 		partnerRepo: partnerRepo,
 		settingRepo: settingRepo,
+		logger:      zerolog.New(nil).With().Timestamp().Str("usecase", "partner").Logger(),
 	}
 }
 
@@ -25,6 +28,7 @@ func (uc *PartnerUseCase) GetDashboardData(ctx context.Context, startDateStr, en
 
 	kpi, err := uc.partnerRepo.GetDashboardKpi(ctx, startDate, endDate)
 	if err != nil {
+		uc.logger.Warn().Err(err).Msg("failed to fetch dashboard KPI (using defaults)")
 		kpi = &domain.DashboardKpiSummary{
 			TotalConversations: 0,
 			AIRateVal:          "0%",
@@ -35,11 +39,13 @@ func (uc *PartnerUseCase) GetDashboardData(ctx context.Context, startDateStr, en
 
 	trend, err := uc.partnerRepo.GetDashboardAutomationTrend(ctx, startDate, endDate)
 	if err != nil {
+		uc.logger.Warn().Err(err).Msg("failed to fetch automation trend (using empty)")
 		trend = []*domain.DashboardAutomationTrendDaily{}
 	}
 
 	chats, err := uc.partnerRepo.GetRecentCompletedChats(ctx, 20, 0)
 	if err != nil {
+		uc.logger.Warn().Err(err).Msg("failed to fetch recent completed chats (using empty)")
 		chats = []*domain.ChatCase{}
 	}
 
@@ -48,19 +54,39 @@ func (uc *PartnerUseCase) GetDashboardData(ctx context.Context, startDateStr, en
 
 // Config UseCase Methods
 func (uc *PartnerUseCase) ListQuickTemplates(ctx context.Context) ([]*domain.QuickTemplate, error) {
-	return uc.partnerRepo.ListQuickTemplates(ctx)
+	templates, err := uc.partnerRepo.ListQuickTemplates(ctx)
+	if err != nil {
+		uc.logger.Error().Err(err).Msg("failed to list quick templates")
+		return nil, err
+	}
+	return templates, nil
 }
 
 func (uc *PartnerUseCase) CreateQuickTemplate(ctx context.Context, t *domain.QuickTemplate) (*domain.QuickTemplate, error) {
-	return uc.partnerRepo.CreateQuickTemplate(ctx, t)
+	created, err := uc.partnerRepo.CreateQuickTemplate(ctx, t)
+	if err != nil {
+		uc.logger.Error().Err(err).Str("title", t.Title).Msg("failed to create quick template")
+		return nil, err
+	}
+	uc.logger.Info().Int64("template_id", created.ID).Str("title", created.Title).
+		Msg("quick template created")
+	return created, nil
 }
 
 func (uc *PartnerUseCase) UpdateQuickTemplate(ctx context.Context, id int64, title, category, content string) error {
-	return uc.partnerRepo.UpdateQuickTemplate(ctx, id, title, category, content)
+	if err := uc.partnerRepo.UpdateQuickTemplate(ctx, id, title, category, content); err != nil {
+		uc.logger.Error().Err(err).Int64("template_id", id).Msg("failed to update quick template")
+		return err
+	}
+	return nil
 }
 
 func (uc *PartnerUseCase) DeleteQuickTemplate(ctx context.Context, id int64) error {
-	return uc.partnerRepo.DeleteQuickTemplate(ctx, id)
+	if err := uc.partnerRepo.DeleteQuickTemplate(ctx, id); err != nil {
+		uc.logger.Error().Err(err).Int64("template_id", id).Msg("failed to delete quick template")
+		return err
+	}
+	return nil
 }
 
 func (uc *PartnerUseCase) SaveSystemPromptConfig(ctx context.Context, promptText, llmModel string, temp float64, username string) error {
@@ -73,16 +99,31 @@ func (uc *PartnerUseCase) SaveSystemPromptConfig(ctx context.Context, promptText
 		Temperature:  temp,
 		CreatedBy:    username,
 	}
-	_, err := uc.partnerRepo.InsertSystemPromptHistory(ctx, historyItem)
-	return err
+	if _, err := uc.partnerRepo.InsertSystemPromptHistory(ctx, historyItem); err != nil {
+		uc.logger.Error().Err(err).Str("username", username).Msg("failed to insert system prompt history")
+		return err
+	}
+	uc.logger.Info().Str("username", username).Str("llm_model", llmModel).
+		Msg("system prompt config saved")
+	return nil
 }
 
 func (uc *PartnerUseCase) ListRolePermissions(ctx context.Context) ([]*domain.RolePermission, error) {
-	return uc.partnerRepo.ListRolePermissions(ctx)
+	permissions, err := uc.partnerRepo.ListRolePermissions(ctx)
+	if err != nil {
+		uc.logger.Error().Err(err).Msg("failed to list role permissions")
+		return nil, err
+	}
+	return permissions, nil
 }
 
 func (uc *PartnerUseCase) UpsertRolePermission(ctx context.Context, p *domain.RolePermission) error {
-	return uc.partnerRepo.UpsertRolePermission(ctx, p)
+	if err := uc.partnerRepo.UpsertRolePermission(ctx, p); err != nil {
+		uc.logger.Error().Err(err).Str("role_name", p.RoleName).
+			Str("feature_key", p.FeatureKey).Msg("failed to upsert role permission")
+		return err
+	}
+	return nil
 }
 
 // UpsertRolePermissionSimple is a convenience wrapper that creates a RolePermission from individual parameters.
@@ -94,11 +135,16 @@ func (uc *PartnerUseCase) UpsertRolePermissionSimple(ctx context.Context, roleNa
 		CanView:         permissionLevel == "act" || permissionLevel == "view",
 		CanEdit:         permissionLevel == "act",
 	}
-	return uc.partnerRepo.UpsertRolePermission(ctx, p)
+	return uc.UpsertRolePermission(ctx, p)
 }
 
 func (uc *PartnerUseCase) ListAuditLogs(ctx context.Context, limit, offset int) ([]*domain.SystemAuditLog, error) {
-	return uc.partnerRepo.ListAuditLogs(ctx, limit, offset)
+	logs, err := uc.partnerRepo.ListAuditLogs(ctx, limit, offset)
+	if err != nil {
+		uc.logger.Error().Err(err).Msg("failed to list audit logs")
+		return nil, err
+	}
+	return logs, nil
 }
 
 func (uc *PartnerUseCase) CreateAuditLog(ctx context.Context, actionType, details, username string) (*domain.SystemAuditLog, error) {
@@ -107,59 +153,130 @@ func (uc *PartnerUseCase) CreateAuditLog(ctx context.Context, actionType, detail
 		Details:     details,
 		PerformedBy: username,
 	}
-	return uc.partnerRepo.InsertAuditLog(ctx, log)
+
+	created, err := uc.partnerRepo.InsertAuditLog(ctx, log)
+	if err != nil {
+		uc.logger.Error().Err(err).Str("action_type", actionType).
+			Str("username", username).Msg("failed to insert audit log")
+		return nil, err
+	}
+	return created, nil
 }
 
 // Report UseCase Methods (7 Sub-reports)
 func (uc *PartnerUseCase) GetGeneralOverviewReport(ctx context.Context, startDateStr, endDateStr string) (*domain.GeneralOverviewMetrics, error) {
 	sDate, eDate := parseDateRange(startDateStr, endDateStr)
-	return uc.partnerRepo.GetGeneralOverviewReport(ctx, sDate, eDate)
+
+	report, err := uc.partnerRepo.GetGeneralOverviewReport(ctx, sDate, eDate)
+	if err != nil {
+		uc.logger.Error().Err(err).Msg("failed to fetch general overview report")
+		return nil, err
+	}
+	return report, nil
 }
 
 func (uc *PartnerUseCase) GetAIPerformanceReport(ctx context.Context, startDateStr, endDateStr string) (*domain.AIPerformanceMetrics, error) {
 	sDate, eDate := parseDateRange(startDateStr, endDateStr)
-	return uc.partnerRepo.GetAIPerformanceReport(ctx, sDate, eDate)
+
+	report, err := uc.partnerRepo.GetAIPerformanceReport(ctx, sDate, eDate)
+	if err != nil {
+		uc.logger.Error().Err(err).Msg("failed to fetch AI performance report")
+		return nil, err
+	}
+	return report, nil
 }
 
 func (uc *PartnerUseCase) GetStaffPerformanceReport(ctx context.Context, startDateStr, endDateStr string) ([]*domain.StaffPerformanceItem, error) {
 	sDate, eDate := parseDateRange(startDateStr, endDateStr)
-	return uc.partnerRepo.GetStaffPerformanceReport(ctx, sDate, eDate)
+
+	report, err := uc.partnerRepo.GetStaffPerformanceReport(ctx, sDate, eDate)
+	if err != nil {
+		uc.logger.Error().Err(err).Msg("failed to fetch staff performance report")
+		return nil, err
+	}
+	return report, nil
 }
 
 func (uc *PartnerUseCase) GetCXReport(ctx context.Context, startDateStr, endDateStr string) (*domain.CXMetricsReport, error) {
 	sDate, eDate := parseDateRange(startDateStr, endDateStr)
-	return uc.partnerRepo.GetCXReport(ctx, sDate, eDate)
+
+	report, err := uc.partnerRepo.GetCXReport(ctx, sDate, eDate)
+	if err != nil {
+		uc.logger.Error().Err(err).Msg("failed to fetch CX metrics report")
+		return nil, err
+	}
+	return report, nil
 }
 
 func (uc *PartnerUseCase) SubmitCSATFeedback(ctx context.Context, fb *domain.CSATFeedback) (*domain.CSATFeedback, error) {
-	return uc.partnerRepo.InsertCSATFeedback(ctx, fb)
+	created, err := uc.partnerRepo.InsertCSATFeedback(ctx, fb)
+	if err != nil {
+		uc.logger.Error().Err(err).Str("session_id", fb.SessionID).Msg("failed to insert CSAT feedback")
+		return nil, err
+	}
+	return created, nil
 }
 
 func (uc *PartnerUseCase) GetHourlyOperationalLoad(ctx context.Context, startDateStr, endDateStr string) ([]*domain.HourlyOperationalItem, error) {
 	sDate, eDate := parseDateRange(startDateStr, endDateStr)
-	return uc.partnerRepo.GetHourlyOperationalLoad(ctx, sDate, eDate)
+
+	report, err := uc.partnerRepo.GetHourlyOperationalLoad(ctx, sDate, eDate)
+	if err != nil {
+		uc.logger.Error().Err(err).Msg("failed to fetch hourly operational load report")
+		return nil, err
+	}
+	return report, nil
 }
 
 func (uc *PartnerUseCase) GetIssueAnalysisReport(ctx context.Context, startDateStr, endDateStr string) ([]*domain.IssueAnalysisItem, error) {
 	sDate, eDate := parseDateRange(startDateStr, endDateStr)
-	return uc.partnerRepo.GetIssueAnalysisReport(ctx, sDate, eDate)
+
+	report, err := uc.partnerRepo.GetIssueAnalysisReport(ctx, sDate, eDate)
+	if err != nil {
+		uc.logger.Error().Err(err).Msg("failed to fetch issue analysis report")
+		return nil, err
+	}
+	return report, nil
 }
 
 func (uc *PartnerUseCase) GetAILearningReportStats(ctx context.Context) (*domain.AILearningReportStats, error) {
-	return uc.partnerRepo.GetAILearningReportStats(ctx)
+	stats, err := uc.partnerRepo.GetAILearningReportStats(ctx)
+	if err != nil {
+		uc.logger.Error().Err(err).Msg("failed to fetch AI learning report stats")
+		return nil, err
+	}
+	return stats, nil
 }
 
 // System Error Persistence Methods
 func (uc *PartnerUseCase) CreateSystemError(ctx context.Context, errRecord *domain.SystemErrorRecord) (*domain.SystemErrorRecord, error) {
-	return uc.partnerRepo.CreateSystemError(ctx, errRecord)
+	uc.logger.Warn().Str("source", errRecord.Source).Str("severity", errRecord.Severity).
+		Msg("system error record creation")
+
+	created, err := uc.partnerRepo.CreateSystemError(ctx, errRecord)
+	if err != nil {
+		uc.logger.Error().Err(err).Str("source", errRecord.Source).
+			Msg("failed to create system error record")
+		return nil, err
+	}
+	return created, nil
 }
 
 func (uc *PartnerUseCase) ListSystemErrors(ctx context.Context) ([]*domain.SystemErrorRecord, error) {
-	return uc.partnerRepo.ListSystemErrors(ctx)
+	errors, err := uc.partnerRepo.ListSystemErrors(ctx)
+	if err != nil {
+		uc.logger.Error().Err(err).Msg("failed to list system errors")
+		return nil, err
+	}
+	return errors, nil
 }
 
 func (uc *PartnerUseCase) MarkSystemErrorHandled(ctx context.Context, id string) error {
-	return uc.partnerRepo.MarkSystemErrorHandled(ctx, id)
+	if err := uc.partnerRepo.MarkSystemErrorHandled(ctx, id); err != nil {
+		uc.logger.Error().Err(err).Str("error_id", id).Msg("failed to mark system error handled")
+		return err
+	}
+	return nil
 }
 
 // Helper date range parser

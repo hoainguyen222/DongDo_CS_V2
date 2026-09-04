@@ -84,26 +84,31 @@ func RequireRoles(allowedRoles ...RoleLevel) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userVal, exists := c.Get("user")
 		if !exists {
+			Logger.Warn().Str("path", c.Request.URL.Path).Msg("RBAC denied: no user in context")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"detail": "Unauthorized"})
 			return
 		}
 
 		user, ok := userVal.(*domain.SessionUser)
 		if !ok || user == nil {
+			Logger.Warn().Str("path", c.Request.URL.Path).Msg("RBAC denied: invalid session")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"detail": "Invalid user session"})
 			return
 		}
 
-		// Convert UserRole to string and parse
 		userRole := ParseRoleLevel(string(user.Role))
 
-		// Check if user's role is in the allowed roles
 		for _, allowed := range allowedRoles {
 			if userRole >= allowed {
 				c.Next()
 				return
 			}
 		}
+
+		Logger.Warn().
+			Str("user_id", user.Username).
+			Str("path", c.Request.URL.Path).
+			Msg("RBAC denied: insufficient role")
 
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 			"detail": "Bạn không có quyền truy cập tính năng này.",

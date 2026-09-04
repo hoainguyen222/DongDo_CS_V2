@@ -3,8 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
+	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -21,16 +22,43 @@ import (
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/usecase"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/worker"
 	"github.com/hoainguyen222/DongDo_CS_V2/pkg/graceful"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
-func main() {
-	log.Println("============================================================")
-	log.Println("🚀 Khởi động Đông Đô CS Core V2 (Golang Clean Architecture)")
-	log.Println("============================================================")
+const (
+	serviceName    = "dongdo-cs-server"
+	serviceVersion = "2.0.0"
+)
 
-	cfg := config.Load()
+func init() {
+	// Configure zerolog for production
+	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+}
+
+func main() {
+	// Initialize logger with structured fields
+	logger := log.Output(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}).
+		With().
+		Timestamp().
+		Str("service", serviceName).
+		Str("version", serviceVersion).
+		Logger()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	cfg := config.Load()
+	serverAddr := fmt.Sprintf("%s:%s", cfg.ServerHost, cfg.ServerPort)
+
+	logger.Info().
+		Str("address", serverAddr).
+		Str("service", serviceName).
+		Str("version", serviceVersion).
+		Str("go_version", runtime.Version()).
+		Msg("Server starting")
 
 	sm := graceful.NewShutdownManager(15 * time.Second)
 
@@ -47,9 +75,9 @@ func main() {
 	var partnerRepo domain.PartnerRepository
 
 	usePostgres := cfg.DatabaseURL != "" && strings.HasPrefix(cfg.DatabaseURL, "postgres://")
+	dbLabel := "sqlite"
 
 	if usePostgres {
-		log.Printf("🐘 Connecting to PostgreSQL: %s", cfg.DatabaseURL)
 		var pgDB *repoPostgres.DB
 		var err error
 		for attempt := 1; attempt <= 15; attempt++ {
@@ -57,14 +85,25 @@ func main() {
 			if err == nil {
 				break
 			}
-			log.Printf("⏳ Waiting for PostgreSQL (attempt %d/15): %v", attempt, err)
+			if attempt == 1 {
+				logger.Warn().
+					Str("type", "postgresql").
+					Err(err).
+					Msg("Waiting for PostgreSQL")
+			}
+			if attempt == 15 {
+				logger.Error().
+					Str("type", "postgresql").
+					Err(err).
+					Msg("PostgreSQL connection failed after all retries; falling back to SQLite")
+			}
 			time.Sleep(1 * time.Second)
 		}
 
 		if err != nil {
-			log.Printf("⚠️ PostgreSQL connection failed (%v). Falling back to SQLite.", err)
 			usePostgres = false
 		} else {
+			dbLabel = "postgresql"
 			sm.Register("PostgreSQL Connection Pool", func(ctx context.Context) error {
 				pgDB.Close()
 				return nil
@@ -83,11 +122,14 @@ func main() {
 	}
 
 	if !usePostgres {
-		log.Println("📦 Khởi tạo cơ sở dữ liệu SQLite cục bộ (chat_history.db)...")
 		sqliteDB, err := repoSqlite.NewDB("chat_history.db")
 		if err != nil {
-			log.Fatalf("❌ Failed to initialize SQLite: %v", err)
+			logger.Fatal().
+				Str("type", "sqlite").
+				Err(err).
+				Msg("Failed to initialize SQLite")
 		}
+
 		sm.Register("SQLite Database", func(ctx context.Context) error {
 			return sqliteDB.Close()
 		})
@@ -103,6 +145,10 @@ func main() {
 		partnerRepo = repoSqlite.NewPartnerRepo(sqliteDB)
 	}
 
+	logger.Info().
+		Str("type", dbLabel).
+		Msg("Database connected")
+
 	// 2. Initialize Redis (Event Bus & State)
 	var eventBus domain.EventBus = infraRedis.NewNoOpEventBus()
 	var stateMgr domain.StateManager = infraRedis.NewNoOpStateManager()
@@ -116,12 +162,22 @@ func main() {
 			if err == nil {
 				break
 			}
-			log.Printf("⏳ Waiting for Redis (attempt %d/15): %v", attempt, err)
+			if attempt == 1 {
+				logger.Warn().
+					Err(err).
+					Msg("Waiting for Redis")
+			}
+			if attempt == 15 {
+				logger.Error().
+					Err(err).
+					Msg("Redis connection failed after all retries; running with NoOp fallback")
+			}
 			time.Sleep(1 * time.Second)
 		}
 
 		if err != nil {
-			log.Printf("⚠️ Redis connection failed (%v). Running with NoOp fallback.", err)
+			eventBus = infraRedis.NewNoOpEventBus()
+			stateMgr = infraRedis.NewNoOpStateManager()
 		} else {
 			streamEventBus = infraRedis.NewEventBus(redisClient)
 			eventBus = streamEventBus
@@ -129,18 +185,30 @@ func main() {
 			sm.Register("Redis Connection", func(ctx context.Context) error {
 				return redisClient.Close()
 			})
+			logger.Info().
+				Str("url", cfg.RedisURL).
+				Msg("Redis connected")
 		}
+	} else {
+		logger.Warn().
+			Msg("Redis URL not configured; using NoOp event bus and state manager")
 	}
 
 	// 3. Initialize Qdrant Vector DB
-	var qdrantClient *infraQdrant.Client
 	qdrantClient, err := infraQdrant.NewClient(ctx, cfg.QdrantHost, cfg.QdrantPort, 384)
 	if err != nil {
-		log.Printf("⚠️ Qdrant connection notice: %v (RAG will run in fallback mode until Qdrant is up)", err)
+		logger.Warn().
+			Err(err).
+			Msg("Qdrant unavailable; RAG will run in fallback mode")
 	} else {
 		sm.Register("Qdrant gRPC Connection", func(ctx context.Context) error {
-			return qdrantClient.Close()
+			qdrantClient.Close()
+			return nil
 		})
+		logger.Info().
+			Str("host", cfg.QdrantHost).
+			Int("port", cfg.QdrantPort).
+			Msg("Qdrant connected")
 	}
 
 	// 4. Initialize Embedder & Claude LLM Client
@@ -163,18 +231,30 @@ func main() {
 	eventBus.SetHub(hub)
 
 	// 8. Start Background Workers if Redis Streams is available
+	startedWorkers := []string{}
 	if streamEventBus != nil {
 		wsWorker := worker.NewWSWorker(streamEventBus, hub, "ws_worker_1")
 		go wsWorker.Start(ctx)
+		startedWorkers = append(startedWorkers, "ws_worker_1")
 
 		aiWorker := worker.NewAIWorker(streamEventBus, stateMgr, ragUC, messageRepo, caseRepo, "ai_worker_1")
 		go aiWorker.Start(ctx)
+		startedWorkers = append(startedWorkers, "ai_worker_1")
 
 		dbWorker := worker.NewDBWorker(streamEventBus, messageRepo, "db_worker_1", cfg.DBBatchSize, time.Duration(cfg.DBBatchInterval)*time.Millisecond)
 		go dbWorker.Start(ctx)
+		startedWorkers = append(startedWorkers, "db_worker_1")
 
 		retryWorker := worker.NewRetryWorker(streamEventBus, "retry_worker_1", cfg.RetryMaxCount, cfg.RetryClaimAfter)
 		go retryWorker.Start(ctx)
+		startedWorkers = append(startedWorkers, "retry_worker_1")
+
+		logger.Info().
+			Strs("workers", startedWorkers).
+			Msg("Workers started")
+	} else {
+		logger.Warn().
+			Msg("Redis not available; background workers not started")
 	}
 
 	// 9. Initialize HTTP Router
@@ -196,7 +276,6 @@ func main() {
 	router := deliveryHTTP.SetupRouter(handler, hub, chatUC, voiceUC, stateMgr, eventBus, authUC)
 
 	// 10. Start HTTP Server
-	serverAddr := fmt.Sprintf("%s:%s", cfg.ServerHost, cfg.ServerPort)
 	srv := &http.Server{
 		Addr:         serverAddr,
 		Handler:      router,
@@ -210,12 +289,20 @@ func main() {
 	})
 
 	go func() {
-		log.Printf("🌐 Server listening on http://%s", serverAddr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("❌ HTTP server error: %v", err)
+			logger.Fatal().
+				Err(err).
+				Msg("HTTP server error")
 		}
 	}()
 
+	logger.Info().
+		Str("address", serverAddr).
+		Msg("HTTP server listening")
+
 	// 11. Wait for shutdown signal
 	sm.WaitForSignal(ctx)
+
+	logger.Info().
+		Msg("Server shutdown complete")
 }

@@ -98,6 +98,14 @@ type Message struct {
 	CreatedAt   time.Time  `json:"created_at"`
 }
 
+// ClientMsgIDString returns the string representation of ClientMsgID or empty string
+func (m *Message) ClientMsgIDString() string {
+	if m.ClientMsgID == nil {
+		return ""
+	}
+	return m.ClientMsgID.String()
+}
+
 // ============================================================
 // Chat Case (Live CS Inbox)
 // ============================================================

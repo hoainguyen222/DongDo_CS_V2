@@ -6,12 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
+	"github.com/rs/zerolog"
 )
 
 type Client struct {
@@ -22,12 +23,17 @@ type Client struct {
 	model       string
 	temp        float64
 	httpClient  *http.Client
+	logger      zerolog.Logger
 }
 
 func NewClient(apiKey, workspaceID, openAIKey, geminiKey, model string, temperature float64) *Client {
+	logger := zerolog.New(os.Stderr).With().Timestamp().Logger()
+	logger = logger.With().Str("component", "claude_client").Logger()
+
 	if model == "" {
 		model = "claude-haiku-4-5-20251001"
 	}
+
 	return &Client{
 		apiKey:      apiKey,
 		workspaceID: workspaceID,
@@ -36,6 +42,7 @@ func NewClient(apiKey, workspaceID, openAIKey, geminiKey, model string, temperat
 		model:       model,
 		temp:        temperature,
 		httpClient:  &http.Client{Timeout: 15 * time.Second},
+		logger:      logger,
 	}
 }
 
@@ -71,7 +78,6 @@ func (c *Client) GenerateResponse(
 	query string,
 	contextBlock string,
 ) (reply string, isFallback bool, err error) {
-	// 1. Construct system message with retrieved context
 	fullSystemPrompt := systemPrompt
 	if contextBlock != "" {
 		fullSystemPrompt += fmt.Sprintf("\n\nDỮ LIỆU TỪ CƠ SỞ KIẾN THỨC (Knowledge Base):\n===\n%s\n===\nHãy dựa HOÀN TOÀN vào dữ liệu trên để trả lời câu hỏi của khách hàng. KHÔNG ĐƯỢC sử dụng bất kỳ kiến thức nào bên ngoài dữ liệu này.", contextBlock)
@@ -79,7 +85,6 @@ func (c *Client) GenerateResponse(
 		fullSystemPrompt += "\n\nKHÔNG TÌM THẤY DỮ LIỆU LIÊN QUAN trong Cơ sở kiến thức.\nHãy thực hiện đúng 2 bước: Xin lỗi + Chuyển giao chuyên viên CSKH với đúng nguyên văn câu chốt."
 	}
 
-	// 2. Build conversation history messages
 	var messages []MessageItem
 	for _, m := range history {
 		if m.SenderType == domain.SenderGuest {
@@ -89,10 +94,9 @@ func (c *Client) GenerateResponse(
 		}
 	}
 
-	// Append current user query
 	messages = append(messages, MessageItem{Role: "user", Content: query})
 
-	// 3. Try Anthropic Claude API if key is present
+	// 1. Try Anthropic Claude API if key is present
 	if c.apiKey != "" {
 		reqBody := AnthropicRequest{
 			Model:       c.model,
@@ -121,7 +125,7 @@ func (c *Client) GenerateResponse(
 					if resp.StatusCode == http.StatusOK {
 						var anthropicResp AnthropicResponse
 						if err := json.Unmarshal(respBytes, &anthropicResp); err != nil {
-							log.Printf("⚠️ Anthropic JSON unmarshal error: %v | body: %s", err, string(respBytes))
+							c.logger.Error().Err(err).Msg("Anthropic JSON unmarshal error")
 						} else {
 							var replyBuilder strings.Builder
 							for _, block := range anthropicResp.Content {
@@ -133,64 +137,88 @@ func (c *Client) GenerateResponse(
 							fallbackPhrase := "chuyên viên CSKH của Đông Đô sẽ trực tiếp tham gia cuộc trò chuyện để hỗ trợ bạn ngay"
 							isFallback = strings.Contains(strings.ToLower(reply), strings.ToLower(fallbackPhrase)) || contextBlock == ""
 
-							// Only return if we have actual content; otherwise fall through to next provider.
 							if reply != "" {
 								return reply, isFallback, nil
 							}
-							log.Printf("⚠️ Anthropic 200 OK but empty text content | body: %s", string(respBytes))
+							c.logger.Warn().Msg("Anthropic 200 OK but empty text content")
 						}
 					} else {
-						log.Printf("⚠️ Anthropic Claude API response status %d: %s", resp.StatusCode, string(respBytes))
+						c.logger.Warn().
+							Int("status_code", resp.StatusCode).
+							Msg("Anthropic API error response")
 					}
+				} else {
+					c.logger.Error().Err(err).Msg("Anthropic API request failed")
 				}
 			}
 		}
 	}
 
-	// 4. Try Google Gemini API if key is present
+	// 2. Try Google Gemini API if key is present
 	if c.geminiKey != "" {
 		geminiReply, geminiErr := c.generateGemini(ctx, fullSystemPrompt, messages)
 		if geminiErr == nil && geminiReply != "" {
 			fallbackPhrase := "chuyên viên CSKH của Đông Đô sẽ trực tiếp tham gia cuộc trò chuyện để hỗ trợ bạn ngay"
 			isFallback = strings.Contains(strings.ToLower(geminiReply), strings.ToLower(fallbackPhrase)) || contextBlock == ""
 			return geminiReply, isFallback, nil
+		} else if geminiErr != nil {
+			c.logger.Warn().Err(geminiErr).Msg("Gemini API failed")
 		}
 	}
 
-	// 5. Try OpenAI API if key is present
+	// 3. Try OpenAI API if key is present
 	if c.openAIKey != "" {
 		openAIReply, openAIErr := c.generateOpenAI(ctx, fullSystemPrompt, messages)
 		if openAIErr == nil && openAIReply != "" {
 			fallbackPhrase := "chuyên viên CSKH của Đông Đô sẽ trực tiếp tham gia cuộc trò chuyện để hỗ trợ bạn ngay"
 			isFallback = strings.Contains(strings.ToLower(openAIReply), strings.ToLower(fallbackPhrase)) || contextBlock == ""
 			return openAIReply, isFallback, nil
+		} else if openAIErr != nil {
+			c.logger.Warn().Err(openAIErr).Msg("OpenAI API failed")
 		}
 	}
 
-	// 6. Intelligent Local Knowledge Synthesizer fallback if no cloud LLM responded
+	// 4. Intelligent Local Knowledge Synthesizer fallback if no cloud LLM responded
 	if contextBlock != "" {
+		c.logger.Warn().Msg("Falling back to local knowledge synthesizer")
+
 		synthesized, isFallbackLocal := synthesizeKnowledgeResponse(query, contextBlock)
 		if synthesized != "" {
 			return synthesized, isFallbackLocal, nil
 		}
 	}
 
+	// All providers failed
+	c.logger.Error().Msg("All AI providers failed - returning default fallback")
+
 	return "Dạ xin lỗi anh/chị, hiện tại em chưa có thông tin chi tiết về nội dung này trong hệ thống dữ liệu của Đông Đô Partners. Vui lòng đợi trong giây lát, chuyên viên CSKH của Đông Đô sẽ trực tiếp tham gia cuộc trò chuyện để hỗ trợ bạn ngay.", true, nil
+}
+
+func getAvailableProviders(c *Client) []string {
+	var providers []string
+	if c.apiKey != "" {
+		providers = append(providers, "anthropic")
+	}
+	if c.geminiKey != "" {
+		providers = append(providers, "gemini")
+	}
+	if c.openAIKey != "" {
+		providers = append(providers, "openai")
+	}
+	providers = append(providers, "local_synthesizer")
+	return providers
 }
 
 func synthesizeKnowledgeResponse(query, contextBlock string) (string, bool) {
 	chunks := strings.Split(contextBlock, "\n\n---\n\n")
 	var bestChunk string
 
-	// Look for chunks that are substantial paragraphs (not just table of contents headers)
 	for _, chunk := range chunks {
 		trimmed := strings.TrimSpace(chunk)
 		lines := strings.Split(trimmed, "\n")
-		// Filter out table of contents headers
 		if len(lines) <= 2 && len(trimmed) < 60 {
 			continue
 		}
-		// If chunk contains detailed explanation
 		if len(trimmed) > 100 && !strings.HasPrefix(trimmed, "1. ") && !strings.HasPrefix(trimmed, "I. ") {
 			bestChunk = trimmed
 			break
@@ -362,4 +390,11 @@ func (c *Client) generateOpenAI(ctx context.Context, systemPrompt string, messag
 	}
 
 	return "", fmt.Errorf("empty openai choices")
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

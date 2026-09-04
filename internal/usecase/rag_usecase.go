@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
 	infraClaude "github.com/hoainguyen222/DongDo_CS_V2/internal/infra/claude"
+	"github.com/rs/zerolog"
 )
 
 type RAGUseCase struct {
@@ -18,6 +20,7 @@ type RAGUseCase struct {
 	defaultPrompt string
 	memoryWindow  int
 	retrieverK    int
+	logger        zerolog.Logger
 }
 
 func NewRAGUseCase(
@@ -45,6 +48,7 @@ func NewRAGUseCase(
 		defaultPrompt: defaultPrompt,
 		memoryWindow:  memoryWindow,
 		retrieverK:    retrieverK,
+		logger:        zerolog.New(nil).With().Timestamp().Str("usecase", "rag").Logger(),
 	}
 }
 
@@ -67,22 +71,30 @@ func isGreetingQuery(q string) bool {
 
 // GenerateResponse executes the full RAG pipeline: Embedding -> Vector Search -> Prompt Building -> Claude Generation.
 func (uc *RAGUseCase) GenerateResponse(ctx context.Context, sessionID, query string) (reply string, sources []string, isFallback bool, err error) {
+	startTime := time.Now()
+
 	// 0. Natural Greeting & Intent Handling
 	if isGreetingQuery(query) {
 		reply = "Dạ, xin chào anh/chị! 👋\n\nEm là Trợ lý AI Chăm sóc khách hàng của Đông Đô Partners. Em rất vui được hỗ trợ anh/chị hôm nay!\n\nEm có thể giải đáp nhanh về:\n- 📈 **Hàng hóa phái sinh** (Khái niệm, đòn bẩy, lệnh giao dịch, ký quỹ)\n- 📱 **Nền tảng DDP Invest** (Hướng dẫn mở tài khoản, nạp rút tiền, biểu phí)\n- 🛡️ **Quản trị rủi ro & Xử lý sự cố**\n\nAnh/chị đang quan tâm đến nội dung nào để em hỗ trợ chi tiết ạ? 😊"
 		return reply, nil, false, nil
 	}
 
-	// 1. Retrieve relevant knowledge chunks from Qdrant with confidence threshold
+	// 1. Retrieve relevant knowledge chunks from Vector Store
 	var contextParts []string
 	sourceSet := make(map[string]bool)
 
 	if uc.embedder != nil && uc.vectorStore != nil {
 		queryVec, err := uc.embedder.EmbedText(ctx, query)
-		if err == nil {
+		if err != nil {
+			uc.logger.Warn().Err(err).Str("session_id", sessionID).
+				Msg("failed to embed query (continuing without vector search)")
+		} else {
 			// Require minimum similarity score of 0.35 to avoid matching random documents on short queries
 			docs, err := uc.vectorStore.Search(ctx, queryVec, uc.retrieverK, 0.35)
-			if err == nil {
+			if err != nil {
+				uc.logger.Warn().Err(err).Str("session_id", sessionID).
+					Msg("vector search failed (continuing without context)")
+			} else {
 				for _, doc := range docs {
 					if doc.Content != "" {
 						contextParts = append(contextParts, doc.Content)
@@ -104,30 +116,45 @@ func (uc *RAGUseCase) GenerateResponse(ctx context.Context, sessionID, query str
 	// 2. Fetch conversation history
 	history, err := uc.messageRepo.GetHistory(ctx, sessionID)
 	if err != nil {
+		uc.logger.Warn().Err(err).Str("session_id", sessionID).
+			Msg("failed to fetch conversation history (using empty history)")
 		history = []*domain.Message{}
 	}
 
-	// Limit history to memory window (last N messages)
 	maxHistory := uc.memoryWindow * 2
 	if len(history) > maxHistory {
 		history = history[len(history)-maxHistory:]
 	}
 
-	// 3. Get system prompt from settings or default
+	// 3. Get system prompt from settings
 	systemPrompt, _ := uc.settingRepo.Get(ctx, "system_prompt", uc.defaultPrompt)
 
 	// 4. Generate response via LLM Client
 	reply, isFallback, err = uc.claudeClient.GenerateResponse(ctx, systemPrompt, history, query, contextBlock)
 	if err != nil {
+		uc.logger.Error().Err(err).Str("session_id", sessionID).
+			Msg("LLM response generation failed")
 		return "", sources, true, fmt.Errorf("rag generation failed: %w", err)
 	}
 
+	// Fallback detection logic
 	lowerReply := strings.ToLower(reply)
 	if contextBlock == "" ||
 		strings.Contains(lowerReply, "chuyên viên cskh") ||
 		strings.Contains(lowerReply, "chưa có thông tin") ||
 		strings.Contains(lowerReply, "tham gia cuộc trò chuyện") {
 		isFallback = true
+	}
+
+	totalDuration := time.Since(startTime)
+	// Only warn for slow LLM calls (>2s)
+	if totalDuration > 2*time.Second {
+		uc.logger.Warn().Str("session_id", sessionID).
+			Dur("total_duration", totalDuration).
+			Int("reply_length", len(reply)).
+			Bool("is_fallback", isFallback).
+			Int("sources", len(sources)).
+			Msg("RAG total LLM call took > 2s")
 	}
 
 	return reply, sources, isFallback, nil

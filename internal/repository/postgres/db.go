@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	"os"
 	"time"
 
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
@@ -18,7 +18,16 @@ import (
 	"github.com/hoainguyen222/DongDo_CS_V2/pkg/security"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pressly/goose/v3"
+	"github.com/rs/zerolog"
 )
+
+// logger is the global logger instance for the postgres package.
+var logger = zerolog.New(os.Stderr).With().Str("component", "postgres").Logger()
+
+// SetLogger sets a custom zerolog logger for the postgres package.
+func SetLogger(l zerolog.Logger) {
+	logger = l.With().Str("component", "postgres").Logger()
+}
 
 // DB is the top-level PostgreSQL access handle. It bundles the underlying
 // connection pool with the generated sqlc query sets for every sub-domain
@@ -47,6 +56,7 @@ type DB struct {
 func NewDB(ctx context.Context, dsn string) (*DB, error) {
 	config, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
+		logger.Error().Err(err).Msg("failed to parse PostgreSQL DSN")
 		return nil, fmt.Errorf("invalid DATABASE_URL: %w", err)
 	}
 
@@ -58,15 +68,17 @@ func NewDB(ctx context.Context, dsn string) (*DB, error) {
 
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
+		logger.Error().Err(err).Msg("failed to create pgx connection pool")
 		return nil, fmt.Errorf("failed to create pgxpool: %w", err)
 	}
 
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
+		logger.Error().Err(err).Msg("failed to ping PostgreSQL database")
 		return nil, fmt.Errorf("failed to ping PostgreSQL: %w", err)
 	}
 
-	log.Println("✅ Connected to PostgreSQL database pool")
+	logger.Info().Str("status", "connected").Msg("Connected to PostgreSQL")
 
 	db := &DB{
 		Pool:      pool,
@@ -79,18 +91,15 @@ func NewDB(ctx context.Context, dsn string) (*DB, error) {
 		Partner:   partnerdb.New(pool),
 	}
 
-	// Apply pending migrations (idempotent — goose tracks applied versions
-	// in the `goose_db_version` table).
 	if err := db.RunMigrations(ctx, dsn); err != nil {
-		log.Printf("⚠️ Migration warning: %v", err)
+		logger.Warn().Err(err).Msg("migration warning")
 	}
 
-	// Seed default admin/cskh accounts (kept out of SQL migrations because
-	// the passwords must be hashed with PBKDF2 in Go).
 	if err := db.SeedDefaultAccounts(ctx); err != nil {
-		log.Printf("⚠️ Account seeding warning: %v", err)
+		logger.Warn().Err(err).Msg("account seeding warning")
 	}
 
+	logger.Info().Msg("PostgreSQL initialization complete")
 	return db, nil
 }
 
@@ -99,6 +108,7 @@ func NewDB(ctx context.Context, dsn string) (*DB, error) {
 func (db *DB) Close() {
 	if db.Pool != nil {
 		db.Pool.Close()
+		logger.Info().Msg("PostgreSQL pool closed")
 	}
 }
 
@@ -114,24 +124,27 @@ func (db *DB) Close() {
 func (db *DB) RunMigrations(ctx context.Context, dsn string) error {
 	sqlDB, err := sql.Open("pgx", dsn)
 	if err != nil {
+		logger.Error().Err(err).Msg("failed to open SQL handle for migrations")
 		return fmt.Errorf("failed to open SQL handle for migrations: %w", err)
 	}
 	defer func() {
 		if cerr := sqlDB.Close(); cerr != nil {
-			log.Printf("⚠️ migrations sqlDB close error: %v", cerr)
+			logger.Warn().Err(cerr).Msg("migration sqlDB close error")
 		}
 	}()
 
 	goose.SetBaseFS(migrationsFS)
 	if err := goose.SetDialect("postgres"); err != nil {
+		logger.Error().Err(err).Msg("failed to set goose dialect")
 		return fmt.Errorf("failed to set goose dialect: %w", err)
 	}
 
 	if err := goose.UpContext(ctx, sqlDB, "migrations"); err != nil {
+		logger.Error().Err(err).Msg("failed to run migrations")
 		return fmt.Errorf("failed to run migrations: %w", err)
 	}
 
-	log.Println("✅ Database schema migrations applied successfully")
+	logger.Info().Msg("database migrations applied")
 	return nil
 }
 
@@ -153,9 +166,11 @@ func (db *DB) SeedDefaultAccounts(ctx context.Context) error {
 		{"cskh05", "DongDo@123", "Chuyên viên CSKH 05", domain.RoleCSKH},
 	}
 
+	seededCount := 0
 	for _, acc := range defaultAccounts {
 		count, err := db.Auth.CountUsersByUsername(ctx, acc.username)
 		if err != nil {
+			logger.Error().Err(err).Str("username", acc.username).Msg("failed to check existing user")
 			return fmt.Errorf("failed to check existing user %s: %w", acc.username, err)
 		}
 
@@ -165,6 +180,7 @@ func (db *DB) SeedDefaultAccounts(ctx context.Context) error {
 
 		hash, salt, err := security.HashPassword(acc.password, "")
 		if err != nil {
+			logger.Error().Err(err).Str("username", acc.username).Msg("failed to hash password")
 			return fmt.Errorf("failed to hash password for %s: %w", acc.username, err)
 		}
 
@@ -175,11 +191,13 @@ func (db *DB) SeedDefaultAccounts(ctx context.Context) error {
 			FullName:     acc.fullName,
 			Role:         acc.role,
 		}); err != nil {
+			logger.Error().Err(err).Str("username", acc.username).Msg("failed to seed user")
 			return fmt.Errorf("failed to seed user %s: %w", acc.username, err)
 		}
 
-		log.Printf("🔑 Seeded default account: %s (%s)", acc.username, acc.role)
+		seededCount++
 	}
 
+	logger.Info().Int("seeded", seededCount).Int("total", len(defaultAccounts)).Msg("default accounts seeded")
 	return nil
 }

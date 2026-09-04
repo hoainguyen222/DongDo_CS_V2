@@ -2,23 +2,34 @@ package redis
 
 import (
 	"context"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
+	"github.com/rs/zerolog"
 )
 
 // NoOpEventBus is a fallback event bus when Redis is not available, with direct Hub broadcasting.
 type NoOpEventBus struct {
-	hub domain.HubBroadcaster
+	hub    domain.HubBroadcaster
+	logger zerolog.Logger
 }
 
 func NewNoOpEventBus() domain.EventBus {
-	return &NoOpEventBus{}
+	logger := zerolog.New(os.Stderr).With().Timestamp().Logger()
+	logger = logger.With().Str("component", "noop_event_bus").Logger()
+
+	logger.Warn().Msg("NoOpEventBus initialized - Redis streaming disabled")
+
+	return &NoOpEventBus{logger: logger}
 }
 
 func (n *NoOpEventBus) SetHub(hub domain.HubBroadcaster) {
 	n.hub = hub
+	if hub == nil {
+		n.logger.Warn().Msg("Hub broadcaster is nil for NoOpEventBus")
+	}
 }
 
 func (n *NoOpEventBus) PublishWS(ctx context.Context, sessionID string, event domain.WSEventType, payload interface{}, senderID string) error {
@@ -30,7 +41,10 @@ func (n *NoOpEventBus) PublishWS(ctx context.Context, sessionID string, event do
 			SenderID:  senderID,
 			Timestamp: time.Now(),
 		})
+	} else {
+		n.logger.Warn().Str("session_id", sessionID).Msg("NoOpEventBus: event dropped (no hub)")
 	}
+
 	return nil
 }
 
@@ -43,10 +57,17 @@ func (n *NoOpEventBus) PublishDBJob(ctx context.Context, msg *domain.Message) er
 }
 
 // NoOpStateManager is a fallback in-memory state manager when Redis is not available.
-type NoOpStateManager struct{}
+type NoOpStateManager struct {
+	logger zerolog.Logger
+}
 
 func NewNoOpStateManager() domain.StateManager {
-	return &NoOpStateManager{}
+	logger := zerolog.New(os.Stderr).With().Timestamp().Logger()
+	logger = logger.With().Str("component", "noop_state_manager").Logger()
+
+	logger.Warn().Msg("NoOpStateManager initialized - Redis state disabled")
+
+	return &NoOpStateManager{logger: logger}
 }
 
 func (n *NoOpStateManager) SetTyping(ctx context.Context, sessionID, userID string) error {

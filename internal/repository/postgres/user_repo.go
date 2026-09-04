@@ -10,6 +10,7 @@ import (
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
 	authdb "github.com/hoainguyen222/DongDo_CS_V2/internal/repository/sqlcdb/auth"
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog"
 )
 
 // ============================================================
@@ -18,12 +19,16 @@ import (
 
 // UserRepo persists users via sqlc-generated auth queries.
 type UserRepo struct {
-	db *DB
+	db     *DB
+	logger zerolog.Logger
 }
 
 // NewUserRepo constructs a UserRepo using the shared DB handle.
 func NewUserRepo(db *DB) *UserRepo {
-	return &UserRepo{db: db}
+	return &UserRepo{
+		db:     db,
+		logger: logger.With().Str("repo", "user").Logger(),
+	}
 }
 
 // Create inserts a new user record. The sqlc CreateUser query does not
@@ -38,8 +43,10 @@ func (r *UserRepo) Create(ctx context.Context, username, passwordHash, salt, ful
 		Role:         role,
 	})
 	if err != nil {
+		r.logger.Error().Err(err).Str("username", username).Msg("CreateUser failed")
 		return nil, err
 	}
+
 	return &domain.User{
 		ID:           row.ID,
 		Username:     row.Username,
@@ -60,8 +67,10 @@ func (r *UserRepo) GetByUsername(ctx context.Context, username string) (*domain.
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
+		r.logger.Error().Err(err).Str("username", username).Msg("GetUserByUsernameInsensitive failed")
 		return nil, err
 	}
+
 	return userFromAuth(u), nil
 }
 
@@ -69,8 +78,10 @@ func (r *UserRepo) GetByUsername(ctx context.Context, username string) (*domain.
 func (r *UserRepo) List(ctx context.Context) ([]*domain.User, error) {
 	rows, err := r.db.Auth.ListUsers(ctx)
 	if err != nil {
+		r.logger.Error().Err(err).Msg("ListUsers failed")
 		return nil, err
 	}
+
 	users := make([]*domain.User, 0, len(rows))
 	for _, row := range rows {
 		users = append(users, &domain.User{
@@ -82,21 +93,30 @@ func (r *UserRepo) List(ctx context.Context) ([]*domain.User, error) {
 			CreatedAt: row.CreatedAt,
 		})
 	}
+
 	return users, nil
 }
 
 // Delete removes a user by exact username.
 func (r *UserRepo) Delete(ctx context.Context, username string) error {
-	return r.db.Auth.DeleteUser(ctx, username)
+	if err := r.db.Auth.DeleteUser(ctx, username); err != nil {
+		r.logger.Error().Err(err).Str("username", username).Msg("DeleteUser failed")
+		return err
+	}
+	return nil
 }
 
 // UpdatePassword updates the password hash and salt for a user.
 func (r *UserRepo) UpdatePassword(ctx context.Context, username, passwordHash, salt string) error {
-	return r.db.Auth.UpdatePassword(ctx, authdb.UpdatePasswordParams{
+	if err := r.db.Auth.UpdatePassword(ctx, authdb.UpdatePasswordParams{
 		PasswordHash: passwordHash,
 		Salt:         salt,
 		Username:     username,
-	})
+	}); err != nil {
+		r.logger.Error().Err(err).Str("username", username).Msg("UpdatePassword failed")
+		return err
+	}
+	return nil
 }
 
 // UpdateUser updates a user's profile fields. When passwordHash is non-empty
@@ -112,8 +132,10 @@ func (r *UserRepo) UpdateUser(ctx context.Context, username, fullName string, ro
 			Lower:        username,
 		})
 		if err != nil {
+			r.logger.Error().Err(err).Str("username", username).Msg("UpdateUserWithPassword failed")
 			return nil, err
 		}
+
 		return userFromUpdateRow(row.ID, row.Username, row.FullName, row.Role, row.IsActive, row.CreatedAt), nil
 	}
 
@@ -124,8 +146,10 @@ func (r *UserRepo) UpdateUser(ctx context.Context, username, fullName string, ro
 		Lower:    username,
 	})
 	if err != nil {
+		r.logger.Error().Err(err).Str("username", username).Msg("UpdateUserWithoutPassword failed")
 		return nil, err
 	}
+
 	return userFromUpdateRow(row.ID, row.Username, row.FullName, row.Role, row.IsActive, row.CreatedAt), nil
 }
 
@@ -155,5 +179,3 @@ func userFromUpdateRow(id int64, username, fullName string, role domain.UserRole
 		CreatedAt: createdAt,
 	}
 }
-
-

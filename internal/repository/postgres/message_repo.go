@@ -8,15 +8,20 @@ import (
 	chatdb "github.com/hoainguyen222/DongDo_CS_V2/internal/repository/sqlcdb/chat"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/rs/zerolog"
 )
 
 // MessageRepo implements domain.MessageRepository using sqlc-generated chat queries.
 type MessageRepo struct {
-	db *DB
+	db     *DB
+	logger zerolog.Logger
 }
 
 func NewMessageRepo(db *DB) *MessageRepo {
-	return &MessageRepo{db: db}
+	return &MessageRepo{
+		db:     db,
+		logger: logger.With().Str("repo", "message").Logger(),
+	}
 }
 
 // chatMessageToDomain maps a sqlc ChatMessage to the domain entity.
@@ -77,8 +82,10 @@ func (r *MessageRepo) Insert(ctx context.Context, msg *domain.Message) (*domain.
 		ClientMsgID: clientMsgID,
 	})
 	if err != nil {
+		r.logger.Error().Err(err).Str("session_id", msg.SessionID).Msg("InsertMessage failed")
 		return nil, err
 	}
+
 	return chatMessageToDomain(&row), nil
 }
 
@@ -110,9 +117,11 @@ func (r *MessageRepo) InsertBatch(ctx context.Context, msgs []*domain.Message) e
 
 	for i := 0; i < len(msgs); i++ {
 		if _, err := br.Exec(); err != nil {
+			r.logger.Error().Err(err).Int("batch_index", i).Int("total", len(msgs)).Msg("batch insert failed")
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -120,8 +129,10 @@ func (r *MessageRepo) InsertBatch(ctx context.Context, msgs []*domain.Message) e
 func (r *MessageRepo) GetHistory(ctx context.Context, sessionID string) ([]*domain.Message, error) {
 	rows, err := r.db.Chat.GetSessionHistory(ctx, sessionID)
 	if err != nil {
+		r.logger.Error().Err(err).Str("session_id", sessionID).Msg("GetSessionHistory failed")
 		return nil, err
 	}
+
 	out := make([]*domain.Message, 0, len(rows))
 	for i := range rows {
 		out = append(out, chatMessageToDomain(&rows[i]))
@@ -133,8 +144,10 @@ func (r *MessageRepo) GetHistory(ctx context.Context, sessionID string) ([]*doma
 func (r *MessageRepo) GetUnlearned(ctx context.Context) ([]*domain.Message, error) {
 	rows, err := r.db.Chat.GetUnlearnedMessages(ctx)
 	if err != nil {
+		r.logger.Error().Err(err).Msg("GetUnlearnedMessages failed")
 		return nil, err
 	}
+
 	out := make([]*domain.Message, 0, len(rows))
 	for i := range rows {
 		out = append(out, unlearnedRowToDomain(&rows[i]))
@@ -147,20 +160,45 @@ func (r *MessageRepo) MarkLearned(ctx context.Context, ids []int64) error {
 	if len(ids) == 0 {
 		return nil
 	}
-	return r.db.Chat.MarkMessagesLearned(ctx, ids)
+
+	if err := r.db.Chat.MarkMessagesLearned(ctx, ids); err != nil {
+		r.logger.Error().Err(err).Int("count", len(ids)).Msg("MarkMessagesLearned failed")
+		return err
+	}
+	return nil
 }
 
 // DeleteBySession deletes all messages for the given session.
 func (r *MessageRepo) DeleteBySession(ctx context.Context, sessionID string) error {
-	return r.db.Chat.DeleteSessionMessages(ctx, sessionID)
+	if err := r.db.Chat.DeleteSessionMessages(ctx, sessionID); err != nil {
+		r.logger.Error().Err(err).Str("session_id", sessionID).Msg("DeleteSessionMessages failed")
+		return err
+	}
+	return nil
 }
 
 // DeleteAll deletes every chat message.
 func (r *MessageRepo) DeleteAll(ctx context.Context) error {
-	return r.db.Chat.DeleteAllMessages(ctx)
+	if err := r.db.Chat.DeleteAllMessages(ctx); err != nil {
+		r.logger.Error().Err(err).Msg("DeleteAllMessages failed")
+		return err
+	}
+	return nil
 }
 
 // ResetLearnedFlags resets all messages' is_learned flag to FALSE.
 func (r *MessageRepo) ResetLearnedFlags(ctx context.Context) error {
-	return r.db.Chat.ResetLearnedFlags(ctx)
+	if err := r.db.Chat.ResetLearnedFlags(ctx); err != nil {
+		r.logger.Error().Err(err).Msg("ResetLearnedFlags failed")
+		return err
+	}
+	return nil
+}
+
+// truncate truncates a string to a maximum length.
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }

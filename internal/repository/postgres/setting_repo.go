@@ -6,16 +6,21 @@ import (
 
 	settingsdb "github.com/hoainguyen222/DongDo_CS_V2/internal/repository/sqlcdb/settings"
 	"github.com/jackc/pgx/v5"
+	"github.com/rs/zerolog"
 )
 
 // SettingRepo implements domain.SettingRepository using sqlc-generated settings queries.
 type SettingRepo struct {
-	db *DB
+	db     *DB
+	logger zerolog.Logger
 }
 
 // NewSettingRepo constructs a SettingRepo using the shared DB handle.
 func NewSettingRepo(db *DB) *SettingRepo {
-	return &SettingRepo{db: db}
+	return &SettingRepo{
+		db:     db,
+		logger: logger.With().Str("repo", "setting").Logger(),
+	}
 }
 
 // Get returns the value for a settings key, falling back to the provided default
@@ -27,15 +32,21 @@ func (r *SettingRepo) Get(ctx context.Context, key, fallback string) (string, er
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fallback, nil
 		}
+		r.logger.Error().Err(err).Str("key", key).Msg("GetSetting failed")
 		return fallback, err
 	}
+
 	return val, nil
 }
 
 // Set upserts a settings key-value pair.
 func (r *SettingRepo) Set(ctx context.Context, key, value string) error {
-	return r.db.Settings.UpsertSetting(ctx, settingsdb.UpsertSettingParams{
+	if err := r.db.Settings.UpsertSetting(ctx, settingsdb.UpsertSettingParams{
 		SettingKey:   key,
 		SettingValue: value,
-	})
+	}); err != nil {
+		r.logger.Error().Err(err).Str("key", key).Msg("UpsertSetting failed")
+		return err
+	}
+	return nil
 }

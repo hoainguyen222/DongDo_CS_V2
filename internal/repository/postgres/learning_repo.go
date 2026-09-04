@@ -9,15 +9,20 @@ import (
 	learningdb "github.com/hoainguyen222/DongDo_CS_V2/internal/repository/sqlcdb/learning"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/rs/zerolog"
 )
 
 // LearningRepo implements domain.LearningRepository using sqlc-generated learning queries.
 type LearningRepo struct {
-	db *DB
+	db     *DB
+	logger zerolog.Logger
 }
 
 func NewLearningRepo(db *DB) *LearningRepo {
-	return &LearningRepo{db: db}
+	return &LearningRepo{
+		db:     db,
+		logger: logger.With().Str("repo", "learning").Logger(),
+	}
 }
 
 // learningQueueToDomain maps a sqlc LearningQueue to the domain entity.
@@ -55,8 +60,10 @@ func (r *LearningRepo) Add(ctx context.Context, sessionID, question, answer stri
 		CreatedBy: pgtype.Text{String: createdBy, Valid: createdBy != ""},
 	})
 	if err != nil {
+		r.logger.Error().Err(err).Str("session_id", sessionID).Msg("AddToLearningQueue failed")
 		return nil, err
 	}
+
 	return learningQueueToDomain(&row), nil
 }
 
@@ -68,11 +75,16 @@ func (r *LearningRepo) ListByStatus(ctx context.Context, status domain.LearnStat
 
 	if status != "" {
 		rows, err = r.db.Learning.ListLearningByStatus(ctx, status)
+		if err != nil {
+			r.logger.Error().Err(err).Str("status_filter", string(status)).Msg("ListLearningByStatus failed")
+			return nil, err
+		}
 	} else {
 		rows, err = r.db.Learning.ListAllLearning(ctx)
-	}
-	if err != nil {
-		return nil, err
+		if err != nil {
+			r.logger.Error().Err(err).Msg("ListAllLearning failed")
+			return nil, err
+		}
 	}
 
 	out := make([]*domain.LearningItem, 0, len(rows))
@@ -89,35 +101,53 @@ func (r *LearningRepo) Get(ctx context.Context, id int64) (*domain.LearningItem,
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
+		r.logger.Error().Err(err).Int64("learning_id", id).Msg("GetLearningItem failed")
 		return nil, err
 	}
+
 	return learningQueueToDomain(&row), nil
 }
 
 // UpdateContent updates the question and answer of a learning item.
 func (r *LearningRepo) UpdateContent(ctx context.Context, id int64, question, answer string) error {
-	return r.db.Learning.UpdateLearningContent(ctx, learningdb.UpdateLearningContentParams{
+	if err := r.db.Learning.UpdateLearningContent(ctx, learningdb.UpdateLearningContentParams{
 		Question: question,
 		Answer:   answer,
 		ID:       id,
-	})
+	}); err != nil {
+		r.logger.Error().Err(err).Int64("learning_id", id).Msg("UpdateLearningContent failed")
+		return err
+	}
+	return nil
 }
 
 // MarkStatus updates the status and approver of a learning item.
 func (r *LearningRepo) MarkStatus(ctx context.Context, id int64, status domain.LearnStatus, approvedBy string) error {
-	return r.db.Learning.MarkLearningStatus(ctx, learningdb.MarkLearningStatusParams{
+	if err := r.db.Learning.MarkLearningStatus(ctx, learningdb.MarkLearningStatusParams{
 		Column1:    status,
 		ApprovedBy: pgtype.Text{String: approvedBy, Valid: approvedBy != ""},
 		ID:         id,
-	})
+	}); err != nil {
+		r.logger.Error().Err(err).Int64("learning_id", id).Str("status", string(status)).Msg("MarkLearningStatus failed")
+		return err
+	}
+	return nil
 }
 
 // DeleteBySession removes PENDING learning items for the given session.
 func (r *LearningRepo) DeleteBySession(ctx context.Context, sessionID string) error {
-	return r.db.Learning.DeleteSessionLearning(ctx, pgtype.Text{String: sessionID, Valid: sessionID != ""})
+	if err := r.db.Learning.DeleteSessionLearning(ctx, pgtype.Text{String: sessionID, Valid: sessionID != ""}); err != nil {
+		r.logger.Error().Err(err).Str("session_id", sessionID).Msg("DeleteSessionLearning failed")
+		return err
+	}
+	return nil
 }
 
 // ClearAll removes all learning queue items.
 func (r *LearningRepo) ClearAll(ctx context.Context) error {
-	return r.db.Learning.ClearAllLearning(ctx)
+	if err := r.db.Learning.ClearAllLearning(ctx); err != nil {
+		r.logger.Error().Err(err).Msg("ClearAllLearning failed")
+		return err
+	}
+	return nil
 }

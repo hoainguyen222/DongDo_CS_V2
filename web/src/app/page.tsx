@@ -318,14 +318,28 @@ export default function CustomerChatPage() {
   };
 
   // ============================================================
-  // PRE-CHAT SCREEN
+  // PRE-CHAT SCREEN — redirect sang /login nếu chưa có guest session
   // ============================================================
-  if (!guest) {
+  const [hasHydrated, setHasHydrated] = useState(false);
+
+  useEffect(() => {
+    // Đánh dấu hydration xong (client-side only)
+    setHasHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    // Chỉ redirect SAU khi hydration xong và confirmed không có session
+    if (hasHydrated && !guest) {
+      router.replace('/login');
+    }
+  }, [hasHydrated, guest, router]);
+
+  // Hiển thị loading trong khi hydration hoặc redirect
+  if (!hasHydrated || !guest) {
     return (
       <div className={styles.preChat}>
         <div className={styles.blobNavy} />
         <div className={styles.blobRed} />
-
         <div className={styles.preChatCard}>
           <div className={styles.preChatHeader}>
             <div className={styles.brandBlock}>
@@ -346,19 +360,10 @@ export default function CustomerChatPage() {
                 Cổng Tư Vấn Hàng Hóa Phái Sinh &amp; DDP Invest
               </p>
             </div>
-            {isAuthed && (
-              <button
-                onClick={handleLogout}
-                className={styles.btnLogout}
-                title="Đăng xuất"
-                aria-label="Đăng xuất"
-              >
-                <LogOut style={{ width: 14, height: 14 }} />
-                <span>Đăng xuất</span>
-              </button>
-            )}
           </div>
-          <GuestRegisterForm onSubmit={handleRegister} isLoading={false} error={registerError} />
+          <p style={{ color: '#cbd5e1', textAlign: 'center', marginTop: '20px' }}>
+            Đang chuyển hướng...
+          </p>
           <div className={styles.footerNote}>
             <ShieldCheck style={{ width: 14, height: 14, color: '#10b981' }} />
             <span>Hệ thống bảo mật dữ liệu khách hàng 100%</span>

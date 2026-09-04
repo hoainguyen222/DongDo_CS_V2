@@ -3,8 +3,8 @@ package ws
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -12,6 +12,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/usecase"
+	"github.com/rs/zerolog"
 )
 
 const (
@@ -41,6 +42,30 @@ type Client struct {
 	voiceUC   *usecase.VoiceUseCase
 	stateMgr  domain.StateManager
 	eventBus  domain.EventBus
+	logger    zerolog.Logger
+}
+
+func NewClient(hub *Hub, conn *websocket.Conn, sessionID, userID, userRole string, chatUC *usecase.ChatUseCase, voiceUC *usecase.VoiceUseCase, stateMgr domain.StateManager, eventBus domain.EventBus) *Client {
+	logger := zerolog.New(os.Stderr).With().Timestamp().Logger()
+	logger = logger.With().
+		Str("component", "ws_client").
+		Str("session_id", sessionID).
+		Str("user_id", userID).
+		Logger()
+
+	return &Client{
+		hub:       hub,
+		conn:      conn,
+		send:      make(chan *domain.WSEvent, 256),
+		sessionID: sessionID,
+		userID:    userID,
+		userRole:  userRole,
+		chatUC:    chatUC,
+		voiceUC:   voiceUC,
+		stateMgr:  stateMgr,
+		eventBus:  eventBus,
+		logger:    logger,
+	}
 }
 
 // ReadPump pumps messages from the websocket connection to the hub.
@@ -63,7 +88,7 @@ func (c *Client) ReadPump() {
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("WS read error: %v", err)
+				c.logger.Warn().Err(err).Msg("WS read error - unexpected close")
 			}
 			break
 		}
@@ -77,7 +102,7 @@ func (c *Client) ReadPump() {
 		}
 
 		if err := json.Unmarshal(message, &incoming); err != nil {
-			log.Printf("Invalid WS JSON: %v", err)
+			c.logger.Warn().Err(err).Msg("Invalid WS JSON message")
 			continue
 		}
 
@@ -86,7 +111,9 @@ func (c *Client) ReadPump() {
 
 		switch incoming.Type {
 		case domain.WSEventTyping:
-			_ = c.stateMgr.SetTyping(ctx, c.sessionID, c.userID)
+			if err := c.stateMgr.SetTyping(ctx, c.sessionID, c.userID); err != nil {
+				c.logger.Warn().Err(err).Msg("Failed to set typing state")
+			}
 			c.hub.BroadcastToSession(c.sessionID, &domain.WSEvent{
 				Type:      domain.WSEventTyping,
 				SessionID: c.sessionID,
@@ -109,12 +136,10 @@ func (c *Client) ReadPump() {
 				calleeType = domain.CallerGuest
 				calleeID = targetSession
 			}
+
 			if c.voiceUC != nil {
-				call, err := c.voiceUC.InitiateCall(ctx, targetSession, callerType, callerID, calleeType, calleeID)
-				if err != nil {
-					log.Printf("⚠️ Voice call initiate error: %v", err)
-				} else if call != nil {
-					log.Printf("📞 Voice call initiated: ID=%d, Session=%s", call.ID, targetSession)
+				if _, err := c.voiceUC.InitiateCall(ctx, targetSession, callerType, callerID, calleeType, calleeID); err != nil {
+					c.logger.Error().Err(err).Str("session_id", targetSession).Msg("Voice call initiate error")
 				}
 			}
 			c.hub.BroadcastToSessionExcept(targetSession, &domain.WSEvent{
@@ -124,14 +149,15 @@ func (c *Client) ReadPump() {
 				SenderID:  c.userID,
 				Timestamp: time.Now(),
 			}, c.userID)
-			// Also notify admin_inbox if a guest is calling
 			if callerType == domain.CallerGuest {
-				_ = c.eventBus.PublishWS(ctx, "admin_inbox", domain.WSEventCallRing, map[string]interface{}{
+				if err := c.eventBus.PublishWS(ctx, "admin_inbox", domain.WSEventCallRing, map[string]interface{}{
 					"session_id":  targetSession,
 					"caller_id":   callerID,
 					"caller_type": callerType,
 					"offer":       incoming.Payload,
-				}, c.userID)
+				}, c.userID); err != nil {
+					c.logger.Warn().Err(err).Msg("Failed to publish call ring")
+				}
 			}
 
 		case domain.WSEventCallEnd:
@@ -139,6 +165,7 @@ func (c *Client) ReadPump() {
 			if incoming.SessionID != "" {
 				targetSession = incoming.SessionID
 			}
+
 			if c.voiceUC != nil {
 				calls, _ := c.voiceUC.GetCallsBySession(ctx, targetSession)
 				if len(calls) > 0 {
@@ -148,7 +175,9 @@ func (c *Client) ReadPump() {
 						if dur < 1 {
 							dur = 1
 						}
-						_ = c.voiceUC.EndCall(ctx, lastCall.ID, targetSession, dur, "")
+						if err := c.voiceUC.EndCall(ctx, lastCall.ID, targetSession, dur, ""); err != nil {
+							c.logger.Error().Err(err).Msg("Failed to end call")
+						}
 					}
 				}
 			}
@@ -159,9 +188,11 @@ func (c *Client) ReadPump() {
 				SenderID:  c.userID,
 				Timestamp: time.Now(),
 			}, c.userID)
-			_ = c.eventBus.PublishWS(ctx, "admin_inbox", domain.WSEventCallEnd, map[string]interface{}{
+			if err := c.eventBus.PublishWS(ctx, "admin_inbox", domain.WSEventCallEnd, map[string]interface{}{
 				"session_id": targetSession,
-			}, c.userID)
+			}, c.userID); err != nil {
+				c.logger.Warn().Err(err).Msg("Failed to publish call end")
+			}
 
 		case domain.WSEventCallAnswer, domain.WSEventCallICE:
 			targetSession := c.sessionID
@@ -198,13 +229,13 @@ func (c *Client) WritePump() {
 
 			w, err := c.conn.NextWriter(websocket.TextMessage)
 			if err != nil {
+				c.logger.Error().Err(err).Msg("WS NextWriter error")
 				return
 			}
 
 			eventBytes, _ := json.Marshal(event)
 			_, _ = w.Write(eventBytes)
 
-			// Add queued events to the current websocket message
 			n := len(c.send)
 			for i := 0; i < n; i++ {
 				_, _ = w.Write([]byte{'\n'})
@@ -213,12 +244,14 @@ func (c *Client) WritePump() {
 			}
 
 			if err := w.Close(); err != nil {
+				c.logger.Error().Err(err).Msg("WS write batch close error")
 				return
 			}
 
 		case <-ticker.C:
 			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				c.logger.Error().Err(err).Msg("WS Ping failed")
 				return
 			}
 		}
@@ -233,6 +266,9 @@ func ServeWS(
 	stateMgr domain.StateManager,
 	eventBus domain.EventBus,
 ) gin.HandlerFunc {
+	logger := zerolog.New(os.Stderr).With().Timestamp().Logger()
+	logger = logger.With().Str("component", "ws_handler").Logger()
+
 	return func(c *gin.Context) {
 		sessionID := c.Query("session_id")
 		if sessionID == "" {
@@ -251,9 +287,16 @@ func ServeWS(
 
 		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
-			log.Printf("WS upgrade error: %v", err)
+			logger.Error().Err(err).Str("session_id", sessionID).Msg("WS upgrade error")
 			return
 		}
+
+		clientLogger := zerolog.New(os.Stderr).With().Timestamp().Logger()
+		clientLogger = clientLogger.With().
+			Str("component", "ws_client").
+			Str("session_id", sessionID).
+			Str("user_id", userID).
+			Logger()
 
 		client := &Client{
 			hub:       hub,
@@ -266,6 +309,7 @@ func ServeWS(
 			voiceUC:   voiceUC,
 			stateMgr:  stateMgr,
 			eventBus:  eventBus,
+			logger:    clientLogger,
 		}
 
 		client.hub.register <- client
@@ -273,4 +317,12 @@ func ServeWS(
 		go client.WritePump()
 		go client.ReadPump()
 	}
+}
+
+// truncateString truncates a string to the specified length
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }

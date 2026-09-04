@@ -12,16 +12,21 @@ import (
 	partnerdb "github.com/hoainguyen222/DongDo_CS_V2/internal/repository/sqlcdb/partner"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/rs/zerolog"
 )
 
 // PartnerRepo implements domain.PartnerRepository using sqlc-generated partner queries.
 type PartnerRepo struct {
-	db *DB
+	db     *DB
+	logger zerolog.Logger
 }
 
 // NewPartnerRepo constructs a PartnerRepo using the shared DB handle.
 func NewPartnerRepo(db *DB) *PartnerRepo {
-	return &PartnerRepo{db: db}
+	return &PartnerRepo{
+		db:     db,
+		logger: logger.With().Str("repo", "partner").Logger(),
+	}
 }
 
 // ============================================================
@@ -34,6 +39,7 @@ func (r *PartnerRepo) GetDashboardKpi(ctx context.Context, startDate, endDate ti
 		CreatedAt_2: endDate,
 	})
 	if err != nil {
+		r.logger.Error().Err(err).Msg("failed to get dashboard KPI summary")
 		return nil, err
 	}
 
@@ -53,6 +59,7 @@ func (r *PartnerRepo) GetDashboardKpi(ctx context.Context, startDate, endDate ti
 
 	summary.AvgResponseTime = "1.2s"
 	summary.CSATVal = fmt.Sprintf("%.1f / 5.0", row.AvgCsat)
+
 	return summary, nil
 }
 
@@ -62,6 +69,7 @@ func (r *PartnerRepo) GetDashboardAutomationTrend(ctx context.Context, startDate
 		CreatedAt_2: endDate,
 	})
 	if err != nil {
+		r.logger.Error().Err(err).Msg("failed to get dashboard automation trend")
 		return nil, err
 	}
 
@@ -75,6 +83,7 @@ func (r *PartnerRepo) GetDashboardAutomationTrend(ctx context.Context, startDate
 			HandoffCases: int(row.HandoffCases),
 		})
 	}
+
 	return list, nil
 }
 
@@ -84,19 +93,20 @@ func (r *PartnerRepo) GetRecentCompletedChats(ctx context.Context, limit, offset
 		Offset: int32(offset),
 	})
 	if err != nil {
+		r.logger.Error().Err(err).Msg("failed to get recent completed chats")
 		return nil, err
 	}
 
 	list := make([]*domain.ChatCase, 0, len(rows))
 	for _, row := range rows {
 		c := &domain.ChatCase{
-			ID:             row.ID,
-			SessionID:      row.SessionID,
-			CustomerName:   row.CustomerName,
-			CustomerPhone:  row.CustomerPhone,
-			Status:         row.Status,
-			CreatedAt:      row.CreatedAt,
-			UpdatedAt:      row.UpdatedAt,
+			ID:            row.ID,
+			SessionID:     row.SessionID,
+			CustomerName:  row.CustomerName,
+			CustomerPhone: row.CustomerPhone,
+			Status:        row.Status,
+			CreatedAt:     row.CreatedAt,
+			UpdatedAt:     row.UpdatedAt,
 		}
 		if row.GuestID.Valid {
 			id := uuid.UUID(row.GuestID.Bytes)
@@ -113,6 +123,7 @@ func (r *PartnerRepo) GetRecentCompletedChats(ctx context.Context, limit, offset
 		}
 		list = append(list, c)
 	}
+
 	return list, nil
 }
 
@@ -123,6 +134,7 @@ func (r *PartnerRepo) GetRecentCompletedChats(ctx context.Context, limit, offset
 func (r *PartnerRepo) ListQuickTemplates(ctx context.Context) ([]*domain.QuickTemplate, error) {
 	rows, err := r.db.Partner.ListQuickTemplates(ctx)
 	if err != nil {
+		r.logger.Error().Err(err).Msg("failed to list quick templates")
 		return nil, err
 	}
 
@@ -138,6 +150,7 @@ func (r *PartnerRepo) ListQuickTemplates(ctx context.Context) ([]*domain.QuickTe
 			UpdatedAt: row.UpdatedAt,
 		})
 	}
+
 	return list, nil
 }
 
@@ -149,8 +162,10 @@ func (r *PartnerRepo) CreateQuickTemplate(ctx context.Context, t *domain.QuickTe
 		CreatedBy: textFromString(t.CreatedBy),
 	})
 	if err != nil {
+		r.logger.Error().Err(err).Msg("failed to create quick template")
 		return nil, err
 	}
+
 	return &domain.QuickTemplate{
 		ID:        row.ID,
 		Title:     row.Title,
@@ -163,16 +178,26 @@ func (r *PartnerRepo) CreateQuickTemplate(ctx context.Context, t *domain.QuickTe
 }
 
 func (r *PartnerRepo) UpdateQuickTemplate(ctx context.Context, id int64, title, category, content string) error {
-	return r.db.Partner.UpdateQuickTemplate(ctx, partnerdb.UpdateQuickTemplateParams{
+	if err := r.db.Partner.UpdateQuickTemplate(ctx, partnerdb.UpdateQuickTemplateParams{
 		Title:    title,
 		Category: category,
 		Content:  content,
 		ID:       id,
-	})
+	}); err != nil {
+		r.logger.Error().Err(err).Msg("failed to update quick template")
+		return err
+	}
+
+	return nil
 }
 
 func (r *PartnerRepo) DeleteQuickTemplate(ctx context.Context, id int64) error {
-	return r.db.Partner.DeleteQuickTemplate(ctx, id)
+	if err := r.db.Partner.DeleteQuickTemplate(ctx, id); err != nil {
+		r.logger.Error().Err(err).Msg("failed to delete quick template")
+		return err
+	}
+
+	return nil
 }
 
 // ============================================================
@@ -185,6 +210,7 @@ func (r *PartnerRepo) GetLatestSystemPromptHistory(ctx context.Context) (*domain
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
+		r.logger.Error().Err(err).Msg("failed to get latest system prompt history")
 		return nil, err
 	}
 
@@ -192,6 +218,7 @@ func (r *PartnerRepo) GetLatestSystemPromptHistory(ctx context.Context) (*domain
 	if v, convErr := row.Temperature.Float64Value(); convErr == nil {
 		temp = v.Float64
 	}
+
 	return &domain.SystemPromptHistory{
 		ID:           row.ID,
 		SystemPrompt: row.SystemPrompt,
@@ -205,17 +232,20 @@ func (r *PartnerRepo) GetLatestSystemPromptHistory(ctx context.Context) (*domain
 func (r *PartnerRepo) InsertSystemPromptHistory(ctx context.Context, p *domain.SystemPromptHistory) (*domain.SystemPromptHistory, error) {
 	row, err := r.db.Partner.InsertSystemPromptHistory(ctx, partnerdb.InsertSystemPromptHistoryParams{
 		SystemPrompt: p.SystemPrompt,
-		LlmModel:    p.LLMModel,
-		Temperature: numericFromFloat64(p.Temperature),
-		CreatedBy:   textFromString(p.CreatedBy),
+		LlmModel:     p.LLMModel,
+		Temperature:  numericFromFloat64(p.Temperature),
+		CreatedBy:    textFromString(p.CreatedBy),
 	})
 	if err != nil {
+		r.logger.Error().Err(err).Msg("failed to insert system prompt history")
 		return nil, err
 	}
+
 	var temp float64
 	if v, convErr := row.Temperature.Float64Value(); convErr == nil {
 		temp = v.Float64
 	}
+
 	return &domain.SystemPromptHistory{
 		ID:           row.ID,
 		SystemPrompt: row.SystemPrompt,
@@ -233,6 +263,7 @@ func (r *PartnerRepo) InsertSystemPromptHistory(ctx context.Context, p *domain.S
 func (r *PartnerRepo) ListRolePermissions(ctx context.Context) ([]*domain.RolePermission, error) {
 	rows, err := r.db.Partner.ListRolePermissions(ctx)
 	if err != nil {
+		r.logger.Error().Err(err).Msg("failed to list role permissions")
 		return nil, err
 	}
 
@@ -242,6 +273,7 @@ func (r *PartnerRepo) ListRolePermissions(ctx context.Context) ([]*domain.RolePe
 		}
 		rows, err = r.db.Partner.ListRolePermissions(ctx)
 		if err != nil {
+			r.logger.Error().Err(err).Msg("failed to list role permissions after seeding")
 			return nil, err
 		}
 	}
@@ -258,6 +290,7 @@ func (r *PartnerRepo) ListRolePermissions(ctx context.Context) ([]*domain.RolePe
 			UpdatedAt:       row.UpdatedAt,
 		})
 	}
+
 	return list, nil
 }
 
@@ -275,13 +308,18 @@ func (r *PartnerRepo) UpsertRolePermission(ctx context.Context, p *domain.RolePe
 	canView := permLevel != "none"
 	canEdit := permLevel == "act"
 
-	return r.db.Partner.UpsertRolePermission(ctx, partnerdb.UpsertRolePermissionParams{
+	if err := r.db.Partner.UpsertRolePermission(ctx, partnerdb.UpsertRolePermissionParams{
 		RoleName:        p.RoleName,
 		FeatureKey:      p.FeatureKey,
 		PermissionLevel: permLevel,
 		CanView:         canView,
 		CanEdit:         canEdit,
-	})
+	}); err != nil {
+		r.logger.Error().Err(err).Msg("failed to upsert role permission")
+		return err
+	}
+
+	return nil
 }
 
 func (r *PartnerRepo) seedDefaultRolePermissions(ctx context.Context) error {
@@ -298,6 +336,7 @@ func (r *PartnerRepo) seedDefaultRolePermissions(ctx context.Context) error {
 		"config",
 	}
 
+	seededCount := 0
 	for _, role := range roles {
 		for _, feat := range features {
 			perm := "act"
@@ -326,10 +365,13 @@ func (r *PartnerRepo) seedDefaultRolePermissions(ctx context.Context) error {
 				CanView:         canView,
 				CanEdit:         canEdit,
 			}); err != nil {
+				r.logger.Error().Err(err).Msg("failed to seed role permission")
 				return err
 			}
+			seededCount++
 		}
 	}
+
 	return nil
 }
 
@@ -344,8 +386,10 @@ func (r *PartnerRepo) InsertAuditLog(ctx context.Context, log *domain.SystemAudi
 		PerformedBy: textFromString(log.PerformedBy),
 	})
 	if err != nil {
+		r.logger.Error().Err(err).Msg("failed to insert audit log")
 		return nil, err
 	}
+
 	return &domain.SystemAuditLog{
 		ID:          row.ID,
 		ActionType:  row.ActionType,
@@ -361,6 +405,7 @@ func (r *PartnerRepo) ListAuditLogs(ctx context.Context, limit, offset int) ([]*
 		Offset: int32(offset),
 	})
 	if err != nil {
+		r.logger.Error().Err(err).Msg("failed to list audit logs")
 		return nil, err
 	}
 
@@ -374,6 +419,7 @@ func (r *PartnerRepo) ListAuditLogs(ctx context.Context, limit, offset int) ([]*
 			CreatedAt:   row.CreatedAt,
 		})
 	}
+
 	return list, nil
 }
 
@@ -387,6 +433,7 @@ func (r *PartnerRepo) GetGeneralOverviewReport(ctx context.Context, startDate, e
 		CreatedAt_2: endDate,
 	})
 	if err != nil {
+		r.logger.Error().Err(err).Msg("failed to get general overview report")
 		return nil, err
 	}
 
@@ -402,6 +449,7 @@ func (r *PartnerRepo) GetGeneralOverviewReport(ctx context.Context, startDate, e
 	} else {
 		m.ResolutionRate = "0%"
 	}
+
 	return m, nil
 }
 
@@ -411,15 +459,16 @@ func (r *PartnerRepo) GetAIPerformanceReport(ctx context.Context, startDate, end
 		CreatedAt_2: endDate,
 	})
 	if err != nil {
+		r.logger.Error().Err(err).Msg("failed to get AI performance report")
 		return nil, err
 	}
 
 	m := &domain.AIPerformanceMetrics{
-		TotalCases:       int(row.TotalCases),
-		AIResolvedCases:  int(row.AiResolvedCases),
-		HandoffCases:     int(row.HandoffCases),
-		AvgAICSAT:        row.AvgAiCsat,
-		AvgResponseTime:  "1.18s",
+		TotalCases:      int(row.TotalCases),
+		AIResolvedCases: int(row.AiResolvedCases),
+		HandoffCases:    int(row.HandoffCases),
+		AvgAICSAT:       row.AvgAiCsat,
+		AvgResponseTime: "1.18s",
 	}
 
 	if row.TotalCases > 0 {
@@ -429,6 +478,7 @@ func (r *PartnerRepo) GetAIPerformanceReport(ctx context.Context, startDate, end
 		m.AIResolutionRate = "0%"
 		m.HandoffRate = "0%"
 	}
+
 	return m, nil
 }
 
@@ -438,6 +488,7 @@ func (r *PartnerRepo) GetStaffPerformanceReport(ctx context.Context, startDate, 
 		CreatedAt_2: endDate,
 	})
 	if err != nil {
+		r.logger.Error().Err(err).Msg("failed to get staff performance report")
 		return nil, err
 	}
 
@@ -445,8 +496,8 @@ func (r *PartnerRepo) GetStaffPerformanceReport(ctx context.Context, startDate, 
 	for _, row := range rows {
 		list = append(list, &domain.StaffPerformanceItem{
 			StaffUsername:     row.StaffUsername,
-			StaffFullName:    textToString(row.StaffFullName),
-			StaffRole:        row.StaffRole,
+			StaffFullName:     textToString(row.StaffFullName),
+			StaffRole:         row.StaffRole,
 			TotalCasesHandled: int(row.TotalCasesHandled),
 			ResolvedCases:     int(row.ResolvedCases),
 			AvgResponseTime:   "26s",
@@ -455,6 +506,7 @@ func (r *PartnerRepo) GetStaffPerformanceReport(ctx context.Context, startDate, 
 			Status:            "Hoạt động",
 		})
 	}
+
 	return list, nil
 }
 
@@ -464,6 +516,7 @@ func (r *PartnerRepo) GetCXReport(ctx context.Context, startDate, endDate time.T
 		CreatedAt_2: endDate,
 	})
 	if err != nil {
+		r.logger.Error().Err(err).Msg("failed to get CX metrics report")
 		return nil, err
 	}
 
@@ -481,6 +534,7 @@ func (r *PartnerRepo) GetCXReport(ctx context.Context, startDate, endDate time.T
 		m.NSIIndex = "0%"
 		m.FCRRate = "0%"
 	}
+
 	return m, nil
 }
 
@@ -493,8 +547,10 @@ func (r *PartnerRepo) InsertCSATFeedback(ctx context.Context, fb *domain.CSATFee
 		StaffUsername: textFromString(fb.StaffUsername),
 	})
 	if err != nil {
+		r.logger.Error().Err(err).Msg("failed to insert CSAT feedback")
 		return nil, err
 	}
+
 	return &domain.CSATFeedback{
 		ID:            row.ID,
 		SessionID:     row.SessionID,
@@ -502,7 +558,7 @@ func (r *PartnerRepo) InsertCSATFeedback(ctx context.Context, fb *domain.CSATFee
 		FeedbackText:  textToString(row.FeedbackText),
 		TargetType:    row.TargetType,
 		StaffUsername: textToString(row.StaffUsername),
-		CreatedAt:    row.CreatedAt,
+		CreatedAt:     row.CreatedAt,
 	}, nil
 }
 
@@ -512,6 +568,7 @@ func (r *PartnerRepo) GetHourlyOperationalLoad(ctx context.Context, startDate, e
 		CreatedAt_2: endDate,
 	})
 	if err != nil {
+		r.logger.Error().Err(err).Msg("failed to get hourly operational load")
 		return nil, err
 	}
 
@@ -522,6 +579,7 @@ func (r *PartnerRepo) GetHourlyOperationalLoad(ctx context.Context, startDate, e
 			TotalMessages: int(row.TotalMessages),
 		})
 	}
+
 	return list, nil
 }
 
@@ -531,6 +589,7 @@ func (r *PartnerRepo) GetIssueAnalysisReport(ctx context.Context, startDate, end
 		CreatedAt_2: endDate,
 	})
 	if err != nil {
+		r.logger.Error().Err(err).Msg("failed to get issue analysis report")
 		return nil, err
 	}
 
@@ -558,12 +617,14 @@ func (r *PartnerRepo) GetIssueAnalysisReport(ctx context.Context, startDate, end
 		}
 		list = append(list, item)
 	}
+
 	return list, nil
 }
 
 func (r *PartnerRepo) GetAILearningReportStats(ctx context.Context) (*domain.AILearningReportStats, error) {
 	row, err := r.db.Partner.GetAILearningReportStats(ctx)
 	if err != nil {
+		r.logger.Error().Err(err).Msg("failed to get AI learning report stats")
 		return nil, err
 	}
 
@@ -579,6 +640,7 @@ func (r *PartnerRepo) GetAILearningReportStats(ctx context.Context) (*domain.AIL
 	} else {
 		m.ApprovalRate = "0%"
 	}
+
 	return m, nil
 }
 
@@ -588,7 +650,6 @@ func (r *PartnerRepo) GetAILearningReportStats(ctx context.Context) (*domain.AIL
 
 func (r *PartnerRepo) CreateSystemError(ctx context.Context, errRecord *domain.SystemErrorRecord) (*domain.SystemErrorRecord, error) {
 	if err := r.db.Partner.PurgeOldSystemErrors(ctx); err != nil {
-		return nil, err
 	}
 
 	createdAt := errRecord.CreatedAt
@@ -606,20 +667,22 @@ func (r *PartnerRepo) CreateSystemError(ctx context.Context, errRecord *domain.S
 		SuggestedFix: textFromString(errRecord.SuggestedFix),
 		CreatedAt:    createdAt,
 	}); err != nil {
+		r.logger.Error().Err(err).Msg("failed to create system error")
 		return nil, err
 	}
 
 	errRecord.CreatedAt = createdAt
+
 	return errRecord, nil
 }
 
 func (r *PartnerRepo) ListSystemErrors(ctx context.Context) ([]*domain.SystemErrorRecord, error) {
 	if err := r.db.Partner.PurgeOldSystemErrors(ctx); err != nil {
-		return nil, err
 	}
 
 	rows, err := r.db.Partner.ListSystemErrors(ctx)
 	if err != nil {
+		r.logger.Error().Err(err).Msg("failed to list system errors")
 		return nil, err
 	}
 
@@ -636,11 +699,17 @@ func (r *PartnerRepo) ListSystemErrors(ctx context.Context) ([]*domain.SystemErr
 			CreatedAt:    row.CreatedAt,
 		})
 	}
+
 	return list, nil
 }
 
 func (r *PartnerRepo) MarkSystemErrorHandled(ctx context.Context, id string) error {
-	return r.db.Partner.MarkSystemErrorHandled(ctx, id)
+	if err := r.db.Partner.MarkSystemErrorHandled(ctx, id); err != nil {
+		r.logger.Error().Err(err).Msg("failed to mark system error as handled")
+		return err
+	}
+
+	return nil
 }
 
 // textToString converts a pgtype.Text to a Go string, returning "" when null.
@@ -667,5 +736,3 @@ func numericFromFloat64(v float64) pgtype.Numeric {
 	}
 	return pgtype.Numeric{Valid: false}
 }
-
-

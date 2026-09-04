@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
+	"github.com/rs/zerolog"
 )
 
 type ChatUseCase struct {
@@ -15,6 +16,7 @@ type ChatUseCase struct {
 	caseRepo    domain.CaseRepository
 	eventBus    domain.EventBus
 	stateMgr    domain.StateManager
+	logger      zerolog.Logger
 }
 
 func NewChatUseCase(
@@ -28,6 +30,7 @@ func NewChatUseCase(
 		caseRepo:    caseRepo,
 		eventBus:    eventBus,
 		stateMgr:    stateMgr,
+		logger:      zerolog.New(nil).With().Timestamp().Str("usecase", "chat").Logger(),
 	}
 }
 
@@ -46,17 +49,14 @@ func (uc *ChatUseCase) SendGuestMessage(ctx context.Context, sessionID, customer
 		CreatedAt:   time.Now(),
 	}
 
-	// 1. Direct or batch save message
 	savedMsg, err := uc.messageRepo.Insert(ctx, msg)
 	if err != nil {
+		uc.logger.Error().Err(err).Str("session_id", sessionID).
+			Msg("failed to save guest message")
 		return nil, fmt.Errorf("failed to save message: %w", err)
 	}
 
-	// 2. Fetch existing case
-	existingCase, err := uc.caseRepo.Get(ctx, sessionID)
-	if err != nil {
-		return nil, err
-	}
+	existingCase, _ := uc.caseRepo.Get(ctx, sessionID)
 
 	caseStatus := domain.StatusAIActive
 	var assignedCS string
@@ -75,13 +75,12 @@ func (uc *ChatUseCase) SendGuestMessage(ctx context.Context, sessionID, customer
 		}
 	}
 
-	// 3. Upsert case
-	_, err = uc.caseRepo.Upsert(ctx, sessionID, nil, targetCustomerName, targetCustomerPhone, caseStatus, assignedCS, content)
-	if err != nil {
+	if _, err = uc.caseRepo.Upsert(ctx, sessionID, nil, targetCustomerName, targetCustomerPhone, caseStatus, assignedCS, content); err != nil {
+		uc.logger.Error().Err(err).Str("session_id", sessionID).
+			Msg("failed to upsert case")
 		return nil, fmt.Errorf("failed to upsert case: %w", err)
 	}
 
-	// 4. Publish to WebSocket stream to update UI in real-time
 	_ = uc.eventBus.PublishWS(ctx, sessionID, domain.WSEventMessage, savedMsg, targetCustomerName)
 	_ = uc.eventBus.PublishWS(ctx, "admin_inbox", domain.WSEventCaseUpdate, map[string]interface{}{
 		"session_id":     sessionID,
@@ -91,7 +90,7 @@ func (uc *ChatUseCase) SendGuestMessage(ctx context.Context, sessionID, customer
 		"status":         caseStatus,
 	}, targetCustomerName)
 
-	// 5. If Human CS is actively chatting, increment unread and DO NOT trigger AI
+	// If Human CS is actively chatting, increment unread and DO NOT trigger AI
 	if caseStatus == domain.StatusHumanCSActive && assignedCS != "" {
 		_, _ = uc.stateMgr.IncrementUnread(ctx, sessionID, assignedCS)
 		_ = uc.eventBus.PublishWS(ctx, "admin_inbox", domain.WSEventUnread, map[string]interface{}{
@@ -101,7 +100,6 @@ func (uc *ChatUseCase) SendGuestMessage(ctx context.Context, sessionID, customer
 		return savedMsg, nil
 	}
 
-	// 6. Otherwise, publish AI Job to stream:ai for asynchronous processing
 	_ = uc.eventBus.PublishAIJob(ctx, sessionID, content, customerName, clientMsgID)
 
 	return savedMsg, nil
@@ -128,10 +126,11 @@ func (uc *ChatUseCase) SendCSReply(ctx context.Context, sessionID, csUsername, c
 
 	savedMsg, err := uc.messageRepo.Insert(ctx, msg)
 	if err != nil {
+		uc.logger.Error().Err(err).Str("session_id", sessionID).
+			Msg("failed to save CS reply")
 		return nil, fmt.Errorf("failed to save CS message: %w", err)
 	}
 
-	// Update case to HUMAN_CS_ACTIVE preserving customer details
 	existingCase, _ := uc.caseRepo.Get(ctx, sessionID)
 	targetCustomerName := ""
 	targetCustomerPhone := ""
@@ -141,15 +140,15 @@ func (uc *ChatUseCase) SendCSReply(ctx context.Context, sessionID, csUsername, c
 		targetCustomerPhone = existingCase.CustomerPhone
 		targetGuestID = existingCase.GuestID
 	}
-	_, err = uc.caseRepo.Upsert(ctx, sessionID, targetGuestID, targetCustomerName, targetCustomerPhone, domain.StatusHumanCSActive, senderName, content)
-	if err != nil {
+
+	if _, err = uc.caseRepo.Upsert(ctx, sessionID, targetGuestID, targetCustomerName, targetCustomerPhone, domain.StatusHumanCSActive, senderName, content); err != nil {
+		uc.logger.Error().Err(err).Str("session_id", sessionID).
+			Msg("failed to update case status after CS reply")
 		return nil, err
 	}
 
-	// Clear unread count
 	_ = uc.stateMgr.ClearUnread(ctx, sessionID, csUsername)
 
-	// Broadcast via WebSocket
 	_ = uc.eventBus.PublishWS(ctx, sessionID, domain.WSEventMessage, savedMsg, csUsername)
 	_ = uc.eventBus.PublishWS(ctx, "admin_inbox", domain.WSEventCaseUpdate, map[string]interface{}{
 		"session_id":     sessionID,
@@ -160,6 +159,9 @@ func (uc *ChatUseCase) SendCSReply(ctx context.Context, sessionID, csUsername, c
 		"last_message":   content,
 	}, csUsername)
 
+	uc.logger.Info().Str("session_id", sessionID).Str("cs_username", csUsername).
+		Msg("CS reply sent")
+
 	return savedMsg, nil
 }
 
@@ -167,13 +169,25 @@ func (uc *ChatUseCase) SendCSReply(ctx context.Context, sessionID, csUsername, c
 func (uc *ChatUseCase) GetHistory(ctx context.Context, sessionID string) ([]*domain.Message, *domain.ChatCase, error) {
 	messages, err := uc.messageRepo.GetHistory(ctx, sessionID)
 	if err != nil {
+		uc.logger.Error().Err(err).Str("session_id", sessionID).
+			Msg("failed to fetch message history")
 		return nil, nil, err
 	}
 
 	chatCase, err := uc.caseRepo.Get(ctx, sessionID)
 	if err != nil {
-		return nil, nil, err
+		uc.logger.Warn().Err(err).Str("session_id", sessionID).
+			Msg("failed to fetch case details (non-fatal)")
+		return messages, nil, nil
 	}
 
 	return messages, chatCase, nil
+}
+
+// Helper function to convert clientMsgID to string safely
+func clientMsgIDStr(id *uuid.UUID) string {
+	if id == nil {
+		return ""
+	}
+	return id.String()
 }
