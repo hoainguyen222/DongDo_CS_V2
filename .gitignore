@@ -25,6 +25,9 @@ chat_history.db-wal
 *.ogg
 *.wav
 
+# Asterisk call logs (generated at runtime, not part of source)
+logs/asterisk/
+
 # Node & Next.js
 node_modules/
 /web/node_modules/
