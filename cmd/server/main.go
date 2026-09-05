@@ -71,6 +71,7 @@ func main() {
 	var voiceRepo domain.VoiceCallRepository
 	var analyticsRepo domain.AnalyticsRepository
 	var partnerRepo domain.PartnerRepository
+	var tagRepo domain.ChatTagRepository
 
 	var pgDB *repoPostgres.DB
 	var err error
@@ -108,6 +109,7 @@ func main() {
 	voiceRepo = repoPostgres.NewVoiceCallRepo(pgDB)
 	analyticsRepo = repoPostgres.NewAnalyticsRepo(pgDB)
 	partnerRepo = repoPostgres.NewPartnerRepo(pgDB)
+	tagRepo = repoPostgres.NewChatTagRepo(pgDB)
 
 	logger.Info().
 		Str("type", "postgresql").
@@ -188,6 +190,7 @@ func main() {
 	voiceUC := usecase.NewVoiceUseCase(voiceRepo, caseRepo, eventBus)
 	analyticsUC := usecase.NewAnalyticsUseCase(analyticsRepo, settingRepo)
 	partnerUC := usecase.NewPartnerUseCase(partnerRepo, settingRepo)
+	tagUC := usecase.NewChatTagUseCase(tagRepo)
 
 	// 7. Initialize WebSocket Hub
 	hub := deliveryWS.NewHub()
@@ -231,6 +234,7 @@ func main() {
 		analyticsUC,
 		partnerUC,
 		ragUC,
+		tagUC,
 		qdrantClient,
 		embedder,
 		cfg.DocumentsDir,

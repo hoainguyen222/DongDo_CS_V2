@@ -130,6 +130,75 @@
   flex-shrink: 0;
 }
 
+// ── Filter tabs ──────────────────────────────────────────
+.filterTabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 8px;
+  background: rgba($bg-dark, 0.6);
+  border-bottom: 1px solid $border-subtle;
+}
+
+.tabBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 2px;
+  border-radius: 6px;
+  border: 1px solid rgba($border-subtle, 0.6);
+  background: rgba($bg-card-solid, 0.4);
+  color: $text-muted;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: rgba($brand-navy, 0.6);
+    color: $text-main;
+  }
+}
+
+.tabBtnActive {
+  background: rgba($brand-navy, 0.95);
+  border-color: rgba($accent-red, 0.5);
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+.tabBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.tabBadgeRose {
+  background: $accent-red;
+  color: #ffffff;
+  box-shadow: 0 0 6px rgba($accent-red, 0.6);
+}
+
+.tabBadgeAmber {
+  background: $accent-amber;
+  color: #111;
+}
+
+.tabBadgeMuted {
+  background: rgba($text-muted, 0.25);
+  color: $text-muted;
+}
+
 .listScroll {
   flex: 1;
   overflow-y: auto;
@@ -146,7 +215,7 @@
   padding: $space-3;
   border-bottom: 1px solid rgba($border-subtle, 0.6);
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.15s, border-color 0.15s;
 
   &:hover {
     background: rgba($brand-navy, 0.5);
@@ -154,7 +223,37 @@
 }
 
 .caseItemActive {
-  background: $brand-navy-dark;
+  background: $brand-navy-dark !important;
+}
+
+.caseItemUnreplied {
+  background: rgba(225, 29, 72, 0.08);
+  border-left: 3px solid $accent-red;
+
+  &:hover {
+    background: rgba(225, 29, 72, 0.16);
+  }
+
+  .caseName {
+    font-weight: 800;
+    color: #ffffff;
+  }
+
+  .casePreview {
+    color: lighten($text-main, 10%);
+    font-weight: 600;
+  }
+}
+
+.unreadDot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: $accent-red;
+  margin-right: 5px;
+  flex-shrink: 0;
+  box-shadow: 0 0 6px $accent-red;
 }
 
 .caseRow {

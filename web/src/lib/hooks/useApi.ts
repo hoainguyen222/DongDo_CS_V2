@@ -15,7 +15,7 @@ import {
   type UseQueryOptions,
   type UseMutationOptions,
 } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { api, tagsApi } from '@/lib/api';
 import type {
   GuestSession,
   ChatCase,
@@ -30,6 +30,9 @@ import type {
   RolePermissionItem,
   PermissionLevel,
   SessionUser,
+  ChatTag,
+  CaseTag,
+  AlertConfig,
 } from '@/lib/types';
 
 // ============================================================
@@ -71,6 +74,11 @@ export const queryKeys = {
 
   // Chat (guest)
   chatHistory: (sessionId: string) => ['chatHistory', sessionId] as const,
+
+  // Tags & Alerts
+  chatTags: ['chatTags'] as const,
+  caseTags: (sessionId: string) => ['caseTags', sessionId] as const,
+  alertConfig: ['alertConfig'] as const,
 };
 
 // ============================================================
@@ -713,3 +721,109 @@ export function useResetAllLearningEnhanced() {
     },
   });
 }
+
+// ============================================================
+// ─── TAGS & ALERTS ──────────────────────────────────────────
+
+export function useChatTags(options?: QueryOpts<ChatTag[]>) {
+  return useQuery({
+    queryKey: queryKeys.chatTags,
+    queryFn: () => tagsApi.listTags(),
+    staleTime: 1000 * 60, // 1 min
+    ...options,
+  });
+}
+
+export function useCreateTag() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { name: string; description?: string; color: string }) => tagsApi.createTag(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.chatTags });
+    },
+  });
+}
+
+export function useUpdateTag() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: number; name: string; description?: string; color: string }) =>
+      tagsApi.updateTag(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.chatTags });
+    },
+  });
+}
+
+export function useDeleteTag() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => tagsApi.deleteTag(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.chatTags });
+    },
+  });
+}
+
+export function useCaseTags(sessionId: string, options?: QueryOpts<CaseTag[]>) {
+  return useQuery({
+    queryKey: queryKeys.caseTags(sessionId),
+    queryFn: () => tagsApi.getCaseTags(sessionId),
+    enabled: Boolean(sessionId),
+    staleTime: 1000 * 10,
+    ...options,
+  });
+}
+
+export function useAttachTag() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sessionId, tagId }: { sessionId: string; tagId: number }) =>
+      tagsApi.attachTag(sessionId, tagId),
+    onSuccess: (_data, { sessionId }) => {
+      qc.invalidateQueries({ queryKey: queryKeys.caseTags(sessionId) });
+    },
+  });
+}
+
+export function useDetachTag() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sessionId, tagId }: { sessionId: string; tagId: number }) =>
+      tagsApi.detachTag(sessionId, tagId),
+    onSuccess: (_data, { sessionId }) => {
+      qc.invalidateQueries({ queryKey: queryKeys.caseTags(sessionId) });
+    },
+  });
+}
+
+export function useAlertConfig(options?: QueryOpts<AlertConfig>) {
+  return useQuery({
+    queryKey: queryKeys.alertConfig,
+    queryFn: () => tagsApi.getAlertConfig(),
+    staleTime: 1000 * 30,
+    ...options,
+  });
+}
+
+export function useSaveAlertConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { is_enabled: boolean; timeout_seconds: number; alert_content: string }) =>
+      tagsApi.saveAlertConfig(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.alertConfig });
+    },
+  });
+}
+
+export function useResolveAlertEvent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (sessionId: string) => tagsApi.resolveAlertEvent(sessionId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.alertConfig });
+    },
+  });
+}
+

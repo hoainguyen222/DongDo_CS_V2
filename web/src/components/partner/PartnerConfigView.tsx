@@ -2,10 +2,19 @@
 
 import React, { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
-import { SystemConfig, PermissionLevel } from '@/lib/types';
+import { SystemConfig, PermissionLevel, ChatTag as DomainChatTag } from '@/lib/types';
+import {
+  useChatTags,
+  useCreateTag,
+  useUpdateTag,
+  useDeleteTag,
+  useAlertConfig,
+  useSaveAlertConfig,
+} from '@/lib/hooks/useApi';
 import './PartnerStyles.css';
 
-type ConfigSubViewType = 'subview-prompt' | 'subview-account' | 'subview-permission' | 'subview-template' | 'subview-database';
+type ConfigSubViewType = 'subview-prompt' | 'subview-account' | 'subview-chat-config' | 'subview-permission' | 'subview-template' | 'subview-database';
+type ChatConfigSubTab = 'tag' | 'alert' | 'library';
 
 interface UserAccount {
   id: string;
@@ -48,6 +57,97 @@ Bạn PHẢI LUÔN tìm kiếm và TRÍCH XUẤT CHÍNH XÁC câu trả lời t�
   const [temperature, setTemperature] = useState('0.1');
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
+
+  // 6. Chat Config State
+  const [chatConfigSubTab, setChatConfigSubTab] = useState<ChatConfigSubTab>('tag');
+
+  // --- Real Tag API Hooks ---
+  const { data: tagList = [] } = useChatTags();
+  const createTagMutation = useCreateTag();
+  const updateTagMutation = useUpdateTag();
+  const deleteTagMutation = useDeleteTag();
+
+  // --- Real Alert API Hooks ---
+  const { data: fetchedAlertConfig } = useAlertConfig();
+  const saveAlertMutation = useSaveAlertConfig();
+
+  const [newTagName, setNewTagName] = useState('');
+  const [newTagDesc, setNewTagDesc] = useState('');
+  const [newTagColor, setNewTagColor] = useState('#6366f1');
+  const [editingTag, setEditingTag] = useState<DomainChatTag | null>(null);
+
+  // -- Alert Config --
+  const [alertEnabled, setAlertEnabled] = useState(true);
+  const [alertTimeout, setAlertTimeout] = useState('60');
+  const [alertContent, setAlertContent] = useState('⚠️ Có tin nhắn khách hàng chờ trả lời! Vui lòng xử lý ngay.');
+
+  useEffect(() => {
+    if (fetchedAlertConfig) {
+      setAlertEnabled(fetchedAlertConfig.is_enabled);
+      setAlertTimeout(String(fetchedAlertConfig.timeout_seconds || 60));
+      setAlertContent(fetchedAlertConfig.alert_content || '⚠️ Có tin nhắn khách hàng chờ trả lời! Vui lòng xử lý ngay.');
+    }
+  }, [fetchedAlertConfig]);
+
+  const TAG_COLORS = ['#ef4444','#f97316','#eab308','#22c55e','#10b981','#14b8a6','#06b6d4','#3b82f6','#6366f1','#8b5cf6','#ec4899','#94a3b8'];
+
+  const handleAddTag = async () => {
+    if (!newTagName.trim() || isReadOnly) return;
+    try {
+      await createTagMutation.mutateAsync({
+        name: newTagName.trim(),
+        description: newTagDesc.trim(),
+        color: newTagColor,
+      });
+      setNewTagName('');
+      setNewTagDesc('');
+      setNewTagColor('#6366f1');
+      showToast('✅ Đã thêm tag mới thành công!');
+    } catch (err: any) {
+      showToast(`❌ Lỗi thêm tag: ${err.message || 'Lỗi hệ thống'}`);
+    }
+  };
+
+  const handleDeleteTag = async (id: number) => {
+    if (isReadOnly) return;
+    try {
+      await deleteTagMutation.mutateAsync(id);
+      showToast('🗑️ Đã xóa tag thành công!');
+    } catch (err: any) {
+      showToast(`❌ Lỗi xóa tag: ${err.message || 'Lỗi hệ thống'}`);
+    }
+  };
+
+  const handleUpdateTag = async () => {
+    if (!editingTag || !editingTag.name.trim() || isReadOnly) return;
+    try {
+      await updateTagMutation.mutateAsync({
+        id: editingTag.id,
+        name: editingTag.name.trim(),
+        description: editingTag.description.trim(),
+        color: editingTag.color,
+      });
+      setEditingTag(null);
+      showToast('✅ Đã cập nhật tag thành công!');
+    } catch (err: any) {
+      showToast(`❌ Lỗi cập nhật tag: ${err.message || 'Lỗi hệ thống'}`);
+    }
+  };
+
+  const handleSaveAlertConfig = async () => {
+    if (isReadOnly) return;
+    try {
+      await saveAlertMutation.mutateAsync({
+        is_enabled: alertEnabled,
+        timeout_seconds: parseInt(alertTimeout, 10) || 60,
+        alert_content: alertContent,
+      });
+      showToast('✅ Đã lưu cấu hình cảnh báo tin nhắn thành công!');
+    } catch (err: any) {
+      showToast(`❌ Lỗi lưu cấu hình cảnh báo: ${err.message || 'Lỗi hệ thống'}`);
+    }
+  };
+
 
   // 2. Account Management State
   const [users, setUsers] = useState<UserAccount[]>([
@@ -432,17 +532,21 @@ Bạn PHẢI LUÔN tìm kiếm và TRÍCH XUẤT CHÍNH XÁC câu trả lời t�
           <span>👥</span>
           <span>2. Cấu Hình Tài Khoản</span>
         </button>
+        <button className={`config-tab-pill ${activeSubView === 'subview-chat-config' ? 'active' : ''}`} onClick={() => setActiveSubView('subview-chat-config')}>
+          <span>💬</span>
+          <span>3. Cấu Hình Chat</span>
+        </button>
         <button className={`config-tab-pill ${activeSubView === 'subview-permission' ? 'active' : ''}`} onClick={() => setActiveSubView('subview-permission')}>
           <span>🛡️</span>
-          <span>3. Phân Quyền Hệ Thống</span>
+          <span>4. Phân Quyền Hệ Thống</span>
         </button>
         <button className={`config-tab-pill ${activeSubView === 'subview-template' ? 'active' : ''}`} onClick={() => setActiveSubView('subview-template')}>
-          <span>💬</span>
-          <span>4. Tin Nhắn Mẫu</span>
+          <span>📝</span>
+          <span>5. Tin Nhắn Mẫu</span>
         </button>
         <button className={`config-tab-pill ${activeSubView === 'subview-database' ? 'active' : ''}`} onClick={() => setActiveSubView('subview-database')}>
           <span>🗄️</span>
-          <span>5. Quản Lý Bộ Nhớ DB</span>
+          <span>6. Quản Lý Bộ Nhớ DB</span>
         </button>
       </div>
 
@@ -702,7 +806,274 @@ Bạn PHẢI LUÔN tìm kiếm và TRÍCH XUẤT CHÍNH XÁC câu trả lời t�
         </div>
       )}
 
-      {/* SUBVIEW 3: PERMISSION MATRIX */}
+      {/* SUBVIEW 3: CẤU HÌNH CHAT */}
+      {activeSubView === 'subview-chat-config' && (
+        <div className="card-config">
+          <div className="card-title-bar">
+            <span>💬 Cấu Hình Chat</span>
+          </div>
+
+          {/* Sub-tabs for Chat Config */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '12px' }}>
+            {(['tag', 'alert', 'library'] as ChatConfigSubTab[]).map((tab) => {
+              const labels: Record<ChatConfigSubTab, string> = {
+                tag: '🏷️ Cấu Hình Tag',
+                alert: '🔔 Cấu Hình Cảnh Báo',
+                library: '📚 Cấu Hình Thư Viện',
+              };
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setChatConfigSubTab(tab)}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    fontWeight: 600,
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    background: chatConfigSubTab === tab ? 'linear-gradient(135deg, #6366f1, #4f46e5)' : 'rgba(255,255,255,0.06)',
+                    color: chatConfigSubTab === tab ? '#fff' : '#94a3b8',
+                    boxShadow: chatConfigSubTab === tab ? '0 4px 12px rgba(99,102,241,0.35)' : 'none',
+                  }}
+                >
+                  {labels[tab]}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* ─── Sub-tab: CẤU HÌNH TAG ─── */}
+          {chatConfigSubTab === 'tag' && (
+            <div>
+              {/* Create Tag Form */}
+              {!editingTag && (
+                <div style={{ background: '#0e1422', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '20px', marginBottom: '24px' }}>
+                  <h4 style={{ fontSize: '14px', fontWeight: 700, color: '#fff', marginBottom: '16px' }}>➕ Tạo Tag Mới</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                    <div>
+                      <label className="form-label">Tên Tag:</label>
+                      <input
+                        type="text"
+                        className="input-custom"
+                        placeholder="Ví dụ: Khiếu nại, Tư vấn..."
+                        value={newTagName}
+                        onChange={(e) => setNewTagName(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label">Mô Tả Tag:</label>
+                      <input
+                        type="text"
+                        className="input-custom"
+                        placeholder="Mô tả ngắn về tag..."
+                        value={newTagDesc}
+                        onChange={(e) => setNewTagDesc(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ marginBottom: '16px' }}>
+                    <label className="form-label">Chọn Màu Tag:</label>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
+                      {TAG_COLORS.map((color) => (
+                        <button
+                          key={color}
+                          onClick={() => setNewTagColor(color)}
+                          style={{
+                            width: '28px', height: '28px', borderRadius: '50%',
+                            background: color, border: newTagColor === color ? '3px solid #fff' : '3px solid transparent',
+                            cursor: 'pointer', transition: 'border 0.2s',
+                            boxShadow: newTagColor === color ? `0 0 0 2px ${color}` : 'none',
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '12px', color: '#94a3b8' }}>Preview:</span>
+                      <span style={{
+                        background: `${newTagColor}22`, color: newTagColor, border: `1px solid ${newTagColor}66`,
+                        borderRadius: '20px', padding: '3px 12px', fontSize: '12px', fontWeight: 700,
+                      }}>
+                        {newTagName || 'Tên tag'}
+                      </span>
+                    </div>
+                  </div>
+                  <button onClick={handleAddTag} className="btn-primary-purple" disabled={!newTagName.trim()}>
+                    + Lưu Tag
+                  </button>
+                </div>
+              )}
+
+              {/* Edit Tag Form */}
+              {editingTag && (
+                <div style={{ background: '#0e1422', border: '1px solid rgba(99,102,241,0.4)', borderRadius: '12px', padding: '20px', marginBottom: '24px' }}>
+                  <h4 style={{ fontSize: '14px', fontWeight: 700, color: '#6366f1', marginBottom: '16px' }}>✏️ Chỉnh Sửa Tag</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                    <div>
+                      <label className="form-label">Tên Tag:</label>
+                      <input type="text" className="input-custom" value={editingTag.name} onChange={(e) => setEditingTag({ ...editingTag, name: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="form-label">Mô Tả Tag:</label>
+                      <input type="text" className="input-custom" value={editingTag.description} onChange={(e) => setEditingTag({ ...editingTag, description: e.target.value })} />
+                    </div>
+                  </div>
+                  <div style={{ marginBottom: '16px' }}>
+                    <label className="form-label">Màu Tag:</label>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
+                      {TAG_COLORS.map((color) => (
+                        <button key={color} onClick={() => setEditingTag({ ...editingTag, color })}
+                          style={{
+                            width: '28px', height: '28px', borderRadius: '50%', background: color,
+                            border: editingTag.color === color ? '3px solid #fff' : '3px solid transparent',
+                            cursor: 'pointer', boxShadow: editingTag.color === color ? `0 0 0 2px ${color}` : 'none',
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button onClick={handleUpdateTag} className="btn-primary-purple">💾 Cập Nhật Tag</button>
+                    <button onClick={() => setEditingTag(null)} style={{ padding: '8px 18px', borderRadius: '8px', background: '#334155', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '13px' }}>Hủy</button>
+                  </div>
+                </div>
+              )}
+
+              {/* Tag List */}
+              <div className="table-container">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Tên Tag</th>
+                      <th>Mô Tả Tag</th>
+                      <th style={{ textAlign: 'center' }}>Chỉnh Sửa Tag</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tagList.map((tag) => (
+                      <tr key={tag.id}>
+                        <td>
+                          <span style={{
+                            background: `${tag.color}22`, color: tag.color, border: `1px solid ${tag.color}66`,
+                            borderRadius: '20px', padding: '4px 14px', fontSize: '12px', fontWeight: 700, display: 'inline-block',
+                          }}>
+                            {tag.name}
+                          </span>
+                        </td>
+                        <td style={{ color: '#94a3b8', fontSize: '13px' }}>{tag.description || '—'}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <button onClick={() => setEditingTag(tag)} style={{ background: 'none', border: 'none', color: '#38bdf8', cursor: 'pointer', fontSize: '13px', fontWeight: 600, marginRight: '12px' }}>
+                            ✏️ Sửa
+                          </button>
+                          <button onClick={() => handleDeleteTag(tag.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}>
+                            🗑️ Xóa
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {tagList.length === 0 && (
+                      <tr><td colSpan={3} style={{ textAlign: 'center', color: '#64748b', padding: '32px' }}>Chưa có tag nào. Hãy tạo tag mới!</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ─── Sub-tab: CẤU HÌNH CẢNH BÁO ─── */}
+          {chatConfigSubTab === 'alert' && (
+            <div style={{ maxWidth: '600px' }}>
+              <h4 style={{ fontSize: '14px', fontWeight: 700, color: '#fff', marginBottom: '20px' }}>🔔 Cấu Hình Cảnh Báo Tin Nhắn Chờ</h4>
+
+              {/* Toggle */}
+              <div style={{ background: '#0e1422', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '18px', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ color: '#fff', fontWeight: 600, fontSize: '14px' }}>Bật / Tắt Tính Năng Cảnh Báo</div>
+                  <div style={{ color: '#64748b', fontSize: '12px', marginTop: '3px' }}>Khi bật, hệ thống sẽ hiển thị thông báo nổi khi có tin nhắn chờ</div>
+                </div>
+                <button
+                  onClick={() => setAlertEnabled(!alertEnabled)}
+                  style={{
+                    width: '48px', height: '26px', borderRadius: '13px', border: 'none', cursor: 'pointer', position: 'relative',
+                    background: alertEnabled ? 'linear-gradient(135deg, #10b981, #059669)' : '#334155',
+                    transition: 'background 0.3s',
+                    boxShadow: alertEnabled ? '0 0 10px rgba(16,185,129,0.4)' : 'none',
+                  }}
+                >
+                  <span style={{
+                    position: 'absolute', top: '3px', left: alertEnabled ? '25px' : '3px',
+                    width: '20px', height: '20px', borderRadius: '50%', background: '#fff',
+                    transition: 'left 0.3s', display: 'block',
+                    boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
+                  }} />
+                </button>
+              </div>
+
+              {/* Timeout */}
+              <div style={{ background: '#0e1422', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '18px', marginBottom: '16px' }}>
+                <label className="form-label" style={{ marginBottom: '10px', display: 'block' }}>Thời Gian Cảnh Báo (sau khi tin nhắn chưa được trả lời):</label>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {['30', '60', '90', '120', '300', '600'].map((val) => {
+                    const labels: Record<string, string> = { '30': '30 giây', '60': '1 phút', '90': '90 giây', '120': '2 phút', '300': '5 phút', '600': '10 phút' };
+                    return (
+                      <button
+                        key={val}
+                        onClick={() => setAlertTimeout(val)}
+                        style={{
+                          padding: '7px 16px', borderRadius: '8px', border: 'none', fontWeight: 600, fontSize: '13px', cursor: 'pointer',
+                          background: alertTimeout === val ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'rgba(255,255,255,0.06)',
+                          color: alertTimeout === val ? '#fff' : '#94a3b8',
+                          boxShadow: alertTimeout === val ? '0 4px 10px rgba(245,158,11,0.35)' : 'none',
+                          transition: 'all 0.2s',
+                        }}
+                      >
+                        {labels[val]}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Alert Content */}
+              <div style={{ background: '#0e1422', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '18px', marginBottom: '20px' }}>
+                <label className="form-label" style={{ marginBottom: '8px', display: 'block' }}>Nội Dung Thông Báo Nổi (có thể chỉnh sửa):</label>
+                <textarea
+                  className="textarea-custom"
+                  style={{ minHeight: '80px', fontSize: '13px' }}
+                  value={alertContent}
+                  onChange={(e) => setAlertContent(e.target.value)}
+                />
+                <div style={{ marginTop: '10px', padding: '10px 16px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '8px', fontSize: '13px', color: '#fbbf24', fontWeight: 600, animation: 'pulse 2s infinite' }}>
+                  👁️ Preview: {alertContent}
+                </div>
+              </div>
+
+              <button onClick={handleSaveAlertConfig} className="btn-primary-purple" disabled={saveAlertMutation.isPending}>
+                {saveAlertMutation.isPending ? '⏳ Đang lưu...' : '💾 Lưu Cấu Hình Cảnh Báo'}
+              </button>
+            </div>
+          )}
+
+          {/* ─── Sub-tab: CẤU HÌNH THƯ VIỆN ─── */}
+          {chatConfigSubTab === 'library' && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
+              <div style={{ fontSize: '56px', marginBottom: '16px', filter: 'grayscale(0.3)' }}>📚</div>
+              <h3 style={{ fontSize: '22px', fontWeight: 700, color: '#fff', marginBottom: '8px' }}>Cấu Hình Thư Viện</h3>
+              <div style={{
+                display: 'inline-block', padding: '6px 18px', borderRadius: '20px',
+                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                color: '#fff', fontSize: '13px', fontWeight: 700, marginBottom: '16px',
+              }}>🚀 Coming Soon</div>
+              <p style={{ color: '#64748b', fontSize: '14px', maxWidth: '420px', lineHeight: 1.7 }}>
+                Tính năng Thư Viện Chat đang trong quá trình phát triển. Bạn sẽ sớm có thể quản lý thư viện mẫu câu trả lời, file phương tiện và tài liệu dùng chung trong các cuộc chat.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* SUBVIEW 4: PERMISSION MATRIX */}
       {activeSubView === 'subview-permission' && (
         <div className="card-config">
           <div className="card-title-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>

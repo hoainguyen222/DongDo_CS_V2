@@ -72,6 +72,7 @@ export interface ChatCase {
   status: CaseStatus;
   assigned_cs: string;
   last_message: string;
+  last_sender_type?: SenderType;
   resolution_note: string;
   created_at: string;
   updated_at: string;
@@ -177,3 +178,42 @@ export interface RolePermissionItem {
   can_edit: boolean;
   updated_at?: string;
 }
+
+export interface ChatTag {
+  id: number;
+  name: string;
+  description: string;
+  color: string;
+  created_by?: string;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CaseTag {
+  id: number;
+  session_id: string;
+  tag_id: number;
+  tag_name?: string;
+  color?: string;
+  assigned_by?: string;
+  created_at?: string;
+}
+
+export interface AlertConfig {
+  id?: number;
+  is_enabled: boolean;
+  timeout_seconds: number;
+  alert_content: string;
+  updated_by?: string;
+  updated_at?: string;
+}
+
+export interface AlertEvent {
+  id: number;
+  session_id: string;
+  triggered_at: string;
+  resolved_at?: string;
+  timeout_seconds: number;
+}
+

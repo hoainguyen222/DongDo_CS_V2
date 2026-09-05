@@ -1,5 +1,7 @@
 # Binaries & Build Output
 /server
+/server_new
+/ingest_new
 /dist
 /bin
 *.exe

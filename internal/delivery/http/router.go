@@ -206,10 +206,30 @@ func SetupRouter(
 		admin.GET("/api/admin/system-errors", RequireRoles(RoleAdmin, RoleOwner), handler.HandleListSystemErrors)
 		admin.POST("/api/admin/system-errors", RequireRoles(RoleAdmin, RoleOwner), handler.HandleCreateSystemError)
 		admin.PUT("/api/admin/system-errors/:id/handled", RequireRoles(RoleAdmin, RoleOwner), handler.HandleMarkSystemErrorHandled)
+
+		// Chat Tag CRUD - Admin+ manage tags, Staff can read
+		admin.GET("/api/admin/chat/tags", handler.HandleListChatTags)
+		admin.POST("/api/admin/chat/tags", RequireRoles(RoleAdmin, RoleOwner), handler.HandleCreateChatTag)
+		admin.PUT("/api/admin/chat/tags/:id", RequireRoles(RoleAdmin, RoleOwner), handler.HandleUpdateChatTag)
+		admin.DELETE("/api/admin/chat/tags/:id", RequireRoles(RoleAdmin, RoleOwner), handler.HandleDeleteChatTag)
+
+		// Case Tag operations - Staff+ can attach/detach tags
+		admin.GET("/api/admin/cases/:session_id/tags", handler.HandleGetCaseTags)
+		admin.POST("/api/admin/cases/:session_id/tags", handler.HandleAttachCaseTag)
+		admin.DELETE("/api/admin/cases/:session_id/tags/:tag_id", handler.HandleDetachCaseTag)
+
+		// Alert Config - Admin+ only
+		admin.GET("/api/admin/chat/alert-config", handler.HandleGetAlertConfig)
+		admin.POST("/api/admin/chat/alert-config", RequireRoles(RoleAdmin, RoleOwner), handler.HandleSaveAlertConfig)
+
+		// Alert Events - Staff+ can trigger/resolve
+		admin.POST("/api/admin/chat/alert-events", handler.HandleCreateAlertEvent)
+		admin.POST("/api/admin/chat/alert-events/:session_id/resolve", handler.HandleResolveAlertEvent)
 	}
 
 	return r
 }
+
 
 func CORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {

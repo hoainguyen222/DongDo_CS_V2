@@ -44,7 +44,7 @@ export const casesApi = {
   },
 
   async sendCSMessage(sessionID: string, message: string): Promise<void> {
-    return this.reply(sessionID, message);
+    return casesApi.reply(sessionID, message);
   },
 
   async resolve(

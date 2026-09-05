@@ -14,6 +14,7 @@ export { knowledgeApi } from './knowledge';
 export { analyticsApi } from './analytics';
 export { configApi, systemApi } from './system';
 export { usersApi, permissionsApi } from './users';
+export { tagsApi } from './tags';
 
 import { authApi } from './auth';
 import { guestApi } from './guest';
@@ -25,6 +26,7 @@ import { knowledgeApi } from './knowledge';
 import { analyticsApi } from './analytics';
 import { configApi, systemApi } from './system';
 import { usersApi, permissionsApi } from './users';
+import { tagsApi } from './tags';
 import type { ListCasesResult } from './cases';
 import type { ListCustomersResult } from './customers';
 import type { ListVoiceCallsResult } from './voice';
