@@ -15,6 +15,7 @@ import {
   TeamAgentGuestCallBanner,
 } from '@/components/admin/AdminSidebar';
 import { VoiceHistoryModal, ToastErrorBanner, ErrorCenterWrapper } from '@/components/admin/AdminModals';
+import { MessageAlertBanner } from '@/components/admin/MessageAlertBanner';
 import { useUIStore } from '@/lib/stores/uiStore';
 import { AdminLoadingScreen } from './AdminLoadingScreen';
 import styles from './AdminLayout.module.scss';
@@ -223,6 +224,9 @@ export default function AdminLayout({
           onDismiss={dismissCall}
         />
       ))}
+
+      {/* Floating Message Alert Banner */}
+      <MessageAlertBanner />
     </div>
   );
 }

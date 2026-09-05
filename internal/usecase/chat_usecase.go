@@ -83,11 +83,12 @@ func (uc *ChatUseCase) SendGuestMessage(ctx context.Context, sessionID, customer
 
 	_ = uc.eventBus.PublishWS(ctx, sessionID, domain.WSEventMessage, savedMsg, targetCustomerName)
 	_ = uc.eventBus.PublishWS(ctx, "admin_inbox", domain.WSEventCaseUpdate, map[string]interface{}{
-		"session_id":     sessionID,
-		"customer_name":  targetCustomerName,
-		"customer_phone": targetCustomerPhone,
-		"last_message":   content,
-		"status":         caseStatus,
+		"session_id":       sessionID,
+		"customer_name":    targetCustomerName,
+		"customer_phone":   targetCustomerPhone,
+		"last_message":     content,
+		"last_sender_type": "guest",
+		"status":           caseStatus,
 	}, targetCustomerName)
 
 	// If Human CS is actively chatting, increment unread and DO NOT trigger AI
@@ -151,12 +152,13 @@ func (uc *ChatUseCase) SendCSReply(ctx context.Context, sessionID, csUsername, c
 
 	_ = uc.eventBus.PublishWS(ctx, sessionID, domain.WSEventMessage, savedMsg, csUsername)
 	_ = uc.eventBus.PublishWS(ctx, "admin_inbox", domain.WSEventCaseUpdate, map[string]interface{}{
-		"session_id":     sessionID,
-		"customer_name":  targetCustomerName,
-		"customer_phone": targetCustomerPhone,
-		"status":         domain.StatusHumanCSActive,
-		"assigned_cs":    senderName,
-		"last_message":   content,
+		"session_id":       sessionID,
+		"customer_name":    targetCustomerName,
+		"customer_phone":   targetCustomerPhone,
+		"status":           domain.StatusHumanCSActive,
+		"assigned_cs":      senderName,
+		"last_message":     content,
+		"last_sender_type": "human_cs",
 	}, csUsername)
 
 	uc.logger.Info().Str("session_id", sessionID).Str("cs_username", csUsername).

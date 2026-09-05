@@ -56,6 +56,7 @@ type Handler struct {
 	analyticsUC *usecase.AnalyticsUseCase
 	partnerUC   *usecase.PartnerUseCase
 	ragUC       *usecase.RAGUseCase
+	tagUC       *usecase.ChatTagUseCase
 	vectorStore domain.VectorStore
 	embedder    domain.Embedder
 	docsDir     string
@@ -72,6 +73,7 @@ func NewHandler(
 	analyticsUC *usecase.AnalyticsUseCase,
 	partnerUC *usecase.PartnerUseCase,
 	ragUC *usecase.RAGUseCase,
+	tagUC *usecase.ChatTagUseCase,
 	vectorStore domain.VectorStore,
 	embedder domain.Embedder,
 	docsDir string,
@@ -86,6 +88,7 @@ func NewHandler(
 		analyticsUC: analyticsUC,
 		partnerUC:   partnerUC,
 		ragUC:       ragUC,
+		tagUC:       tagUC,
 		vectorStore: vectorStore,
 		embedder:    embedder,
 		docsDir:     docsDir,
@@ -93,6 +96,7 @@ func NewHandler(
 		logger:      Logger.With().Str("component", "handler").Logger(),
 	}
 }
+
 
 // ============================================================
 // Auth & Guest Handlers
@@ -399,6 +403,15 @@ func (h *Handler) HandleListCases(c *gin.Context) {
 		Logger.Error().Err(err).Msg("Failed to list cases")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
+	}
+
+	for _, cs := range allCases {
+		if cs.LastSenderType == "" && h.chatUC != nil {
+			msgs, _, err := h.chatUC.GetHistory(c.Request.Context(), cs.SessionID)
+			if err == nil && len(msgs) > 0 {
+				cs.LastSenderType = string(msgs[len(msgs)-1].SenderType)
+			}
+		}
 	}
 
 	var filtered []*domain.ChatCase

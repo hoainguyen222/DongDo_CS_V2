@@ -164,30 +164,48 @@ func (r *CaseRepo) Upsert(
 	return upsertCaseRowToDomain(&row), nil
 }
 
+func (r *CaseRepo) populateLastSenderTypes(ctx context.Context, cases []*domain.ChatCase) {
+	for i := range cases {
+		var senderType string
+		err := r.db.Pool.QueryRow(ctx, `
+			SELECT sender_type 
+			FROM chat_messages 
+			WHERE session_id = $1 
+			ORDER BY created_at DESC, id DESC 
+			LIMIT 1
+		`, cases[i].SessionID).Scan(&senderType)
+		if err == nil {
+			cases[i].LastSenderType = senderType
+		}
+	}
+}
+
 // List returns chatdb cases, optionally filtered by status.
 func (r *CaseRepo) List(ctx context.Context, statusFilter domain.CaseStatus) ([]*domain.ChatCase, error) {
+	var out []*domain.ChatCase
 	if statusFilter != "" {
 		rows, err := r.db.Chat.ListCasesByStatus(ctx, statusFilter)
 		if err != nil {
 			r.logger.Error().Err(err).Str("status_filter", string(statusFilter)).Msg("ListCasesByStatus failed")
 			return nil, err
 		}
-		out := make([]*domain.ChatCase, 0, len(rows))
+		out = make([]*domain.ChatCase, 0, len(rows))
 		for i := range rows {
 			out = append(out, listCasesByStatusRowToDomain(&rows[i]))
 		}
-		return out, nil
+	} else {
+		rows, err := r.db.Chat.ListCases(ctx)
+		if err != nil {
+			r.logger.Error().Err(err).Msg("ListCases failed")
+			return nil, err
+		}
+		out = make([]*domain.ChatCase, 0, len(rows))
+		for i := range rows {
+			out = append(out, listCasesRowToDomain(&rows[i]))
+		}
 	}
 
-	rows, err := r.db.Chat.ListCases(ctx)
-	if err != nil {
-		r.logger.Error().Err(err).Msg("ListCases failed")
-		return nil, err
-	}
-	out := make([]*domain.ChatCase, 0, len(rows))
-	for i := range rows {
-		out = append(out, listCasesRowToDomain(&rows[i]))
-	}
+	r.populateLastSenderTypes(ctx, out)
 	return out, nil
 }
 

@@ -1,8 +1,23 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Inbox, Trash2, CheckCircle2, UserCheck, Send, Headphones } from 'lucide-react';
-import { useCases, useCaseDetail, useVoiceCalls, useTakeCase, useResolveCase, useDeleteCase, useClearAllCases } from '@/lib/hooks/useApi';
+import { Inbox, Trash2, CheckCircle2, UserCheck, Send, Headphones, Tag as TagIcon, X } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  useCases,
+  useCaseDetail,
+  useVoiceCalls,
+  useTakeCase,
+  useResolveCase,
+  useDeleteCase,
+  useClearAllCases,
+  useChatTags,
+  useCaseTags,
+  useAttachTag,
+  useDetachTag,
+} from '@/lib/hooks/useApi';
+import { useWebSocket } from '@/lib/hooks/useWebSocket';
+import { useAuthStore } from '@/lib/stores/authStore';
 import { Pagination } from '@/components/admin/AdminSidebar';
 import { MarkdownRenderer } from '@/components/MarkdownRenderer';
 import { useUIStore } from '@/lib/stores/uiStore';
@@ -23,16 +38,22 @@ const STATUS_CLASS: Record<string, string> = {
   RESOLVED: styles.statusResolved,
 };
 
+type InboxTab = 'all' | 'NEEDS_HUMAN_CS' | 'HUMAN_CS_ACTIVE' | 'RESOLVED';
+
 export default function InboxPage() {
   const { addToast, openConfirm } = useUIStore();
+  const { user } = useAuthStore();
+  const queryClient = useQueryClient();
 
-  // Pagination state
+  // Tab & Pagination state
+  const [activeTab, setActiveTab] = useState<InboxTab>('all');
   const [casePage, setCasePage] = useState(1);
   const [casePageSize, setCasePageSize] = useState(10);
   const [caseFilter, setCaseFilter] = useState('');
 
   // Case selection
   const [selectedCase, setSelectedCase] = useState<ChatCase | null>(null);
+  const [lastSenderMap, setLastSenderMap] = useState<Record<string, string>>({});
 
   // UI state
   const [replyText, setReplyText] = useState('');
@@ -47,10 +68,55 @@ export default function InboxPage() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Data fetching
-  const { data: casesData, isLoading: isLoadingCases } = useCases(caseFilter, casePage, casePageSize);
+  // Data fetching: fetch up to 100 cases to allow real-time tab counting & filtering
+  const { data: casesData, isLoading: isLoadingCases } = useCases('', 1, 100);
   const { data: caseDetailData, refetch: refetchCaseDetail } = useCaseDetail(selectedCase?.session_id ?? '');
   const { data: voiceCallsData } = useVoiceCalls();
+
+  // Tags state & hooks
+  const [showTagPicker, setShowTagPicker] = useState(false);
+  const { data: allTags = [] } = useChatTags();
+  const { data: attachedTags = [] } = useCaseTags(selectedCase?.session_id ?? '');
+  const attachTagMutation = useAttachTag();
+  const detachTagMutation = useDetachTag();
+
+  // Real-time WebSocket connection to receive guest messages & case updates instantly
+  useWebSocket({
+    sessionId: 'admin_inbox',
+    username: user?.username || 'admin',
+    role: user?.role || 'admin',
+    onCaseUpdate: () => {
+      queryClient.invalidateQueries({ queryKey: ['cases'] });
+    },
+    onMessage: (event?: any) => {
+      const sid = event?.session_id || event?.payload?.session_id;
+      const senderType = event?.sender_type || event?.payload?.sender_type || 'guest';
+      const content = event?.content || event?.payload?.content;
+
+      if (sid) {
+        setLastSenderMap((prev) => ({ ...prev, [sid]: senderType }));
+
+        queryClient.setQueriesData({ queryKey: ['cases'] }, (oldData: any) => {
+          if (!oldData || !oldData.cases) return oldData;
+          const nowISO = new Date().toISOString();
+          const updatedCases = oldData.cases.map((c: ChatCase) => {
+            if (c.session_id === sid) {
+              return {
+                ...c,
+                last_message: content ?? c.last_message,
+                last_sender_type: senderType,
+                updated_at: nowISO,
+              };
+            }
+            return c;
+          });
+          return { ...oldData, cases: updatedCases };
+        });
+
+        queryClient.invalidateQueries({ queryKey: ['cases'] });
+      }
+    },
+  });
 
   // Mutations
   const takeCaseMutation = useTakeCase();
@@ -58,10 +124,105 @@ export default function InboxPage() {
   const deleteCaseMutation = useDeleteCase();
   const clearAllMutation = useClearAllCases();
 
-  const cases = casesData?.cases ?? [];
+  const allCases = casesData?.cases ?? [];
   const caseMessages = caseDetailData?.messages ?? [];
-  const caseTotal = casesData?.total ?? 0;
   const voiceCalls = voiceCallsData?.calls ?? [];
+
+  // Populate lastSenderMap whenever allCases changes
+  useEffect(() => {
+    allCases.forEach((c) => {
+      const st = c.last_sender_type;
+      if (st) {
+        setLastSenderMap((prev) => {
+          if (prev[c.session_id] === st) return prev;
+          return { ...prev, [c.session_id]: st };
+        });
+      }
+    });
+  }, [allCases]);
+
+  // Sync lastSenderMap when case detail messages are loaded
+  useEffect(() => {
+    if (selectedCase && caseMessages.length > 0) {
+      const lastMsg = caseMessages[caseMessages.length - 1];
+      if (lastMsg) {
+        setLastSenderMap((prev) => {
+          if (prev[selectedCase.session_id] === lastMsg.sender_type) return prev;
+          return { ...prev, [selectedCase.session_id]: lastMsg.sender_type };
+        });
+      }
+    }
+  }, [selectedCase, caseMessages]);
+
+  // Robust multi-tier check to determine if a case has an unreplied customer message
+  const isCaseUnreplied = useCallback(
+    (c: ChatCase): boolean => {
+      if (c.status === 'RESOLVED') return false;
+      if (c.status === 'NEEDS_HUMAN_CS') return true;
+
+      // 1. Explicit last_sender_type from ChatCase (backend)
+      if (c.last_sender_type === 'guest') return true;
+      if (c.last_sender_type === 'human_cs' || c.last_sender_type === 'cs' || c.last_sender_type === 'ai') return false;
+
+      // 2. Check local lastSenderMap state
+      const mapSender = lastSenderMap[c.session_id];
+      if (mapSender === 'guest') return true;
+      if (mapSender === 'human_cs' || mapSender === 'cs' || mapSender === 'ai') return false;
+
+      // 3. Inspect currently loaded caseMessages for selected case
+      if (selectedCase?.session_id === c.session_id && caseMessages.length > 0) {
+        const lastMsg = caseMessages[caseMessages.length - 1];
+        if (lastMsg.sender_type === 'guest') return true;
+        if (lastMsg.sender_type === 'human_cs' || lastMsg.sender_type === 'cs' || lastMsg.sender_type === 'ai') return false;
+      }
+
+      return false;
+    },
+    [lastSenderMap, selectedCase?.session_id, caseMessages]
+  );
+
+  // Real-time tab counts calculation
+  const unrepliedAllCount = allCases.filter((c) => isCaseUnreplied(c)).length;
+  const waitingCount = allCases.filter((c) => c.status === 'NEEDS_HUMAN_CS').length;
+  const unrepliedActiveCount = allCases.filter(
+    (c) => c.status === 'HUMAN_CS_ACTIVE' && isCaseUnreplied(c)
+  ).length;
+  const resolvedCount = allCases.filter((c) => c.status === 'RESOLVED').length;
+
+  // Filter cases based on active tab and search keyword
+  let tabFilteredCases = allCases.filter((c) => {
+    if (activeTab === 'NEEDS_HUMAN_CS') return c.status === 'NEEDS_HUMAN_CS';
+    if (activeTab === 'HUMAN_CS_ACTIVE') return c.status === 'HUMAN_CS_ACTIVE';
+    if (activeTab === 'RESOLVED') return c.status === 'RESOLVED';
+    return true; // 'all'
+  });
+
+  if (caseFilter.trim()) {
+    const sLower = caseFilter.trim().toLowerCase();
+    tabFilteredCases = tabFilteredCases.filter(
+      (c) =>
+        c.customer_name.toLowerCase().includes(sLower) ||
+        (c.customer_phone && c.customer_phone.toLowerCase().includes(sLower)) ||
+        c.session_id.toLowerCase().includes(sLower) ||
+        (c.last_message && c.last_message.toLowerCase().includes(sLower))
+    );
+  }
+
+  // Sorting logic: unreplied customer conversations ALWAYS pinned at the top!
+  const sortedCases = [...tabFilteredCases].sort((a, b) => {
+    const unrepliedA = isCaseUnreplied(a);
+    const unrepliedB = isCaseUnreplied(b);
+
+    if (unrepliedA !== unrepliedB) {
+      return unrepliedA ? -1 : 1;
+    }
+
+    return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+  });
+
+  // Pagination calculation
+  const caseTotal = sortedCases.length;
+  const pagedCases = sortedCases.slice((casePage - 1) * casePageSize, casePage * casePageSize);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -98,6 +259,7 @@ export default function InboxPage() {
     try {
       const { api } = await import('@/lib/api');
       await api.sendCSMessage(selectedCase.session_id, content);
+      setSelectedCase((prev) => (prev ? { ...prev, last_sender_type: 'human_cs', last_message: content } : null));
       refetchCaseDetail();
     } catch (err: any) {
       addToast({ title: err.message || 'Lỗi gửi tin nhắn', variant: 'error' });
@@ -239,23 +401,96 @@ export default function InboxPage() {
       <div className={styles.split}>
         {/* Case list - left panel */}
         <div className={styles.listPanel}>
+          {/* Tab selector bar */}
+          <div className={styles.filterTabs}>
+            <button
+              type="button"
+              className={`${styles.tabBtn} ${activeTab === 'all' ? styles.tabBtnActive : ''}`}
+              onClick={() => {
+                setActiveTab('all');
+                setCasePage(1);
+              }}
+            >
+              <span>Tất cả</span>
+              {unrepliedAllCount > 0 && (
+                <span className={`${styles.tabBadge} ${styles.tabBadgeRose}`}>
+                  {unrepliedAllCount}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              className={`${styles.tabBtn} ${activeTab === 'NEEDS_HUMAN_CS' ? styles.tabBtnActive : ''}`}
+              onClick={() => {
+                setActiveTab('NEEDS_HUMAN_CS');
+                setCasePage(1);
+              }}
+            >
+              <span>Chờ CSKH</span>
+              {waitingCount > 0 && (
+                <span className={`${styles.tabBadge} ${styles.tabBadgeRose}`}>
+                  {waitingCount}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              className={`${styles.tabBtn} ${activeTab === 'HUMAN_CS_ACTIVE' ? styles.tabBtnActive : ''}`}
+              onClick={() => {
+                setActiveTab('HUMAN_CS_ACTIVE');
+                setCasePage(1);
+              }}
+            >
+              <span>Đang CSKH</span>
+              {unrepliedActiveCount > 0 && (
+                <span className={`${styles.tabBadge} ${styles.tabBadgeAmber}`}>
+                  {unrepliedActiveCount}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              className={`${styles.tabBtn} ${activeTab === 'RESOLVED' ? styles.tabBtnActive : ''}`}
+              onClick={() => {
+                setActiveTab('RESOLVED');
+                setCasePage(1);
+              }}
+            >
+              <span>Đã đóng</span>
+              {resolvedCount > 0 && (
+                <span className={`${styles.tabBadge} ${styles.tabBadgeMuted}`}>
+                  {resolvedCount}
+                </span>
+              )}
+            </button>
+          </div>
+
           <div className={styles.listScroll}>
             {isLoadingCases ? (
               <div className={styles.empty}>Đang tải...</div>
-            ) : cases.length === 0 ? (
+            ) : pagedCases.length === 0 ? (
               <div className={styles.empty}>Không có case nào.</div>
             ) : (
-              cases.map((c) => {
+              pagedCases.map((c) => {
+                const isUnreplied = isCaseUnreplied(c);
                 const isActive = selectedCase?.session_id === c.session_id;
                 const statusClass = STATUS_CLASS[c.status] || '';
                 return (
                   <div
                     key={c.id || c.session_id}
                     onClick={() => handleSelectCase(c)}
-                    className={`${styles.caseItem} ${isActive ? styles.caseItemActive : ''}`}
+                    className={`${styles.caseItem} ${isActive ? styles.caseItemActive : ''} ${
+                      isUnreplied ? styles.caseItemUnreplied : ''
+                    }`}
                   >
                     <div className={styles.caseRow}>
-                      <span className={styles.caseName}>{c.customer_name}</span>
+                      <span className={styles.caseName}>
+                        {isUnreplied && <span className={styles.unreadDot} title="Chưa trả lời khách" />}
+                        {c.customer_name}
+                      </span>
                       <span className={`${styles.statusBadge} ${statusClass}`}>
                         {STATUS_LABELS[c.status] || c.status}
                       </span>
@@ -298,11 +533,51 @@ export default function InboxPage() {
               {/* Detail Header */}
               <div className={styles.detailHeader}>
                 <div className={styles.detailTitle}>
-                  <span className={styles.detailName}>{selectedCase.customer_name}</span>
-                  {selectedCase.customer_phone && (
-                    <span className={styles.phonePill}>
-                      📱 {selectedCase.customer_phone}
-                    </span>
+                  <div>
+                    <span className={styles.detailName}>{selectedCase.customer_name}</span>
+                    {selectedCase.customer_phone && (
+                      <span className={styles.phonePill}>
+                        📱 {selectedCase.customer_phone}
+                      </span>
+                    )}
+                  </div>
+                  {attachedTags.length > 0 && (
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
+                      {attachedTags.map((t) => (
+                        <span
+                          key={t.id}
+                          style={{
+                            background: `${t.color || '#6366f1'}22`,
+                            color: t.color || '#6366f1',
+                            border: `1px solid ${t.color || '#6366f1'}66`,
+                            borderRadius: '12px',
+                            padding: '2px 8px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                        >
+                          {t.tag_name}
+                          <X
+                            size={12}
+                            style={{ cursor: 'pointer', opacity: 0.8 }}
+                            onClick={async () => {
+                              try {
+                                await detachTagMutation.mutateAsync({
+                                  sessionId: selectedCase.session_id,
+                                  tagId: t.tag_id,
+                                });
+                                addToast({ title: 'Đã gỡ tag', variant: 'success' });
+                              } catch (err: any) {
+                                addToast({ title: err.message || 'Lỗi gỡ tag', variant: 'error' });
+                              }
+                            }}
+                          />
+                        </span>
+                      ))}
+                    </div>
                   )}
                 </div>
                 <div className={styles.detailSession}>
@@ -310,6 +585,121 @@ export default function InboxPage() {
                 </div>
 
                 <div className={styles.actionBtnGroup}>
+                  {/* Tag Button & Popover */}
+                  <div style={{ position: 'relative' }}>
+                    <button
+                      onClick={() => setShowTagPicker(!showTagPicker)}
+                      className={styles.secondaryBtn}
+                      style={{
+                        background: showTagPicker ? 'rgba(99,102,241,0.2)' : undefined,
+                        borderColor: showTagPicker ? '#6366f1' : undefined,
+                      }}
+                    >
+                      <TagIcon size={14} />
+                      <span>Tag ({attachedTags.length})</span>
+                    </button>
+
+                    {showTagPicker && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: '100%',
+                          right: 0,
+                          marginTop: '6px',
+                          background: '#0f172a',
+                          border: '1px solid rgba(255,255,255,0.15)',
+                          borderRadius: '10px',
+                          padding: '10px',
+                          width: '220px',
+                          zIndex: 100,
+                          boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            color: '#94a3b8',
+                            marginBottom: '8px',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <span>Gắn / Gỡ Tag</span>
+                          <X
+                            size={14}
+                            style={{ cursor: 'pointer' }}
+                            onClick={() => setShowTagPicker(false)}
+                          />
+                        </div>
+
+                        {allTags.length === 0 ? (
+                          <div style={{ fontSize: '12px', color: '#64748b', textAlign: 'center', padding: '12px 0' }}>
+                            Chưa có tag nào.
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto' }}>
+                            {allTags.map((tag) => {
+                              const isAttached = attachedTags.some((at) => at.tag_id === tag.id);
+                              return (
+                                <button
+                                  key={tag.id}
+                                  onClick={async () => {
+                                    try {
+                                      if (isAttached) {
+                                        await detachTagMutation.mutateAsync({
+                                          sessionId: selectedCase.session_id,
+                                          tagId: tag.id,
+                                        });
+                                        addToast({ title: `Đã gỡ tag [${tag.name}]`, variant: 'success' });
+                                      } else {
+                                        await attachTagMutation.mutateAsync({
+                                          sessionId: selectedCase.session_id,
+                                          tagId: tag.id,
+                                        });
+                                        addToast({ title: `Đã gắn tag [${tag.name}]`, variant: 'success' });
+                                      }
+                                    } catch (err: any) {
+                                      addToast({ title: err.message || 'Thao tác tag thất bại', variant: 'error' });
+                                    }
+                                  }}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    padding: '6px 10px',
+                                    borderRadius: '6px',
+                                    border: '1px solid rgba(255,255,255,0.06)',
+                                    background: isAttached ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.03)',
+                                    cursor: 'pointer',
+                                    fontSize: '12px',
+                                    color: '#fff',
+                                    transition: 'all 0.15s',
+                                  }}
+                                >
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span
+                                      style={{
+                                        width: '8px',
+                                        height: '8px',
+                                        borderRadius: '50%',
+                                        background: tag.color,
+                                        display: 'inline-block',
+                                      }}
+                                    />
+                                    {tag.name}
+                                  </span>
+                                  {isAttached && <span style={{ color: '#6366f1', fontWeight: 700 }}>✓</span>}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
                   {selectedCase.status !== 'HUMAN_CS_ACTIVE' && (
                     <button
                       onClick={handleTakeCase}
