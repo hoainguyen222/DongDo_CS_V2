@@ -46,29 +46,50 @@ func (h *Hub) Run() {
 		select {
 		case client := <-h.register:
 			h.mu.Lock()
-			if _, ok := h.sessions[client.sessionID]; !ok {
-				h.sessions[client.sessionID] = make(map[*Client]bool)
+			// Register the client under its primary sessionID plus any
+			// extra channels (e.g. "admin_inbox" for staff clients). All
+			// channels share the same `send` buffer so the browser sees
+			// one ordered stream regardless of source.
+			channels := append([]string{client.sessionID}, client.extraSessions...)
+			for _, sid := range channels {
+				if sid == "" {
+					continue
+				}
+				if _, ok := h.sessions[sid]; !ok {
+					h.sessions[sid] = make(map[*Client]bool)
+				}
+				h.sessions[sid][client] = true
 			}
-			h.sessions[client.sessionID][client] = true
 			h.mu.Unlock()
 
 		case client := <-h.unregister:
 			h.mu.Lock()
-			if clients, ok := h.sessions[client.sessionID]; ok {
-				if _, ok := clients[client]; ok {
-					delete(clients, client)
-
-					func() {
-						defer func() {
-							if r := recover(); r != nil {
-								h.logger.Warn().Interface("recover", r).Msg("Recovered from close of closed client channel")
-							}
-						}()
-						close(client.send)
-					}()
-
-					if len(clients) == 0 {
-						delete(h.sessions, client.sessionID)
+			// Remove the client from every channel it was registered
+			// under. Close the shared `send` channel exactly once to
+			// signal WritePump to exit.
+			channels := append([]string{client.sessionID}, client.extraSessions...)
+			closed := false
+			for _, sid := range channels {
+				if sid == "" {
+					continue
+				}
+				if clients, ok := h.sessions[sid]; ok {
+					if _, present := clients[client]; present {
+						delete(clients, client)
+						if !closed {
+							func() {
+								defer func() {
+									if r := recover(); r != nil {
+										h.logger.Warn().Interface("recover", r).Msg("Recovered from close of closed client channel")
+									}
+								}()
+								close(client.send)
+							}()
+							closed = true
+						}
+						if len(clients) == 0 {
+							delete(h.sessions, sid)
+						}
 					}
 				}
 			}
@@ -117,7 +138,9 @@ func (h *Hub) BroadcastToSessionExcept(sessionID string, event *domain.WSEvent, 
 			event.Type == domain.WSEventCallOffer ||
 			event.Type == domain.WSEventCallAnswer ||
 			event.Type == domain.WSEventCallICE ||
-			event.Type == domain.WSEventCallEnd
+			event.Type == domain.WSEventCallEnd ||
+			event.Type == domain.WSEventCallRing ||
+			event.Type == domain.WSEventCallStatusUpdate
 
 		if isBroadcastToAdmin {
 			if adminClients, ok := h.sessions["admin_inbox"]; ok {

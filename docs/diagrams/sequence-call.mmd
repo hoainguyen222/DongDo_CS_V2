@@ -1,0 +1,66 @@
+%%{init: {'theme': 'default', 'themeVariables': { 'primaryColor': '#dc2626', 'primaryTextColor': '#fff'}}}%%
+
+sequenceDiagram
+    autonumber
+    participant G as Guest Browser
+    participant FE as Next.js Frontend
+    participant API as Gin Handler
+    participant UC as VoiceUseCase
+    participant DB as Postgres
+    participant EB as Redis EventBus
+    participant WS as WebSocket Hub
+    participant AMI as Go AMI Client
+    participant AST as Asterisk 20
+    participant AG as Agent SIP Phone
+
+    G->>FE: Click "Gọi CSKH"
+    FE->>API: POST /api/voice/initiate<br/>{session_id, caller_type=guest, callee_type=cskh}
+    API->>UC: InitiateCall(ctx, params)
+    UC->>DB: INSERT voice_calls (status=RINGING)
+    UC->>EB: PublishWS(stream:ws, type=call_ring)
+    API-->>FE: 200 {id, status: RINGING}
+
+    par Realtime broadcast
+        EB->>WS: BroadcastToSession(admin_inbox)
+        WS-->>FE: WS frame {type:call_ring} → admin banner
+    end
+
+    Note over AG,FE: Admin clicks "Nghe máy"
+    FE->>API: POST /api/voice/accept<br/>{call_id, session_id}
+    API->>UC: AcceptCall(call_id)
+    UC->>AMI: Action: Originate<br/>Channel: PJSIP/1001<br/>Exten: 1000<br/>Context: from-internal<br/>Variable: SESSION_ID
+    AMI->>AST: AMI TCP frame
+    AST->>AG: SIP INVITE
+    AG-->>AST: SIP 200 OK
+    AST->>AST: Bridge into dongdo-queue
+    AST-->>AMI: Event: BridgeEnter
+    AMI->>UC: handleBridgeEnter(callID)
+    UC->>DB: UPDATE voice_calls SET status=ACTIVE
+    UC->>EB: PublishWS(stream:ws, type=call_status)
+    EB->>WS: BroadcastToSession(session_id)
+    WS-->>G: WS frame {type:call_status, payload:{status:connected}}
+
+    Note over AST: Recording auto-starts
+    AST->>AST: MixMonitor(/var/spool/asterisk/monitor/<file>.wav)
+
+    rect rgb(220, 252, 231)
+        Note over G,AG: Active call — both sides talking
+    end
+
+    G->>FE: Click "Kết thúc"
+    FE->>API: POST /api/voice/end<br/>{call_id, duration_seconds, recording_url}
+    API->>UC: EndCall(call_id, duration, url)
+    UC->>DB: UPDATE voice_calls SET status=ENDED, duration_seconds=?, recording_url=?
+    UC->>AMI: Action: Hangup(channel)
+    AMI->>AST: AMI frame
+    AST->>AG: SIP BYE
+    AG-->>AST: SIP 200 OK
+    AST->>AST: Stop MixMonitor
+    AST-->>AMI: Event: Hangup
+    UC->>EB: PublishWS(stream:ws, type=call_end)
+    EB->>WS: BroadcastToSession(session_id)
+    WS-->>G: WS frame {type:call_end}
+
+    rect rgb(254, 226, 226)
+        Note over G,AG: Call ended, recording available
+    end

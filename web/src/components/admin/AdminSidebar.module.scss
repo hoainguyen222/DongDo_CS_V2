@@ -280,3 +280,199 @@
   background: rgba(s.$brand-navy, 0.8);
   border-radius: s.$radius-sm;
 }
+
+// ── Incoming Call Banner ───────────────────────────────────
+.callBanner {
+  position: fixed;
+  top: s.$space-6;
+  right: s.$space-6;
+  z-index: 70;
+  background: linear-gradient(135deg, rgba(s.$brand-navy, 0.85) 0%, rgba(s.$brand-navy-light, 0.85) 100%);
+  backdrop-filter: blur(16px);
+  padding: s.$space-4;
+  border-radius: s.$radius-xl;
+  border: 2px solid s.$accent-red;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  gap: s.$space-4;
+  animation: pulseDot 1.5s ease-in-out infinite;
+  max-width: 420px;
+}
+
+.callBannerIcon {
+  width: 48px;
+  height: 48px;
+  border-radius: 9999px;
+  background-color: s.$accent-red;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.callBannerText {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.callBannerLabel {
+  font-size: s.$text-xs;
+  font-weight: 600;
+  color: s.$accent-red;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.callBannerCaller {
+  font-size: s.$text-sm;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.callBannerPhone {
+  font-size: 11px;
+  color: s.$text-muted;
+  margin-top: 2px;
+  font-family: s.$font-mono;
+}
+
+.callBannerActions {
+  display: flex;
+  align-items: center;
+  gap: s.$space-2;
+  flex-shrink: 0;
+}
+
+.callAcceptBtn {
+  padding: 8px 12px;
+  border-radius: s.$radius-xl;
+  background: s.$accent-green;
+  color: #fff;
+  border: none;
+  font-weight: 600;
+  font-size: s.$text-xs;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: filter s.$transition-fast;
+
+  &:hover {
+    filter: brightness(1.08);
+  }
+}
+
+.callDeclineBtn {
+  padding: 8px;
+  border-radius: s.$radius-xl;
+  background-color: rgba(s.$brand-red, 0.7);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  transition: filter s.$transition-fast;
+
+  &:hover {
+    filter: brightness(1.1);
+  }
+}
+
+// ── Team Agent Guest Call Banner ──────────────────────────
+.teamAgentBanner {
+  position: fixed;
+  top: calc(s.$space-6 + 96px);
+  right: s.$space-6;
+  z-index: 69;
+  background: linear-gradient(135deg, rgba(s.$brand-navy, 0.85) 0%, rgba(s.$brand-navy-light, 0.85) 100%);
+  backdrop-filter: blur(16px);
+  padding: s.$space-4;
+  border-radius: s.$radius-xl;
+  border: 1px solid rgba(s.$accent-cyan, 0.4);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  gap: s.$space-4;
+  max-width: 380px;
+}
+
+.teamAgentIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  background-color: rgba(s.$accent-cyan, 0.2);
+  color: s.$accent-cyan;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.teamAgentText {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.teamAgentLabel {
+  font-size: s.$text-xs;
+  font-weight: 600;
+  color: s.$accent-cyan;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.teamAgentGuest {
+  font-size: s.$text-sm;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.teamAgentSession {
+  font-size: 11px;
+  color: s.$text-dim;
+  font-family: s.$font-mono;
+}
+
+.teamAgentActions {
+  display: flex;
+  align-items: center;
+  gap: s.$space-2;
+  flex-shrink: 0;
+}
+
+.teamAgentBtn {
+  padding: 6px 10px;
+  border-radius: s.$radius-md;
+  background: rgba(s.$accent-cyan, 0.15);
+  color: s.$accent-cyan;
+  border: 1px solid rgba(s.$accent-cyan, 0.3);
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(s.$accent-cyan, 0.25);
+  }
+}
+
+.teamAgentDismissBtn {
+  padding: 6px;
+  border-radius: s.$radius-md;
+  background: rgba(30, 41, 59, 0.8);
+  color: s.$text-muted;
+  border: none;
+  cursor: pointer;
+
+  &:hover {
+    color: #fff;
+  }
+}

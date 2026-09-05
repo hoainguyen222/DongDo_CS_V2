@@ -7,15 +7,14 @@ import Image from 'next/image';
 import {
   LogOut,
   Phone,
-  Mic,
-  MicOff,
   PhoneOff,
   Users,
   X,
   Headphones,
+  ExternalLink,
 } from 'lucide-react';
 import { WSClient } from '@/lib/ws';
-import { WebRTCManager } from '@/lib/webrtc';
+import { buildSipUri } from '@/lib/audioStream';
 import styles from './AdminSidebar.module.scss';
 
 // ── RBAC Helpers ───────────────────────────────────────────
@@ -119,17 +118,46 @@ function NavButton({
   );
 }
 
-// ── Call Components (kept inside this file for cohesion) ─────
+// ── Incoming Call Banner (click-to-call display only) ────────
+// Admin does NOT pick up in the browser. The backend Asterisk
+// bridges the call to the agent's SIP client / softphone /
+// desk phone. This banner only:
+//   - announces the incoming call (with caller name + phone)
+//   - offers "Mở softphone" → builds a SIP URI for the agent's
+//     default SIP handler
+//   - offers "Từ chối" → marks the call as missed via REST API
 export function IncomingCallBanner({
   incomingCall,
   onAnswer,
   onDecline,
+  asteriskHost,
 }: {
-  incomingCall: { session_id: string; caller_id: string; offer?: any } | null;
-  onAnswer: () => void;
-  onDecline: () => void;
+  incomingCall: { session_id: string; caller_id: string; call_id?: number; phone?: string } | null;
+  onAnswer: (callId: number, sessionId: string) => void;
+  onDecline: (callId: number | undefined, sessionId: string) => void;
+  asteriskHost?: string;
 }) {
   if (!incomingCall) return null;
+
+  const sipUri = buildSipUri(incomingCall.phone || incomingCall.caller_id || 'guest', asteriskHost);
+
+  const handleAnswer = () => {
+    if (incomingCall.call_id && onAnswer) {
+      onAnswer(incomingCall.call_id, incomingCall.session_id);
+    }
+    // Also open SIP URI in default handler.
+    if (typeof window !== 'undefined') {
+      try {
+        window.location.href = sipUri;
+      } catch (_) {
+        /* noop */
+      }
+    }
+  };
+
+  const handleDecline = () => {
+    onDecline(incomingCall.call_id, incomingCall.session_id);
+  };
 
   return (
     <div className={styles.callBanner}>
@@ -139,61 +167,19 @@ export function IncomingCallBanner({
       <div className={styles.callBannerText}>
         <div className={styles.callBannerLabel}>Cuộc gọi thoại đến!</div>
         <div className={styles.callBannerCaller}>{incomingCall.caller_id}</div>
+        {incomingCall.phone && (
+          <div className={styles.callBannerPhone}>{incomingCall.phone}</div>
+        )}
       </div>
       <div className={styles.callBannerActions}>
-        <button onClick={onAnswer} className={styles.callAcceptBtn}>
-          <Phone style={{ width: 16, height: 16 }} />
-          <span>Nghe máy</span>
+        <button onClick={handleAnswer} className={styles.callAcceptBtn}>
+          <ExternalLink style={{ width: 16, height: 16 }} />
+          <span>Mở softphone</span>
         </button>
-        <button onClick={onDecline} className={styles.callDeclineBtn} aria-label="Từ chối cuộc gọi">
+        <button onClick={handleDecline} className={styles.callDeclineBtn} aria-label="Từ chối cuộc gọi">
           <PhoneOff style={{ width: 16, height: 16 }} />
         </button>
       </div>
-    </div>
-  );
-}
-
-export function ActiveCallBar({
-  isCallActive,
-  callDuration,
-  isMuted,
-  onToggleMute,
-  onEndCall,
-}: {
-  isCallActive: boolean;
-  callDuration: number;
-  isMuted: boolean;
-  onToggleMute: () => void;
-  onEndCall: () => void;
-}) {
-  if (!isCallActive) return null;
-
-  const formatTime = (s: number) => {
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
-  };
-
-  return (
-    <div className={styles.activeCallBar}>
-      <div className={styles.activeCallIcon}>
-        <Phone style={{ width: 20, height: 20 }} />
-      </div>
-      <div className={styles.activeCallText}>
-        <div className={styles.activeCallLabel}>Đang đàm thoại WebRTC</div>
-        <div className={styles.activeCallDuration}>{formatTime(callDuration)}</div>
-      </div>
-      <button onClick={onToggleMute} className={styles.activeCallBtn} aria-label="Bật/tắt mic">
-        {isMuted ? (
-          <MicOff style={{ width: 16, height: 16, color: '#f87171' }} />
-        ) : (
-          <Mic style={{ width: 16, height: 16 }} />
-        )}
-      </button>
-      <button onClick={onEndCall} className={styles.endCallBtn}>
-        <PhoneOff style={{ width: 16, height: 16 }} />
-        <span>Kết thúc</span>
-      </button>
     </div>
   );
 }
@@ -447,185 +433,6 @@ export function AdminSidebar({
       </div>
     </aside>
   );
-}
-
-// ── WebRTC Hook for Admin ───────────────────────────────────
-const MISSED_CALL_TIMEOUT = 60; // seconds before marking as missed
-
-export function useAdminWebRTC(wsRef: React.RefObject<WSClient | null>, sessionId: string, onCallEnd: () => void) {
-  const rtcRef = useRef<WebRTCManager | null>(null);
-  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
-  const callTimerRef = useRef<any>(null);
-  const missedCallTimerRef = useRef<any>(null);
-  const [isCallActive, setIsCallActive] = useState(false);
-  const [callDuration, setCallDuration] = useState(0);
-  const [isMuted, setIsMuted] = useState(false);
-  const [incomingCall, setIncomingCall] = useState<{ session_id: string; caller_id: string; call_id?: number; offer?: any } | null>(null);
-  const [isMissedCall, setIsMissedCall] = useState(false);
-
-  const clearMissedCallTimer = useCallback(() => {
-    if (missedCallTimerRef.current) {
-      clearTimeout(missedCallTimerRef.current);
-      missedCallTimerRef.current = null;
-    }
-  }, []);
-
-  const startMissedCallTimer = useCallback((callSessionId: string, _callerId: string, callId?: number) => {
-    clearMissedCallTimer();
-    setIsMissedCall(false);
-    missedCallTimerRef.current = setTimeout(async () => {
-      // Mark as missed call if no one answered
-      setIsMissedCall(true);
-      try {
-        const { api } = await import('@/lib/api');
-        // Use the dedicated markMissedCall API to set status to MISSED
-        if (callId) {
-          await api.markMissedCall(callId, callSessionId);
-        } else {
-          await api.endCall(callSessionId, 0); // Fallback: 0 duration = missed
-        }
-      } catch (_) {}
-      // Auto-clear after showing
-      setTimeout(() => {
-        setIncomingCall(null);
-        setIsMissedCall(false);
-      }, 5000);
-    }, MISSED_CALL_TIMEOUT * 1000);
-  }, [clearMissedCallTimer]);
-
-  const startCallTimer = useCallback(() => {
-    clearInterval(callTimerRef.current);
-    setCallDuration(0);
-    callTimerRef.current = setInterval(() => {
-      setCallDuration((p) => p + 1);
-    }, 1000);
-  }, []);
-
-  const handleAnswerCall = useCallback(async () => {
-    if (!incomingCall || !wsRef.current) return;
-    clearMissedCallTimer();
-    const callData = { ...incomingCall };
-    setIsCallActive(true);
-    setIncomingCall(null);
-    setIsMissedCall(false);
-    startCallTimer();
-    const rtc = new WebRTCManager(wsRef.current, callData.session_id, (state: any) => {
-      if (state === 'connected') startCallTimer();
-      else if (state === 'ended') {
-        setIsCallActive(false);
-        setIncomingCall(null);
-        clearInterval(callTimerRef.current);
-        setCallDuration(0);
-        onCallEnd();
-      }
-    }, (stream: any) => {
-      if (remoteAudioRef.current) {
-        remoteAudioRef.current.srcObject = stream;
-        remoteAudioRef.current.play().catch(() => {});
-      }
-    });
-    rtcRef.current = rtc;
-    if (callData.offer) await rtc.handleOffer(callData.offer);
-  }, [incomingCall, wsRef, startCallTimer, onCallEnd, clearMissedCallTimer]);
-
-  const handleDeclineCall = useCallback(() => {
-    clearMissedCallTimer();
-    const { voiceApi } = require('@/lib/api');
-    voiceApi.declineCall(incomingCall?.session_id || '').catch(() => {});
-    setIncomingCall(null);
-    setIsMissedCall(false);
-  }, [incomingCall, clearMissedCallTimer]);
-
-  const handleEndCall = useCallback(async () => {
-    clearMissedCallTimer();
-    setIsCallActive(false);
-    setIncomingCall(null);
-    clearInterval(callTimerRef.current);
-    setCallDuration(0);
-    setIsMissedCall(false);
-    if (rtcRef.current) {
-      await rtcRef.current.endCall(false, callDuration).catch(() => {}); // local cleanup only
-      rtcRef.current = null;
-    }
-    const { voiceApi } = require('@/lib/api');
-    // Use incomingCall.session_id if available, otherwise fall back to the provided sessionId
-    const targetSessionId = incomingCall?.session_id || sessionId;
-    await voiceApi.endCall(targetSessionId, callDuration).catch(() => {});
-    onCallEnd();
-  }, [callDuration, sessionId, incomingCall, onCallEnd, clearMissedCallTimer]);
-
-  const toggleMute = useCallback(() => {
-    if (rtcRef.current) {
-      const muted = rtcRef.current.toggleMute();
-      setIsMuted(muted);
-      return muted;
-    }
-    return false;
-  }, []);
-
-  useEffect(() => {
-    if (!wsRef.current) return;
-
-    wsRef.current.on('call_ring', (event: any) => {
-      const sID = event.payload?.session_id || event.session_id;
-      const cID = event.payload?.caller_id || event.sender_id || 'Khách hàng';
-      const offerData = event.payload?.offer || event.payload;
-      if (sID) {
-        // If already in a call, send busy notification
-        if (isCallActive) {
-          // Admin is busy, caller will get no answer
-          return;
-        }
-        const callId = event.payload?.call_id || event.call_id;
-        setIncomingCall({ session_id: sID, caller_id: cID, call_id: callId, offer: offerData });
-        // Start missed call timer with call_id for proper missed call marking
-        startMissedCallTimer(sID, cID, callId);
-      }
-    });
-
-    wsRef.current.on('call_offer', (event: any) => {
-      const sID = event.payload?.session_id || event.session_id;
-      const cID = event.payload?.caller_id || event.sender_id || 'Khách hàng';
-      if (sID) {
-        // If already in a call, ignore (already handled by call_ring)
-        if (!isCallActive && !incomingCall) {
-          const callId = event.payload?.call_id || event.call_id;
-          setIncomingCall({ session_id: sID, caller_id: cID, call_id: callId, offer: event.payload });
-          startMissedCallTimer(sID, cID, callId);
-        }
-      }
-    });
-
-    wsRef.current.on('call_end', async () => {
-      setIsCallActive(false);
-      setIncomingCall(null);
-      setIsMissedCall(false);
-      clearMissedCallTimer();
-      clearInterval(callTimerRef.current);
-      setCallDuration(0);
-      rtcRef.current = null;
-      onCallEnd();
-    });
-
-    return () => {
-      clearInterval(callTimerRef.current);
-      clearMissedCallTimer();
-    };
-  }, [wsRef, onCallEnd, isCallActive, incomingCall, startMissedCallTimer, clearMissedCallTimer]);
-
-  return {
-    rtcRef,
-    remoteAudioRef,
-    isCallActive,
-    callDuration,
-    isMuted,
-    incomingCall,
-    isMissedCall,
-    handleAnswerCall,
-    handleDeclineCall,
-    handleEndCall,
-    toggleMute,
-  };
 }
 
 // ── Types for Team Agent Guest Call Notifications ────────────

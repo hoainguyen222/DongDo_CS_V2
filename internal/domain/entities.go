@@ -160,16 +160,10 @@ type LearningItem struct {
 // ============================================================
 // Voice Call
 // ============================================================
-
-type CallStatus string
-
-const (
-	CallRinging  CallStatus = "RINGING"
-	CallActive   CallStatus = "ACTIVE"
-	CallEnded    CallStatus = "ENDED"
-	CallMissed   CallStatus = "MISSED"
-	CallRejected CallStatus = "REJECTED"
-)
+//
+// CallStatus is defined in voice_call_status.go to keep the lifecycle
+// states (RINGING, DIALING, BRIDGED, ACTIVE, ENDED, FAILED, MISSED,
+// REJECTED) in a single, dedicated file alongside their helpers.
 
 type CallerType string
 
@@ -190,8 +184,15 @@ type VoiceCall struct {
 	DurationSeconds int        `json:"duration_seconds"`
 	RecordingURL    string     `json:"recording_url"`
 	Transcript      string     `json:"transcript"`
-	CreatedAt       time.Time  `json:"created_at"`
-	EndedAt         *time.Time `json:"ended_at,omitempty"`
+
+	// Asterisk AMI tracking fields (populated when AMI integration is enabled).
+	ChannelID   string `json:"channel_id,omitempty"`
+	UniqueID    string `json:"unique_id,omitempty"`
+	LinkedID    string `json:"linked_id,omitempty"`
+	TargetExten string `json:"target_exten,omitempty"`
+
+	CreatedAt time.Time  `json:"created_at"`
+	EndedAt   *time.Time `json:"ended_at,omitempty"`
 }
 
 // ============================================================
@@ -226,9 +227,10 @@ const (
 	WSEventCallOffer      WSEventType = "call_offer"
 	WSEventCallAnswer     WSEventType = "call_answer"
 	WSEventCallICE        WSEventType = "call_ice"
-	WSEventCallEnd        WSEventType = "call_end"
-	WSEventCallRing       WSEventType = "call_ring"
-	WSEventAIStatus       WSEventType = "ai_status"
+	WSEventCallEnd         WSEventType = "call_end"
+	WSEventCallRing        WSEventType = "call_ring"
+	WSEventCallStatusUpdate WSEventType = "call_status_update"
+	WSEventAIStatus        WSEventType = "ai_status"
 )
 
 type WSEvent struct {

@@ -1,0 +1,97 @@
+%%{init: {'theme': 'default', 'themeVariables': { 'primaryColor': '#16a34a', 'primaryTextColor': '#fff'}}}%%
+
+flowchart TB
+    subgraph Internet["Internet"]
+        GUEST[Guest<br/>Browser]
+        ADMIN[Admin<br/>Browser]
+        SIP[Agent SIP<br/>Client]
+        ITSP[ITSP<br/>SIP Trunk]
+    end
+
+    subgraph DMZ["DMZ"]
+        LB[Nginx<br/>:443 :80<br/>SSL termination]
+        FW[Firewall<br/>UFW]
+    end
+
+    subgraph AppNet["App Network (10.10.0.0/24)"]
+        APP1[App server 1<br/>Go backend :8080]
+        APP2[App server 2<br/>Go backend :8080]
+        WEB1[Web :3000]
+        WEB2[Web :3000]
+    end
+
+    subgraph DataNet["Data Network (10.20.0.0/24)"]
+        PG[(Postgres<br/>primary)]
+        PGR[(Postgres<br/>replica)]
+        RD[(Redis<br/>master)]
+        RDR[(Redis<br/>replica)]
+        QD[(Qdrant)]
+    end
+
+    subgraph TelNet["Telephony Network (10.30.0.0/24)"]
+        AST1[Asterisk 1<br/>PJSIP + AMI + ARI]
+        AST2[Asterisk 2<br/>failover]
+    end
+
+    subgraph Storage["Object Storage"]
+        S3[(S3 / MinIO<br/>recordings)]
+    end
+
+    subgraph Monitoring["Monitoring Stack"]
+        PROM[Prometheus]
+        GRAF[Grafana]
+        ALERT[Alertmanager]
+    end
+
+    GUEST --> LB
+    ADMIN --> LB
+    LB --> WEB1
+    LB --> WEB2
+    WEB1 --> APP1
+    WEB2 --> APP2
+
+    SIP -->|SIP TLS| FW
+    ITSP -->|SIP TLS| FW
+    FW --> AST1
+    FW --> AST2
+
+    APP1 --> PG
+    APP2 --> PG
+    APP1 --> RD
+    APP2 --> RD
+    APP1 --> QD
+    APP2 --> QD
+
+    APP1 -->|AMI TCP| AST1
+    APP2 -->|AMI TCP| AST1
+
+    AST1 --> S3
+    AST2 --> S3
+
+    PG --> PGR
+    RD --> RDR
+
+    APP1 -.->|metrics| PROM
+    APP2 -.->|metrics| PROM
+    PG -.->|metrics| PROM
+    RD -.->|metrics| PROM
+    AST1 -.->|metrics| PROM
+
+    PROM --> GRAF
+    PROM --> ALERT
+
+    classDef internet fill:#fef3c7,stroke:#d97706,color:#000
+    classDef dmz fill:#fee2e2,stroke:#dc2626,color:#000
+    classDef app fill:#dbeafe,stroke:#2563eb,color:#000
+    classDef data fill:#ede9fe,stroke:#7c3aed,color:#000
+    classDef tel fill:#fce7f3,stroke:#db2777,color:#000
+    classDef storage fill:#d1fae5,stroke:#059669,color:#000
+    classDef mon fill:#fef9c3,stroke:#ca8a04,color:#000
+
+    class GUEST,ADMIN,SIP,ITSP internet
+    class LB,FW dmz
+    class APP1,APP2,WEB1,WEB2 app
+    class PG,PGR,RD,RDR,QD data
+    class AST1,AST2 tel
+    class S3 storage
+    class PROM,GRAF,ALERT mon

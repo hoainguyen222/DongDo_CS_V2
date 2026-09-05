@@ -13,26 +13,29 @@ import styles from './ConfirmDialog.module.scss';
 
 export function ConfirmDialog() {
   const { confirmDialog, closeConfirm } = useUIStore();
+  const [confirming, setConfirming] = React.useState(false);
+
+  const handleConfirm = async () => {
+    if (!confirmDialog || confirming) return;
+    setConfirming(true);
+    try {
+      await confirmDialog.onConfirm();
+    } catch (_) {
+      // Error already handled by caller (toast)
+    }
+    setConfirming(false);
+    closeConfirm();
+  };
 
   if (!confirmDialog) return null;
 
   const {
     title,
     message,
-    onConfirm,
     confirmText = 'Xác nhận',
     cancelText = 'Hủy',
     variant = 'warning',
   } = confirmDialog;
-
-  const handleConfirm = async () => {
-    try {
-      await onConfirm();
-    } catch (_) {
-      // Error already handled by caller (toast)
-    }
-    closeConfirm();
-  };
 
   const variantConfig = {
     danger: {
@@ -68,11 +71,11 @@ export function ConfirmDialog() {
         </div>
 
         <div className={styles.actions}>
-          <button type="button" onClick={closeConfirm} className={styles.btnCancel}>
+          <button type="button" onClick={closeConfirm} className={styles.btnCancel} disabled={confirming}>
             {cancelText}
           </button>
-          <button type="button" onClick={handleConfirm} className={`${styles.btnConfirm} ${cfg.btnClass}`}>
-            {confirmText}
+          <button type="button" onClick={handleConfirm} className={`${styles.btnConfirm} ${cfg.btnClass}`} disabled={confirming}>
+            {confirming ? 'Đang xử lý...' : confirmText}
           </button>
         </div>
       </div>

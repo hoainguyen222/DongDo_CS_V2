@@ -78,6 +78,9 @@ type VoiceCallRepository interface {
 	End(ctx context.Context, id int64, durationSeconds int, recordingURL string) error
 	MarkMissed(ctx context.Context, id int64) error
 	SetTranscript(ctx context.Context, id int64, transcript string) error
+	SetAsteriskChannels(ctx context.Context, id int64, channelID, uniqueID, linkedID, targetExten string) error
+	GetByChannelID(ctx context.Context, channelID string) (*VoiceCall, error)
+	GetByLinkedID(ctx context.Context, linkedID string) (*VoiceCall, error)
 	GetBySession(ctx context.Context, sessionID string) ([]*VoiceCall, error)
 	ListAll(ctx context.Context) ([]*VoiceCall, error)
 	GetByID(ctx context.Context, id int64) (*VoiceCall, error)

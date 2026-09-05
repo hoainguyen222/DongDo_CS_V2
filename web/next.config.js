@@ -3,6 +3,7 @@ const path = require('path');
 
 const nextConfig = {
   reactStrictMode: false,
+  output: 'standalone', // required for the Docker multi-stage build (web/Dockerfile)
   // SCSS imports dùng `@/...` cần được resolve qua `tsconfig.paths`
   // vì vậy ta hook vào webpack để handle các import SCSS với alias này.
   webpack(config) {

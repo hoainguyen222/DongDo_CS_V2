@@ -1,0 +1,477 @@
+[2026-09-04 14:45:19] Asterisk 20.20.1 built by builder @ ac6af9b2c20d on a aarch64 running Linux on 2026-08-31 10:59:52 UTC
+[2026-09-04 14:45:19] NOTICE[7] loader.c: 363 modules will be loaded.
+[2026-09-04 14:45:19] WARNING[7] res_config_pgsql.c: PostgreSQL RealTime: No database user found, using 'asterisk' as default.
+[2026-09-04 14:45:19] WARNING[7] res_config_pgsql.c: PostgreSQL RealTime: No database password found, using 'asterisk' as default.
+[2026-09-04 14:45:19] WARNING[7] res_config_pgsql.c: PostgreSQL RealTime: No database host found, using localhost via socket.
+[2026-09-04 14:45:19] WARNING[7] res_config_pgsql.c: PostgreSQL RealTime: No database name found, using 'asterisk' as default.
+[2026-09-04 14:45:19] WARNING[7] res_config_pgsql.c: PostgreSQL RealTime: No database port found, using 5432 as default.
+[2026-09-04 14:45:19] WARNING[7] res_config_pgsql.c: PostgreSQL RealTime: No database socket found, using '/tmp/.s.PGSQL.5432' as default.
+[2026-09-04 14:45:19] ERROR[7] res_config_pgsql.c: PostgreSQL RealTime: Failed to connect database asterisk on : 
+[2026-09-04 14:45:19] WARNING[7] res_config_pgsql.c: PostgreSQL RealTime: Couldn't establish connection. Check debug.
+[2026-09-04 14:45:19] NOTICE[7] res_config_ldap.c: No directory user found, anonymous binding as default.
+[2026-09-04 14:45:19] ERROR[7] res_config_ldap.c: No directory URL or host found.
+[2026-09-04 14:45:19] ERROR[7] res_config_ldap.c: Cannot load LDAP RealTime driver.
+[2026-09-04 14:45:19] NOTICE[7] cdr.c: CDR simple logging enabled.
+[2026-09-04 14:45:19] ERROR[7] config_options.c: Could not find config type for category 'csv' in 'cel.conf'
+[2026-09-04 14:45:19] NOTICE[7] cel.c: Failed to process CEL configuration; using defaults
+[2026-09-04 14:45:19] NOTICE[7] dnsmgr.c: Managed DNS entries will be refreshed every 300 seconds.
+[2026-09-04 14:45:19] ERROR[7] config_options.c: Could not find option suitable for category 'general' named 'transferdelay' at line 11 of 
+[2026-09-04 14:45:19] ERROR[7] config_options.c: In features.conf: Processing options for general failed
+[2026-09-04 14:45:19] NOTICE[7] features_config.c: Could not load features config; using defaults
+[2026-09-04 14:45:19] WARNING[7] http.c: Ignoring unknown option 'allowed_origins' in http.conf
+[2026-09-04 14:45:19] WARNING[7] http.c: Ignoring unknown option 'session_keepalive' in http.conf
+[2026-09-04 14:45:19] NOTICE[7] indications.c: Default country for indication tones: us
+[2026-09-04 14:45:19] WARNING[7] indications.c: Failed to get indication zone: us
+[2026-09-04 14:45:19] WARNING[7] indications.c: Unable to set the default country (for indication tones)
+[2026-09-04 14:45:19] ERROR[69] res_pjsip/config_system.c: There are no local system nameservers configured, resorting to system resolution
+[2026-09-04 14:45:19] ERROR[7] config_options.c: Could not find option suitable for category 'aor-trunk-pstn' named 'media_address' at line 82 of 
+[2026-09-04 14:45:19] ERROR[7] res_sorcery_config.c: Could not create an object of type 'aor' with id 'aor-trunk-pstn' from configuration file 'pjsip.conf'
+[2026-09-04 14:45:19] ERROR[7] config_options.c: Could not find option suitable for category 'aor-ari' named 'media_address' at line 82 of 
+[2026-09-04 14:45:19] ERROR[7] res_sorcery_config.c: Could not create an object of type 'aor' with id 'aor-ari' from configuration file 'pjsip.conf'
+[2026-09-04 14:45:19] ERROR[7] config_options.c: Could not find option suitable for category 'aor-agent-1001' named 'media_address' at line 82 of 
+[2026-09-04 14:45:19] ERROR[7] res_sorcery_config.c: Could not create an object of type 'aor' with id 'aor-agent-1001' from configuration file 'pjsip.conf'
+[2026-09-04 14:45:19] ERROR[7] config_options.c: Could not find option suitable for category 'aor-agent-1002' named 'media_address' at line 82 of 
+[2026-09-04 14:45:19] ERROR[7] res_sorcery_config.c: Could not create an object of type 'aor' with id 'aor-agent-1002' from configuration file 'pjsip.conf'
+[2026-09-04 14:45:19] ERROR[7] config_options.c: Could not find option suitable for category 'aor-agent-1003' named 'media_address' at line 82 of 
+[2026-09-04 14:45:19] ERROR[7] res_sorcery_config.c: Could not create an object of type 'aor' with id 'aor-agent-1003' from configuration file 'pjsip.conf'
+[2026-09-04 14:45:19] ERROR[7] config_options.c: Could not find option suitable for category 'aor-agent-1004' named 'media_address' at line 82 of 
+[2026-09-04 14:45:19] ERROR[7] res_sorcery_config.c: Could not create an object of type 'aor' with id 'aor-agent-1004' from configuration file 'pjsip.conf'
+[2026-09-04 14:45:19] ERROR[7] config_options.c: Could not find option suitable for category 'aor-agent-1005' named 'media_address' at line 82 of 
+[2026-09-04 14:45:19] ERROR[7] res_sorcery_config.c: Could not create an object of type 'aor' with id 'aor-agent-1005' from configuration file 'pjsip.conf'
+[2026-09-04 14:45:19] ERROR[7] config_options.c: Could not find option suitable for category 'aor-guest' named 'media_address' at line 82 of 
+[2026-09-04 14:45:19] ERROR[7] res_sorcery_config.c: Could not create an object of type 'aor' with id 'aor-guest' from configuration file 'pjsip.conf'
+[2026-09-04 14:45:19] ERROR[7] res_pjsip/config_transport.c: Transport: transport-tls: cert_file /etc/asterisk/keys/asterisk.pem is either missing or not readable
+[2026-09-04 14:45:19] ERROR[7] config_options.c: Error parsing cert_file=/etc/asterisk/keys/asterisk.pem at line 34 of 
+[2026-09-04 14:45:19] ERROR[7] res_sorcery_config.c: Could not create an object of type 'transport' with id 'transport-tls' from configuration file 'pjsip.conf'
+[2026-09-04 14:45:19] ERROR[7] config_options.c: Could not find option suitable for category 'trunk-pstn' named 'codec_prefs' at line 49 of 
+[2026-09-04 14:45:19] ERROR[7] res_sorcery_config.c: Could not create an object of type 'endpoint' with id 'trunk-pstn' from configuration file 'pjsip.conf'
+[2026-09-04 14:45:19] ERROR[7] config_options.c: Could not find option suitable for category 'ari-user' named 'codec_prefs' at line 49 of 
+[2026-09-04 14:45:19] ERROR[7] res_sorcery_config.c: Could not create an object of type 'endpoint' with id 'ari-user' from configuration file 'pjsip.conf'
+[2026-09-04 14:45:19] ERROR[7] config_options.c: Could not find option suitable for category 'agent-1001' named 'codec_prefs' at line 49 of 
+[2026-09-04 14:45:19] ERROR[7] res_sorcery_config.c: Could not create an object of type 'endpoint' with id 'agent-1001' from configuration file 'pjsip.conf'
+[2026-09-04 14:45:19] ERROR[7] config_options.c: Could not find option suitable for category 'agent-1002' named 'codec_prefs' at line 49 of 
+[2026-09-04 14:45:19] ERROR[7] res_sorcery_config.c: Could not create an object of type 'endpoint' with id 'agent-1002' from configuration file 'pjsip.conf'
+[2026-09-04 14:45:19] ERROR[7] config_options.c: Could not find option suitable for category 'agent-1003' named 'codec_prefs' at line 49 of 
+[2026-09-04 14:45:19] ERROR[7] res_sorcery_config.c: Could not create an object of type 'endpoint' with id 'agent-1003' from configuration file 'pjsip.conf'
+[2026-09-04 14:45:19] ERROR[7] config_options.c: Could not find option suitable for category 'agent-1004' named 'codec_prefs' at line 49 of 
+[2026-09-04 14:45:19] ERROR[7] res_sorcery_config.c: Could not create an object of type 'endpoint' with id 'agent-1004' from configuration file 'pjsip.conf'
+[2026-09-04 14:45:19] ERROR[7] config_options.c: Could not find option suitable for category 'agent-1005' named 'codec_prefs' at line 49 of 
+[2026-09-04 14:45:19] ERROR[7] res_sorcery_config.c: Could not create an object of type 'endpoint' with id 'agent-1005' from configuration file 'pjsip.conf'
+[2026-09-04 14:45:19] ERROR[7] config_options.c: Could not find option suitable for category 'guest' named 'codec_prefs' at line 49 of 
+[2026-09-04 14:45:19] ERROR[7] res_sorcery_config.c: Could not create an object of type 'endpoint' with id 'guest' from configuration file 'pjsip.conf'
+[2026-09-04 14:45:19] ERROR[69] res_pjsip/config_system.c: There are no local system nameservers configured, resorting to system resolution
+[2026-09-04 14:45:19] NOTICE[7] res_smdi.c: No SMDI interfaces are available to listen on, not starting SMDI listener.
+[2026-09-04 14:45:19] WARNING[7] res_musiconhold.c: Unknown option 'debug' in [general] section of musiconhold.conf
+[2026-09-04 14:45:19] WARNING[7] res_musiconhold.c: Unknown format 'alaw,ulaw,gsm' -- defaulting to SLIN
+[2026-09-04 14:45:19] ERROR[7] file.c: Error opening directory - /var/lib/asterisk/moh: No such file or directory
+[2026-09-04 14:45:19] WARNING[7] res_musiconhold.c: No music on hold classes configured, disabling music on hold.
+[2026-09-04 14:45:19] ERROR[7] netsock2.c: getaddrinfo("turn", "(null)", ...): Name does not resolve
+[2026-09-04 14:45:19] WARNING[7] res_rtp_asterisk.c: Invalid TURN server address: turn:turn@stun.l.google.com:3478
+[2026-09-04 14:45:19] WARNING[7] chan_sip.c: Failed to bind to 0.0.0.0:5060: Address in use
+[2026-09-04 14:45:19] WARNING[7] iax2/firmware.c: Error opening firmware directory '/var/lib/asterisk/firmware/iax': No such file or directory
+[2026-09-04 14:45:19] ERROR[7] chan_mobile.c: No Bluetooth devices found. Not loading module.
+[2026-09-04 14:45:19] ERROR[7] config_options.c: Could not find option suitable for category 'dongdo' named 'read_perm' at line 26 of 
+[2026-09-04 14:45:19] ERROR[7] res_sorcery_config.c: Could not create an object of type 'user' with id 'dongdo' from configuration file 'ari.conf'
+[2026-09-04 14:45:19] ERROR[7] config_options.c: Could not find option suitable for category 'dongdo-readonly' named 'read_perm' at line 39 of 
+[2026-09-04 14:45:19] ERROR[7] res_sorcery_config.c: Could not create an object of type 'user' with id 'dongdo-readonly' from configuration file 'ari.conf'
+[2026-09-04 14:45:19] ERROR[7] config_options.c: Could not find config type for category 'general' in 'pjsip_notify.conf'
+[2026-09-04 14:45:19] ERROR[69] pjproject: 	../src/pjsip/sip_endpo Assert failed: !"Too many modules registered!"
+[2026-09-04 14:45:19] ERROR[69] res_pjsip.c: Unable to register module WebSocket Transport Module
+[2026-09-04 14:45:19] NOTICE[7] confbridge/conf_config_parser.c: Adding default_menu menu to app_confbridge
+[2026-09-04 14:45:19] NOTICE[7] cdr_pgsql.c: cdr_pgsql configuration contains no global section, skipping module load.
+[2026-09-04 14:45:19] WARNING[7] cel_pgsql.c: CEL pgsql config file missing global section.
+[2026-09-04 14:45:19] WARNING[7] config.c: parse error: No category context for line 64 of /etc/asterisk/cel_sqlite3_custom.conf
+[2026-09-04 14:45:19] ERROR[7] cdrel_custom/config.c: Unable to load cel_sqlite3_custom.conf. Not logging CELs to custom database
+[2026-09-04 14:45:19] WARNING[7] cdrel_custom/config.c: cel_custom.conf->general: Missing 'fields' parameter
+[2026-09-04 14:45:19] WARNING[7] cdrel_custom/config.c: cel_custom.conf->map1: Missing 'fields' parameter
+[2026-09-04 14:45:19] NOTICE[7] cdrel_custom/config.c: cel_custom.conf: Loaded 0 configs
+[2026-09-04 14:45:19] NOTICE[7] cdrel_custom/config.c: cdr_sqlite3_custom.conf: Loaded 0 configs
+[2026-09-04 14:45:19] NOTICE[7] cdrel_custom/config.c: cdr_custom.conf: Loaded 0 configs
+[2026-09-04 14:45:19] WARNING[7] config.c: parse error: No category context for line 4 of /etc/asterisk/extensions.conf
+[2026-09-04 14:45:19] ERROR[7] app_voicemail_imap.c: Couldn't find mailbox 1001 in context default
+[2026-09-04 14:45:19] ERROR[7] app_voicemail_imap.c: Couldn't find mailbox 1002 in context default
+[2026-09-04 14:45:19] ERROR[7] app_voicemail_imap.c: Couldn't find mailbox 1003 in context default
+[2026-09-04 14:45:19] ERROR[7] app_voicemail_imap.c: Couldn't find mailbox 1004 in context default
+[2026-09-04 14:45:19] ERROR[7] app_voicemail_imap.c: Couldn't find mailbox 1005 in context default
+[2026-09-04 14:45:19] ERROR[7] app_voicemail_imap.c: Couldn't find mailbox 1000 in context default
+[2026-09-04 14:45:19] WARNING[7] pbx_app.c: Already have an application 'VoiceMail'
+[2026-09-04 14:45:19] WARNING[7] pbx_app.c: Already have an application 'VoiceMailMain'
+[2026-09-04 14:45:19] WARNING[7] pbx_app.c: Already have an application 'VMAuthenticate'
+[2026-09-04 14:45:19] WARNING[7] pbx_app.c: Already have an application 'VoiceMailPlayMsg'
+[2026-09-04 14:45:19] WARNING[7] pbx_app.c: Already have an application 'VMSayName'
+[2026-09-04 14:45:19] ERROR[7] pbx_functions.c: Function VM_INFO already registered.
+[2026-09-04 14:45:19] WARNING[7] manager.c: Manager: Action 'VoicemailUsersList' already registered
+[2026-09-04 14:45:19] WARNING[7] manager.c: Manager: Action 'VoicemailUserStatus' already registered
+[2026-09-04 14:45:19] WARNING[7] manager.c: Manager: Action 'VoicemailRefresh' already registered
+[2026-09-04 14:45:19] WARNING[7] manager.c: Manager: Action 'VoicemailBoxSummary' already registered
+[2026-09-04 14:45:19] WARNING[7] manager.c: Manager: Action 'VoicemailMove' already registered
+[2026-09-04 14:45:19] WARNING[7] manager.c: Manager: Action 'VoicemailRemove' already registered
+[2026-09-04 14:45:19] WARNING[7] manager.c: Manager: Action 'VoicemailForward' already registered
+[2026-09-04 14:45:19] ERROR[7] app_voicemail_imap.c: Failure registering applications, functions or tests
+[2026-09-04 14:45:19] WARNING[7] res_hep_rtcp.c: res_hep is disabled; declining module load
+[2026-09-04 14:45:19] WARNING[7] res_hep_pjsip.c: res_hep is disabled; declining module load
+[2026-09-04 14:45:19] WARNING[7] app_queue.c: Unknown keyword in queue 'dongdo-queue': monitor_format at line 47 of queues.conf
+[2026-09-04 14:45:19] WARNING[7] app_queue.c: Unknown keyword in queue 'dongdo-queue': monitor_type at line 48 of queues.conf
+[2026-09-04 14:45:19] WARNING[7] app_queue.c: Empty queue member definition. Moving on!
+[2026-09-04 14:45:19] WARNING[7] app_queue.c: Empty queue member definition. Moving on!
+[2026-09-04 14:45:19] WARNING[7] loader.c: Some non-required modules failed to load.
+[2026-09-04 14:45:19] WARNING[7] loader.c: The deprecated module 'chan_sip.so' has been loaded and is running, it may be removed in a future version
+[2026-09-04 14:45:19] WARNING[7] loader.c: The deprecated module 'res_adsi.so' has been loaded and is running, it may be removed in a future version
+[2026-09-04 14:45:19] WARNING[7] loader.c: The deprecated module 'app_adsiprog.so' has been loaded and is running, it may be removed in a future version
+[2026-09-04 14:45:19] WARNING[7] loader.c: The deprecated module 'app_getcpeid.so' has been loaded and is running, it may be removed in a future version
+[2026-09-04 14:45:19] ERROR[7] loader.c: Error loading module 'res_snmp.so': Error loading shared library /usr/lib/asterisk/modules/res_snmp.so: No such file or directory
+[2026-09-04 14:45:19] ERROR[7] loader.c: Error loading module 'res_monitor.so': Error loading shared library /usr/lib/asterisk/modules/res_monitor.so: No such file or directory
+[2026-09-04 14:45:19] ERROR[7] loader.c: Error loading module 'res_pjsip_publish_optimizer.so': Error loading shared library /usr/lib/asterisk/modules/res_pjsip_publish_optimizer.so: No such file or directory
+[2026-09-04 14:45:19] ERROR[7] loader.c: Error loading module 'res_pjsip_session_renegotiation.so': Error loading shared library /usr/lib/asterisk/modules/res_pjsip_session_renegotiation.so: No such file or directory
+[2026-09-04 14:45:19] ERROR[7] loader.c: Error loading module 'res_pjsip_simple_body_generator.so': Error loading shared library /usr/lib/asterisk/modules/res_pjsip_simple_body_generator.so: No such file or directory
+[2026-09-04 14:45:19] ERROR[7] loader.c: Error loading module 'res_pjsip_transport_management.so': Error loading shared library /usr/lib/asterisk/modules/res_pjsip_transport_management.so: No such file or directory
+[2026-09-04 14:45:19] ERROR[7] loader.c: Error loading module 'res_pjsip_voicemail.so': Error loading shared library /usr/lib/asterisk/modules/res_pjsip_voicemail.so: No such file or directory
+[2026-09-04 14:45:19] ERROR[7] loader.c: Error loading module 'app_ivr.so': Error loading shared library /usr/lib/asterisk/modules/app_ivr.so: No such file or directory
+[2026-09-04 14:45:19] ERROR[7] loader.c: Error loading module 'app_macro.so': Error loading shared library /usr/lib/asterisk/modules/app_macro.so: No such file or directory
+[2026-09-04 14:45:19] ERROR[7] loader.c: Error loading module 'app_pickup.so': Error loading shared library /usr/lib/asterisk/modules/app_pickup.so: No such file or directory
+[2026-09-04 14:45:19] ERROR[7] loader.c: Error loading module 'app_set_callerid.so': Error loading shared library /usr/lib/asterisk/modules/app_set_callerid.so: No such file or directory
+[2026-09-04 14:45:19] ERROR[7] loader.c: Error loading module 'app_wait.so': Error loading shared library /usr/lib/asterisk/modules/app_wait.so: No such file or directory
+[2026-09-04 14:45:19] ERROR[7] loader.c: Error loading module 'app_bridge.so': Error loading shared library /usr/lib/asterisk/modules/app_bridge.so: No such file or directory
+[2026-09-04 14:45:19] ERROR[7] loader.c: Error loading module 'app_celgen.so': Error loading shared library /usr/lib/asterisk/modules/app_celgen.so: No such file or directory
+[2026-09-04 14:45:19] ERROR[7] loader.c: Error loading module 'format_mp3.so': Error loading shared library /usr/lib/asterisk/modules/format_mp3.so: No such file or directory
+[2026-09-04 14:45:19] ERROR[7] loader.c: Error loading module 'format_ogg_vorbis.so': Error loading shared library /usr/lib/asterisk/modules/format_ogg_vorbis.so: No such file or directory
+[2026-09-04 14:45:19] ERROR[7] loader.c: Error loading module 'codec_opus.so': Error loading shared library /usr/lib/asterisk/modules/codec_opus.so: No such file or directory
+[2026-09-04 14:45:19] ERROR[7] loader.c: Error loading module 'codec_g729.so': Error loading shared library /usr/lib/asterisk/modules/codec_g729.so: No such file or directory
+[2026-09-04 14:45:19] ERROR[7] loader.c: Error loading module 'res_http_post.so': Error loading shared library /usr/lib/asterisk/modules/res_http_post.so: No such file or directory
+[2026-09-04 14:45:19] ERROR[7] loader.c: Error loading module 'res_manager.so': Error loading shared library /usr/lib/asterisk/modules/res_manager.so: No such file or directory
+[2026-09-04 14:45:19] ERROR[7] loader.c: Error loading module 'res_fax_spandsp.so': Error relocating /usr/lib/asterisk/modules/res_fax_spandsp.so: ast_fax_session_operation_str: symbol not found
+[2026-09-04 14:45:19] ERROR[7] loader.c: Error loading module 'res_pjsip_phoneprov_provider.so': Error relocating /usr/lib/asterisk/modules/res_pjsip_phoneprov_provider.so: ast_phoneprov_std_variable_lookup: symbol not found
+[2026-09-04 14:45:19] ERROR[7] loader.c: chan_mobile declined to load.
+[2026-09-04 14:45:19] ERROR[7] loader.c: res_pjsip_notify declined to load.
+[2026-09-04 14:45:19] ERROR[7] loader.c: res_pjsip_transport_websocket declined to load.
+[2026-09-04 14:45:19] ERROR[7] loader.c: cdr_pgsql declined to load.
+[2026-09-04 14:45:19] ERROR[7] loader.c: cel_sqlite3_custom declined to load.
+[2026-09-04 14:45:19] ERROR[7] loader.c: cel_custom declined to load.
+[2026-09-04 14:45:19] ERROR[7] loader.c: cdr_sqlite3_custom declined to load.
+[2026-09-04 14:45:19] ERROR[7] loader.c: cdr_custom declined to load.
+[2026-09-04 14:45:19] ERROR[7] loader.c: pbx_config declined to load.
+[2026-09-04 14:45:19] ERROR[7] loader.c: app_voicemail_imap declined to load.
+[2026-09-04 14:45:19] ERROR[7] loader.c: res_hep_rtcp declined to load.
+[2026-09-04 14:45:19] ERROR[7] loader.c: res_hep_pjsip declined to load.
+[2026-09-04 14:45:19] WARNING[44] chan_sip.c: chan_sip has no official maintainer and is deprecated.  Migration to
+[2026-09-04 14:45:19] WARNING[44] chan_sip.c: chan_pjsip is recommended.  See guides at the Asterisk Wiki:
+[2026-09-04 14:45:19] WARNING[44] chan_sip.c: https://wiki.asterisk.org/wiki/display/AST/Migrating+from+chan_sip+to+res_pjsip
+[2026-09-04 14:45:19] WARNING[44] chan_sip.c: https://wiki.asterisk.org/wiki/display/AST/Configuring+res_pjsip
+[2026-09-05 01:38:08] Asterisk 20.20.1 built by builder @ ac6af9b2c20d on a aarch64 running Linux on 2026-08-31 10:59:52 UTC
+[2026-09-05 01:38:08] NOTICE[6] loader.c: 363 modules will be loaded.
+[2026-09-05 01:38:09] WARNING[6] res_config_pgsql.c: PostgreSQL RealTime: No database user found, using 'asterisk' as default.
+[2026-09-05 01:38:09] WARNING[6] res_config_pgsql.c: PostgreSQL RealTime: No database password found, using 'asterisk' as default.
+[2026-09-05 01:38:09] WARNING[6] res_config_pgsql.c: PostgreSQL RealTime: No database host found, using localhost via socket.
+[2026-09-05 01:38:09] WARNING[6] res_config_pgsql.c: PostgreSQL RealTime: No database name found, using 'asterisk' as default.
+[2026-09-05 01:38:09] WARNING[6] res_config_pgsql.c: PostgreSQL RealTime: No database port found, using 5432 as default.
+[2026-09-05 01:38:09] WARNING[6] res_config_pgsql.c: PostgreSQL RealTime: No database socket found, using '/tmp/.s.PGSQL.5432' as default.
+[2026-09-05 01:38:09] ERROR[6] res_config_pgsql.c: PostgreSQL RealTime: Failed to connect database asterisk on : 
+[2026-09-05 01:38:09] WARNING[6] res_config_pgsql.c: PostgreSQL RealTime: Couldn't establish connection. Check debug.
+[2026-09-05 01:38:09] NOTICE[6] res_config_ldap.c: No directory user found, anonymous binding as default.
+[2026-09-05 01:38:09] ERROR[6] res_config_ldap.c: No directory URL or host found.
+[2026-09-05 01:38:09] ERROR[6] res_config_ldap.c: Cannot load LDAP RealTime driver.
+[2026-09-05 01:38:10] NOTICE[6] cdr.c: CDR simple logging enabled.
+[2026-09-05 01:38:10] ERROR[6] config_options.c: Could not find config type for category 'csv' in 'cel.conf'
+[2026-09-05 01:38:10] NOTICE[6] cel.c: Failed to process CEL configuration; using defaults
+[2026-09-05 01:38:10] NOTICE[6] dnsmgr.c: Managed DNS entries will be refreshed every 300 seconds.
+[2026-09-05 01:38:10] ERROR[6] config_options.c: Could not find option suitable for category 'general' named 'transferdelay' at line 11 of 
+[2026-09-05 01:38:10] ERROR[6] config_options.c: In features.conf: Processing options for general failed
+[2026-09-05 01:38:10] NOTICE[6] features_config.c: Could not load features config; using defaults
+[2026-09-05 01:38:10] WARNING[6] http.c: Ignoring unknown option 'allowed_origins' in http.conf
+[2026-09-05 01:38:10] WARNING[6] http.c: Ignoring unknown option 'session_keepalive' in http.conf
+[2026-09-05 01:38:10] NOTICE[6] indications.c: Default country for indication tones: us
+[2026-09-05 01:38:10] WARNING[6] indications.c: Failed to get indication zone: us
+[2026-09-05 01:38:10] WARNING[6] indications.c: Unable to set the default country (for indication tones)
+[2026-09-05 01:38:10] ERROR[69] res_pjsip/config_system.c: There are no local system nameservers configured, resorting to system resolution
+[2026-09-05 01:38:10] ERROR[6] config_options.c: Could not find option suitable for category 'aor-trunk-pstn' named 'media_address' at line 82 of 
+[2026-09-05 01:38:10] ERROR[6] res_sorcery_config.c: Could not create an object of type 'aor' with id 'aor-trunk-pstn' from configuration file 'pjsip.conf'
+[2026-09-05 01:38:10] ERROR[6] config_options.c: Could not find option suitable for category 'aor-ari' named 'media_address' at line 82 of 
+[2026-09-05 01:38:10] ERROR[6] res_sorcery_config.c: Could not create an object of type 'aor' with id 'aor-ari' from configuration file 'pjsip.conf'
+[2026-09-05 01:38:10] ERROR[6] config_options.c: Could not find option suitable for category 'aor-agent-1001' named 'media_address' at line 82 of 
+[2026-09-05 01:38:10] ERROR[6] res_sorcery_config.c: Could not create an object of type 'aor' with id 'aor-agent-1001' from configuration file 'pjsip.conf'
+[2026-09-05 01:38:10] ERROR[6] config_options.c: Could not find option suitable for category 'aor-agent-1002' named 'media_address' at line 82 of 
+[2026-09-05 01:38:10] ERROR[6] res_sorcery_config.c: Could not create an object of type 'aor' with id 'aor-agent-1002' from configuration file 'pjsip.conf'
+[2026-09-05 01:38:10] ERROR[6] config_options.c: Could not find option suitable for category 'aor-agent-1003' named 'media_address' at line 82 of 
+[2026-09-05 01:38:10] ERROR[6] res_sorcery_config.c: Could not create an object of type 'aor' with id 'aor-agent-1003' from configuration file 'pjsip.conf'
+[2026-09-05 01:38:10] ERROR[6] config_options.c: Could not find option suitable for category 'aor-agent-1004' named 'media_address' at line 82 of 
+[2026-09-05 01:38:10] ERROR[6] res_sorcery_config.c: Could not create an object of type 'aor' with id 'aor-agent-1004' from configuration file 'pjsip.conf'
+[2026-09-05 01:38:10] ERROR[6] config_options.c: Could not find option suitable for category 'aor-agent-1005' named 'media_address' at line 82 of 
+[2026-09-05 01:38:10] ERROR[6] res_sorcery_config.c: Could not create an object of type 'aor' with id 'aor-agent-1005' from configuration file 'pjsip.conf'
+[2026-09-05 01:38:10] ERROR[6] config_options.c: Could not find option suitable for category 'aor-guest' named 'media_address' at line 82 of 
+[2026-09-05 01:38:10] ERROR[6] res_sorcery_config.c: Could not create an object of type 'aor' with id 'aor-guest' from configuration file 'pjsip.conf'
+[2026-09-05 01:38:10] ERROR[6] res_pjsip/config_transport.c: Transport: transport-tls: cert_file /etc/asterisk/keys/asterisk.pem is either missing or not readable
+[2026-09-05 01:38:10] ERROR[6] config_options.c: Error parsing cert_file=/etc/asterisk/keys/asterisk.pem at line 34 of 
+[2026-09-05 01:38:10] ERROR[6] res_sorcery_config.c: Could not create an object of type 'transport' with id 'transport-tls' from configuration file 'pjsip.conf'
+[2026-09-05 01:38:10] ERROR[6] config_options.c: Could not find option suitable for category 'trunk-pstn' named 'codec_prefs' at line 49 of 
+[2026-09-05 01:38:10] ERROR[6] res_sorcery_config.c: Could not create an object of type 'endpoint' with id 'trunk-pstn' from configuration file 'pjsip.conf'
+[2026-09-05 01:38:10] ERROR[6] config_options.c: Could not find option suitable for category 'ari-user' named 'codec_prefs' at line 49 of 
+[2026-09-05 01:38:10] ERROR[6] res_sorcery_config.c: Could not create an object of type 'endpoint' with id 'ari-user' from configuration file 'pjsip.conf'
+[2026-09-05 01:38:10] ERROR[6] config_options.c: Could not find option suitable for category 'agent-1001' named 'codec_prefs' at line 49 of 
+[2026-09-05 01:38:10] ERROR[6] res_sorcery_config.c: Could not create an object of type 'endpoint' with id 'agent-1001' from configuration file 'pjsip.conf'
+[2026-09-05 01:38:10] ERROR[6] config_options.c: Could not find option suitable for category 'agent-1002' named 'codec_prefs' at line 49 of 
+[2026-09-05 01:38:10] ERROR[6] res_sorcery_config.c: Could not create an object of type 'endpoint' with id 'agent-1002' from configuration file 'pjsip.conf'
+[2026-09-05 01:38:10] ERROR[6] config_options.c: Could not find option suitable for category 'agent-1003' named 'codec_prefs' at line 49 of 
+[2026-09-05 01:38:10] ERROR[6] res_sorcery_config.c: Could not create an object of type 'endpoint' with id 'agent-1003' from configuration file 'pjsip.conf'
+[2026-09-05 01:38:10] ERROR[6] config_options.c: Could not find option suitable for category 'agent-1004' named 'codec_prefs' at line 49 of 
+[2026-09-05 01:38:10] ERROR[6] res_sorcery_config.c: Could not create an object of type 'endpoint' with id 'agent-1004' from configuration file 'pjsip.conf'
+[2026-09-05 01:38:10] ERROR[6] config_options.c: Could not find option suitable for category 'agent-1005' named 'codec_prefs' at line 49 of 
+[2026-09-05 01:38:10] ERROR[6] res_sorcery_config.c: Could not create an object of type 'endpoint' with id 'agent-1005' from configuration file 'pjsip.conf'
+[2026-09-05 01:38:10] ERROR[6] config_options.c: Could not find option suitable for category 'guest' named 'codec_prefs' at line 49 of 
+[2026-09-05 01:38:10] ERROR[6] res_sorcery_config.c: Could not create an object of type 'endpoint' with id 'guest' from configuration file 'pjsip.conf'
+[2026-09-05 01:38:10] ERROR[69] res_pjsip/config_system.c: There are no local system nameservers configured, resorting to system resolution
+[2026-09-05 01:38:11] NOTICE[6] res_smdi.c: No SMDI interfaces are available to listen on, not starting SMDI listener.
+[2026-09-05 01:38:11] WARNING[6] res_musiconhold.c: Unknown option 'debug' in [general] section of musiconhold.conf
+[2026-09-05 01:38:11] WARNING[6] res_musiconhold.c: Unknown format 'alaw,ulaw,gsm' -- defaulting to SLIN
+[2026-09-05 01:38:11] ERROR[6] file.c: Error opening directory - /var/lib/asterisk/moh: No such file or directory
+[2026-09-05 01:38:11] WARNING[6] res_musiconhold.c: No music on hold classes configured, disabling music on hold.
+[2026-09-05 01:38:11] ERROR[6] netsock2.c: getaddrinfo("turn", "(null)", ...): Name does not resolve
+[2026-09-05 01:38:11] WARNING[6] res_rtp_asterisk.c: Invalid TURN server address: turn:turn@stun.l.google.com:3478
+[2026-09-05 01:38:11] WARNING[6] chan_sip.c: Failed to bind to 0.0.0.0:5060: Address in use
+[2026-09-05 01:38:11] WARNING[6] iax2/firmware.c: Error opening firmware directory '/var/lib/asterisk/firmware/iax': No such file or directory
+[2026-09-05 01:38:11] ERROR[6] chan_mobile.c: No Bluetooth devices found. Not loading module.
+[2026-09-05 01:38:12] ERROR[6] config_options.c: Could not find option suitable for category 'dongdo' named 'read_perm' at line 26 of 
+[2026-09-05 01:38:12] ERROR[6] res_sorcery_config.c: Could not create an object of type 'user' with id 'dongdo' from configuration file 'ari.conf'
+[2026-09-05 01:38:12] ERROR[6] config_options.c: Could not find option suitable for category 'dongdo-readonly' named 'read_perm' at line 39 of 
+[2026-09-05 01:38:12] ERROR[6] res_sorcery_config.c: Could not create an object of type 'user' with id 'dongdo-readonly' from configuration file 'ari.conf'
+[2026-09-05 01:38:12] ERROR[6] config_options.c: Could not find config type for category 'general' in 'pjsip_notify.conf'
+[2026-09-05 01:38:12] ERROR[69] pjproject: 	../src/pjsip/sip_endpo Assert failed: !"Too many modules registered!"
+[2026-09-05 01:38:12] ERROR[69] res_pjsip.c: Unable to register module WebSocket Transport Module
+[2026-09-05 01:38:12] NOTICE[6] confbridge/conf_config_parser.c: Adding default_menu menu to app_confbridge
+[2026-09-05 01:38:12] NOTICE[6] cdr_pgsql.c: cdr_pgsql configuration contains no global section, skipping module load.
+[2026-09-05 01:38:12] WARNING[6] cel_pgsql.c: CEL pgsql config file missing global section.
+[2026-09-05 01:38:12] WARNING[6] config.c: parse error: No category context for line 64 of /etc/asterisk/cel_sqlite3_custom.conf
+[2026-09-05 01:38:12] ERROR[6] cdrel_custom/config.c: Unable to load cel_sqlite3_custom.conf. Not logging CELs to custom database
+[2026-09-05 01:38:12] WARNING[6] cdrel_custom/config.c: cel_custom.conf->general: Missing 'fields' parameter
+[2026-09-05 01:38:12] WARNING[6] cdrel_custom/config.c: cel_custom.conf->map1: Missing 'fields' parameter
+[2026-09-05 01:38:12] NOTICE[6] cdrel_custom/config.c: cel_custom.conf: Loaded 0 configs
+[2026-09-05 01:38:12] NOTICE[6] cdrel_custom/config.c: cdr_sqlite3_custom.conf: Loaded 0 configs
+[2026-09-05 01:38:12] NOTICE[6] cdrel_custom/config.c: cdr_custom.conf: Loaded 0 configs
+[2026-09-05 01:38:12] WARNING[6] config.c: parse error: No category context for line 4 of /etc/asterisk/extensions.conf
+[2026-09-05 01:38:12] ERROR[6] app_voicemail_imap.c: Couldn't find mailbox 1001 in context default
+[2026-09-05 01:38:12] ERROR[6] app_voicemail_imap.c: Couldn't find mailbox 1002 in context default
+[2026-09-05 01:38:12] ERROR[6] app_voicemail_imap.c: Couldn't find mailbox 1003 in context default
+[2026-09-05 01:38:12] ERROR[6] app_voicemail_imap.c: Couldn't find mailbox 1004 in context default
+[2026-09-05 01:38:12] ERROR[6] app_voicemail_imap.c: Couldn't find mailbox 1005 in context default
+[2026-09-05 01:38:12] ERROR[6] app_voicemail_imap.c: Couldn't find mailbox 1000 in context default
+[2026-09-05 01:38:12] WARNING[6] pbx_app.c: Already have an application 'VoiceMail'
+[2026-09-05 01:38:12] WARNING[6] pbx_app.c: Already have an application 'VoiceMailMain'
+[2026-09-05 01:38:12] WARNING[6] pbx_app.c: Already have an application 'VMAuthenticate'
+[2026-09-05 01:38:12] WARNING[6] pbx_app.c: Already have an application 'VoiceMailPlayMsg'
+[2026-09-05 01:38:12] WARNING[6] pbx_app.c: Already have an application 'VMSayName'
+[2026-09-05 01:38:12] ERROR[6] pbx_functions.c: Function VM_INFO already registered.
+[2026-09-05 01:38:12] WARNING[6] manager.c: Manager: Action 'VoicemailUsersList' already registered
+[2026-09-05 01:38:12] WARNING[6] manager.c: Manager: Action 'VoicemailUserStatus' already registered
+[2026-09-05 01:38:12] WARNING[6] manager.c: Manager: Action 'VoicemailRefresh' already registered
+[2026-09-05 01:38:12] WARNING[6] manager.c: Manager: Action 'VoicemailBoxSummary' already registered
+[2026-09-05 01:38:12] WARNING[6] manager.c: Manager: Action 'VoicemailMove' already registered
+[2026-09-05 01:38:12] WARNING[6] manager.c: Manager: Action 'VoicemailRemove' already registered
+[2026-09-05 01:38:12] WARNING[6] manager.c: Manager: Action 'VoicemailForward' already registered
+[2026-09-05 01:38:12] ERROR[6] app_voicemail_imap.c: Failure registering applications, functions or tests
+[2026-09-05 01:38:12] WARNING[6] res_hep_rtcp.c: res_hep is disabled; declining module load
+[2026-09-05 01:38:12] WARNING[6] res_hep_pjsip.c: res_hep is disabled; declining module load
+[2026-09-05 01:38:12] WARNING[6] app_queue.c: Unknown keyword in queue 'dongdo-queue': monitor_format at line 47 of queues.conf
+[2026-09-05 01:38:12] WARNING[6] app_queue.c: Unknown keyword in queue 'dongdo-queue': monitor_type at line 48 of queues.conf
+[2026-09-05 01:38:12] WARNING[6] app_queue.c: Empty queue member definition. Moving on!
+[2026-09-05 01:38:12] WARNING[6] app_queue.c: Empty queue member definition. Moving on!
+[2026-09-05 01:38:12] WARNING[6] loader.c: Some non-required modules failed to load.
+[2026-09-05 01:38:12] WARNING[6] loader.c: The deprecated module 'chan_sip.so' has been loaded and is running, it may be removed in a future version
+[2026-09-05 01:38:12] WARNING[6] loader.c: The deprecated module 'res_adsi.so' has been loaded and is running, it may be removed in a future version
+[2026-09-05 01:38:12] WARNING[6] loader.c: The deprecated module 'app_adsiprog.so' has been loaded and is running, it may be removed in a future version
+[2026-09-05 01:38:12] WARNING[6] loader.c: The deprecated module 'app_getcpeid.so' has been loaded and is running, it may be removed in a future version
+[2026-09-05 01:38:12] ERROR[6] loader.c: Error loading module 'res_snmp.so': Error loading shared library /usr/lib/asterisk/modules/res_snmp.so: No such file or directory
+[2026-09-05 01:38:12] ERROR[6] loader.c: Error loading module 'res_monitor.so': Error loading shared library /usr/lib/asterisk/modules/res_monitor.so: No such file or directory
+[2026-09-05 01:38:12] ERROR[6] loader.c: Error loading module 'res_pjsip_publish_optimizer.so': Error loading shared library /usr/lib/asterisk/modules/res_pjsip_publish_optimizer.so: No such file or directory
+[2026-09-05 01:38:12] ERROR[6] loader.c: Error loading module 'res_pjsip_session_renegotiation.so': Error loading shared library /usr/lib/asterisk/modules/res_pjsip_session_renegotiation.so: No such file or directory
+[2026-09-05 01:38:12] ERROR[6] loader.c: Error loading module 'res_pjsip_simple_body_generator.so': Error loading shared library /usr/lib/asterisk/modules/res_pjsip_simple_body_generator.so: No such file or directory
+[2026-09-05 01:38:12] ERROR[6] loader.c: Error loading module 'res_pjsip_transport_management.so': Error loading shared library /usr/lib/asterisk/modules/res_pjsip_transport_management.so: No such file or directory
+[2026-09-05 01:38:12] ERROR[6] loader.c: Error loading module 'res_pjsip_voicemail.so': Error loading shared library /usr/lib/asterisk/modules/res_pjsip_voicemail.so: No such file or directory
+[2026-09-05 01:38:12] ERROR[6] loader.c: Error loading module 'app_ivr.so': Error loading shared library /usr/lib/asterisk/modules/app_ivr.so: No such file or directory
+[2026-09-05 01:38:12] ERROR[6] loader.c: Error loading module 'app_macro.so': Error loading shared library /usr/lib/asterisk/modules/app_macro.so: No such file or directory
+[2026-09-05 01:38:12] ERROR[6] loader.c: Error loading module 'app_pickup.so': Error loading shared library /usr/lib/asterisk/modules/app_pickup.so: No such file or directory
+[2026-09-05 01:38:12] ERROR[6] loader.c: Error loading module 'app_set_callerid.so': Error loading shared library /usr/lib/asterisk/modules/app_set_callerid.so: No such file or directory
+[2026-09-05 01:38:12] ERROR[6] loader.c: Error loading module 'app_wait.so': Error loading shared library /usr/lib/asterisk/modules/app_wait.so: No such file or directory
+[2026-09-05 01:38:12] ERROR[6] loader.c: Error loading module 'app_bridge.so': Error loading shared library /usr/lib/asterisk/modules/app_bridge.so: No such file or directory
+[2026-09-05 01:38:12] ERROR[6] loader.c: Error loading module 'app_celgen.so': Error loading shared library /usr/lib/asterisk/modules/app_celgen.so: No such file or directory
+[2026-09-05 01:38:12] ERROR[6] loader.c: Error loading module 'format_mp3.so': Error loading shared library /usr/lib/asterisk/modules/format_mp3.so: No such file or directory
+[2026-09-05 01:38:12] ERROR[6] loader.c: Error loading module 'format_ogg_vorbis.so': Error loading shared library /usr/lib/asterisk/modules/format_ogg_vorbis.so: No such file or directory
+[2026-09-05 01:38:12] ERROR[6] loader.c: Error loading module 'codec_opus.so': Error loading shared library /usr/lib/asterisk/modules/codec_opus.so: No such file or directory
+[2026-09-05 01:38:12] ERROR[6] loader.c: Error loading module 'codec_g729.so': Error loading shared library /usr/lib/asterisk/modules/codec_g729.so: No such file or directory
+[2026-09-05 01:38:12] ERROR[6] loader.c: Error loading module 'res_http_post.so': Error loading shared library /usr/lib/asterisk/modules/res_http_post.so: No such file or directory
+[2026-09-05 01:38:12] ERROR[6] loader.c: Error loading module 'res_manager.so': Error loading shared library /usr/lib/asterisk/modules/res_manager.so: No such file or directory
+[2026-09-05 01:38:12] ERROR[6] loader.c: Error loading module 'res_fax_spandsp.so': Error relocating /usr/lib/asterisk/modules/res_fax_spandsp.so: ast_fax_session_operation_str: symbol not found
+[2026-09-05 01:38:12] ERROR[6] loader.c: Error loading module 'res_pjsip_phoneprov_provider.so': Error relocating /usr/lib/asterisk/modules/res_pjsip_phoneprov_provider.so: ast_phoneprov_std_variable_lookup: symbol not found
+[2026-09-05 01:38:12] ERROR[6] loader.c: chan_mobile declined to load.
+[2026-09-05 01:38:12] ERROR[6] loader.c: res_pjsip_notify declined to load.
+[2026-09-05 01:38:12] ERROR[6] loader.c: res_pjsip_transport_websocket declined to load.
+[2026-09-05 01:38:12] ERROR[6] loader.c: cdr_pgsql declined to load.
+[2026-09-05 01:38:12] ERROR[6] loader.c: cel_sqlite3_custom declined to load.
+[2026-09-05 01:38:12] ERROR[6] loader.c: cel_custom declined to load.
+[2026-09-05 01:38:12] ERROR[6] loader.c: cdr_sqlite3_custom declined to load.
+[2026-09-05 01:38:12] ERROR[6] loader.c: cdr_custom declined to load.
+[2026-09-05 01:38:12] ERROR[6] loader.c: pbx_config declined to load.
+[2026-09-05 01:38:12] ERROR[6] loader.c: app_voicemail_imap declined to load.
+[2026-09-05 01:38:12] ERROR[6] loader.c: res_hep_rtcp declined to load.
+[2026-09-05 01:38:12] ERROR[6] loader.c: res_hep_pjsip declined to load.
+[2026-09-05 01:38:12] WARNING[44] chan_sip.c: chan_sip has no official maintainer and is deprecated.  Migration to
+[2026-09-05 01:38:12] WARNING[44] chan_sip.c: chan_pjsip is recommended.  See guides at the Asterisk Wiki:
+[2026-09-05 01:38:12] WARNING[44] chan_sip.c: https://wiki.asterisk.org/wiki/display/AST/Migrating+from+chan_sip+to+res_pjsip
+[2026-09-05 01:38:12] WARNING[44] chan_sip.c: https://wiki.asterisk.org/wiki/display/AST/Configuring+res_pjsip
+[2026-09-05 05:17:11] Asterisk 20.20.1 built by builder @ ac6af9b2c20d on a aarch64 running Linux on 2026-08-31 10:59:52 UTC
+[2026-09-05 05:17:11] NOTICE[7] loader.c: 363 modules will be loaded.
+[2026-09-05 05:17:11] WARNING[7] res_config_pgsql.c: PostgreSQL RealTime: No database user found, using 'asterisk' as default.
+[2026-09-05 05:17:11] WARNING[7] res_config_pgsql.c: PostgreSQL RealTime: No database password found, using 'asterisk' as default.
+[2026-09-05 05:17:11] WARNING[7] res_config_pgsql.c: PostgreSQL RealTime: No database host found, using localhost via socket.
+[2026-09-05 05:17:11] WARNING[7] res_config_pgsql.c: PostgreSQL RealTime: No database name found, using 'asterisk' as default.
+[2026-09-05 05:17:11] WARNING[7] res_config_pgsql.c: PostgreSQL RealTime: No database port found, using 5432 as default.
+[2026-09-05 05:17:11] WARNING[7] res_config_pgsql.c: PostgreSQL RealTime: No database socket found, using '/tmp/.s.PGSQL.5432' as default.
+[2026-09-05 05:17:11] ERROR[7] res_config_pgsql.c: PostgreSQL RealTime: Failed to connect database asterisk on : 
+[2026-09-05 05:17:11] WARNING[7] res_config_pgsql.c: PostgreSQL RealTime: Couldn't establish connection. Check debug.
+[2026-09-05 05:17:11] NOTICE[7] res_config_ldap.c: No directory user found, anonymous binding as default.
+[2026-09-05 05:17:11] ERROR[7] res_config_ldap.c: No directory URL or host found.
+[2026-09-05 05:17:11] ERROR[7] res_config_ldap.c: Cannot load LDAP RealTime driver.
+[2026-09-05 05:17:11] NOTICE[7] cdr.c: CDR simple logging enabled.
+[2026-09-05 05:17:11] ERROR[7] config_options.c: Could not find config type for category 'csv' in 'cel.conf'
+[2026-09-05 05:17:11] NOTICE[7] cel.c: Failed to process CEL configuration; using defaults
+[2026-09-05 05:17:11] NOTICE[7] dnsmgr.c: Managed DNS entries will be refreshed every 300 seconds.
+[2026-09-05 05:17:11] ERROR[7] config_options.c: Could not find option suitable for category 'general' named 'transferdelay' at line 11 of 
+[2026-09-05 05:17:11] ERROR[7] config_options.c: In features.conf: Processing options for general failed
+[2026-09-05 05:17:11] NOTICE[7] features_config.c: Could not load features config; using defaults
+[2026-09-05 05:17:11] WARNING[7] http.c: Ignoring unknown option 'allowed_origins' in http.conf
+[2026-09-05 05:17:11] WARNING[7] http.c: Ignoring unknown option 'session_keepalive' in http.conf
+[2026-09-05 05:17:11] NOTICE[7] indications.c: Default country for indication tones: us
+[2026-09-05 05:17:11] WARNING[7] indications.c: Failed to get indication zone: us
+[2026-09-05 05:17:11] WARNING[7] indications.c: Unable to set the default country (for indication tones)
+[2026-09-05 05:17:11] ERROR[70] res_pjsip/config_system.c: There are no local system nameservers configured, resorting to system resolution
+[2026-09-05 05:17:11] ERROR[7] config_options.c: Could not find option suitable for category 'aor-trunk-pstn' named 'media_address' at line 82 of 
+[2026-09-05 05:17:11] ERROR[7] res_sorcery_config.c: Could not create an object of type 'aor' with id 'aor-trunk-pstn' from configuration file 'pjsip.conf'
+[2026-09-05 05:17:11] ERROR[7] config_options.c: Could not find option suitable for category 'aor-ari' named 'media_address' at line 82 of 
+[2026-09-05 05:17:11] ERROR[7] res_sorcery_config.c: Could not create an object of type 'aor' with id 'aor-ari' from configuration file 'pjsip.conf'
+[2026-09-05 05:17:11] ERROR[7] config_options.c: Could not find option suitable for category 'aor-agent-1001' named 'media_address' at line 82 of 
+[2026-09-05 05:17:11] ERROR[7] res_sorcery_config.c: Could not create an object of type 'aor' with id 'aor-agent-1001' from configuration file 'pjsip.conf'
+[2026-09-05 05:17:11] ERROR[7] config_options.c: Could not find option suitable for category 'aor-agent-1002' named 'media_address' at line 82 of 
+[2026-09-05 05:17:11] ERROR[7] res_sorcery_config.c: Could not create an object of type 'aor' with id 'aor-agent-1002' from configuration file 'pjsip.conf'
+[2026-09-05 05:17:11] ERROR[7] config_options.c: Could not find option suitable for category 'aor-agent-1003' named 'media_address' at line 82 of 
+[2026-09-05 05:17:11] ERROR[7] res_sorcery_config.c: Could not create an object of type 'aor' with id 'aor-agent-1003' from configuration file 'pjsip.conf'
+[2026-09-05 05:17:11] ERROR[7] config_options.c: Could not find option suitable for category 'aor-agent-1004' named 'media_address' at line 82 of 
+[2026-09-05 05:17:11] ERROR[7] res_sorcery_config.c: Could not create an object of type 'aor' with id 'aor-agent-1004' from configuration file 'pjsip.conf'
+[2026-09-05 05:17:11] ERROR[7] config_options.c: Could not find option suitable for category 'aor-agent-1005' named 'media_address' at line 82 of 
+[2026-09-05 05:17:11] ERROR[7] res_sorcery_config.c: Could not create an object of type 'aor' with id 'aor-agent-1005' from configuration file 'pjsip.conf'
+[2026-09-05 05:17:11] ERROR[7] config_options.c: Could not find option suitable for category 'aor-guest' named 'media_address' at line 82 of 
+[2026-09-05 05:17:11] ERROR[7] res_sorcery_config.c: Could not create an object of type 'aor' with id 'aor-guest' from configuration file 'pjsip.conf'
+[2026-09-05 05:17:11] ERROR[7] res_pjsip/config_transport.c: Transport: transport-tls: cert_file /etc/asterisk/keys/asterisk.pem is either missing or not readable
+[2026-09-05 05:17:11] ERROR[7] config_options.c: Error parsing cert_file=/etc/asterisk/keys/asterisk.pem at line 34 of 
+[2026-09-05 05:17:11] ERROR[7] res_sorcery_config.c: Could not create an object of type 'transport' with id 'transport-tls' from configuration file 'pjsip.conf'
+[2026-09-05 05:17:11] ERROR[7] config_options.c: Could not find option suitable for category 'trunk-pstn' named 'codec_prefs' at line 49 of 
+[2026-09-05 05:17:11] ERROR[7] res_sorcery_config.c: Could not create an object of type 'endpoint' with id 'trunk-pstn' from configuration file 'pjsip.conf'
+[2026-09-05 05:17:11] ERROR[7] config_options.c: Could not find option suitable for category 'ari-user' named 'codec_prefs' at line 49 of 
+[2026-09-05 05:17:11] ERROR[7] res_sorcery_config.c: Could not create an object of type 'endpoint' with id 'ari-user' from configuration file 'pjsip.conf'
+[2026-09-05 05:17:11] ERROR[7] config_options.c: Could not find option suitable for category 'agent-1001' named 'codec_prefs' at line 49 of 
+[2026-09-05 05:17:11] ERROR[7] res_sorcery_config.c: Could not create an object of type 'endpoint' with id 'agent-1001' from configuration file 'pjsip.conf'
+[2026-09-05 05:17:11] ERROR[7] config_options.c: Could not find option suitable for category 'agent-1002' named 'codec_prefs' at line 49 of 
+[2026-09-05 05:17:11] ERROR[7] res_sorcery_config.c: Could not create an object of type 'endpoint' with id 'agent-1002' from configuration file 'pjsip.conf'
+[2026-09-05 05:17:11] ERROR[7] config_options.c: Could not find option suitable for category 'agent-1003' named 'codec_prefs' at line 49 of 
+[2026-09-05 05:17:11] ERROR[7] res_sorcery_config.c: Could not create an object of type 'endpoint' with id 'agent-1003' from configuration file 'pjsip.conf'
+[2026-09-05 05:17:11] ERROR[7] config_options.c: Could not find option suitable for category 'agent-1004' named 'codec_prefs' at line 49 of 
+[2026-09-05 05:17:11] ERROR[7] res_sorcery_config.c: Could not create an object of type 'endpoint' with id 'agent-1004' from configuration file 'pjsip.conf'
+[2026-09-05 05:17:11] ERROR[7] config_options.c: Could not find option suitable for category 'agent-1005' named 'codec_prefs' at line 49 of 
+[2026-09-05 05:17:11] ERROR[7] res_sorcery_config.c: Could not create an object of type 'endpoint' with id 'agent-1005' from configuration file 'pjsip.conf'
+[2026-09-05 05:17:11] ERROR[7] config_options.c: Could not find option suitable for category 'guest' named 'codec_prefs' at line 49 of 
+[2026-09-05 05:17:11] ERROR[7] res_sorcery_config.c: Could not create an object of type 'endpoint' with id 'guest' from configuration file 'pjsip.conf'
+[2026-09-05 05:17:11] ERROR[70] res_pjsip/config_system.c: There are no local system nameservers configured, resorting to system resolution
+[2026-09-05 05:17:11] NOTICE[7] res_smdi.c: No SMDI interfaces are available to listen on, not starting SMDI listener.
+[2026-09-05 05:17:11] WARNING[7] res_musiconhold.c: Unknown option 'debug' in [general] section of musiconhold.conf
+[2026-09-05 05:17:11] WARNING[7] res_musiconhold.c: Unknown format 'alaw,ulaw,gsm' -- defaulting to SLIN
+[2026-09-05 05:17:11] ERROR[7] file.c: Error opening directory - /var/lib/asterisk/moh: No such file or directory
+[2026-09-05 05:17:11] WARNING[7] res_musiconhold.c: No music on hold classes configured, disabling music on hold.
+[2026-09-05 05:17:12] ERROR[7] netsock2.c: getaddrinfo("turn", "(null)", ...): Name does not resolve
+[2026-09-05 05:17:12] WARNING[7] res_rtp_asterisk.c: Invalid TURN server address: turn:turn@stun.l.google.com:3478
+[2026-09-05 05:17:12] WARNING[7] chan_sip.c: Failed to bind to 0.0.0.0:5060: Address in use
+[2026-09-05 05:17:12] WARNING[7] iax2/firmware.c: Error opening firmware directory '/var/lib/asterisk/firmware/iax': No such file or directory
+[2026-09-05 05:17:12] ERROR[7] chan_mobile.c: No Bluetooth devices found. Not loading module.
+[2026-09-05 05:17:12] ERROR[7] config_options.c: Could not find option suitable for category 'dongdo' named 'read_perm' at line 26 of 
+[2026-09-05 05:17:12] ERROR[7] res_sorcery_config.c: Could not create an object of type 'user' with id 'dongdo' from configuration file 'ari.conf'
+[2026-09-05 05:17:12] ERROR[7] config_options.c: Could not find option suitable for category 'dongdo-readonly' named 'read_perm' at line 39 of 
+[2026-09-05 05:17:12] ERROR[7] res_sorcery_config.c: Could not create an object of type 'user' with id 'dongdo-readonly' from configuration file 'ari.conf'
+[2026-09-05 05:17:12] ERROR[7] config_options.c: Could not find config type for category 'general' in 'pjsip_notify.conf'
+[2026-09-05 05:17:12] ERROR[70] pjproject: 	../src/pjsip/sip_endpo Assert failed: !"Too many modules registered!"
+[2026-09-05 05:17:12] ERROR[70] res_pjsip.c: Unable to register module WebSocket Transport Module
+[2026-09-05 05:17:12] NOTICE[7] confbridge/conf_config_parser.c: Adding default_menu menu to app_confbridge
+[2026-09-05 05:17:12] NOTICE[7] cdr_pgsql.c: cdr_pgsql configuration contains no global section, skipping module load.
+[2026-09-05 05:17:12] WARNING[7] cel_pgsql.c: CEL pgsql config file missing global section.
+[2026-09-05 05:17:12] WARNING[7] config.c: parse error: No category context for line 64 of /etc/asterisk/cel_sqlite3_custom.conf
+[2026-09-05 05:17:12] ERROR[7] cdrel_custom/config.c: Unable to load cel_sqlite3_custom.conf. Not logging CELs to custom database
+[2026-09-05 05:17:12] WARNING[7] cdrel_custom/config.c: cel_custom.conf->general: Missing 'fields' parameter
+[2026-09-05 05:17:12] WARNING[7] cdrel_custom/config.c: cel_custom.conf->map1: Missing 'fields' parameter
+[2026-09-05 05:17:12] NOTICE[7] cdrel_custom/config.c: cel_custom.conf: Loaded 0 configs
+[2026-09-05 05:17:12] NOTICE[7] cdrel_custom/config.c: cdr_sqlite3_custom.conf: Loaded 0 configs
+[2026-09-05 05:17:12] NOTICE[7] cdrel_custom/config.c: cdr_custom.conf: Loaded 0 configs
+[2026-09-05 05:17:12] WARNING[7] config.c: parse error: No category context for line 4 of /etc/asterisk/extensions.conf
+[2026-09-05 05:17:12] ERROR[7] app_voicemail_imap.c: Couldn't find mailbox 1001 in context default
+[2026-09-05 05:17:12] ERROR[7] app_voicemail_imap.c: Couldn't find mailbox 1002 in context default
+[2026-09-05 05:17:12] ERROR[7] app_voicemail_imap.c: Couldn't find mailbox 1003 in context default
+[2026-09-05 05:17:12] ERROR[7] app_voicemail_imap.c: Couldn't find mailbox 1004 in context default
+[2026-09-05 05:17:12] ERROR[7] app_voicemail_imap.c: Couldn't find mailbox 1005 in context default
+[2026-09-05 05:17:12] ERROR[7] app_voicemail_imap.c: Couldn't find mailbox 1000 in context default
+[2026-09-05 05:17:12] WARNING[7] pbx_app.c: Already have an application 'VoiceMail'
+[2026-09-05 05:17:12] WARNING[7] pbx_app.c: Already have an application 'VoiceMailMain'
+[2026-09-05 05:17:12] WARNING[7] pbx_app.c: Already have an application 'VMAuthenticate'
+[2026-09-05 05:17:12] WARNING[7] pbx_app.c: Already have an application 'VoiceMailPlayMsg'
+[2026-09-05 05:17:12] WARNING[7] pbx_app.c: Already have an application 'VMSayName'
+[2026-09-05 05:17:12] ERROR[7] pbx_functions.c: Function VM_INFO already registered.
+[2026-09-05 05:17:12] WARNING[7] manager.c: Manager: Action 'VoicemailUsersList' already registered
+[2026-09-05 05:17:12] WARNING[7] manager.c: Manager: Action 'VoicemailUserStatus' already registered
+[2026-09-05 05:17:12] WARNING[7] manager.c: Manager: Action 'VoicemailRefresh' already registered
+[2026-09-05 05:17:12] WARNING[7] manager.c: Manager: Action 'VoicemailBoxSummary' already registered
+[2026-09-05 05:17:12] WARNING[7] manager.c: Manager: Action 'VoicemailMove' already registered
+[2026-09-05 05:17:12] WARNING[7] manager.c: Manager: Action 'VoicemailRemove' already registered
+[2026-09-05 05:17:12] WARNING[7] manager.c: Manager: Action 'VoicemailForward' already registered
+[2026-09-05 05:17:12] ERROR[7] app_voicemail_imap.c: Failure registering applications, functions or tests
+[2026-09-05 05:17:12] WARNING[7] res_hep_rtcp.c: res_hep is disabled; declining module load
+[2026-09-05 05:17:12] WARNING[7] res_hep_pjsip.c: res_hep is disabled; declining module load
+[2026-09-05 05:17:12] WARNING[7] app_queue.c: Unknown keyword in queue 'dongdo-queue': monitor_format at line 47 of queues.conf
+[2026-09-05 05:17:12] WARNING[7] app_queue.c: Unknown keyword in queue 'dongdo-queue': monitor_type at line 48 of queues.conf
+[2026-09-05 05:17:12] WARNING[7] app_queue.c: Empty queue member definition. Moving on!
+[2026-09-05 05:17:12] WARNING[7] app_queue.c: Empty queue member definition. Moving on!
+[2026-09-05 05:17:12] WARNING[7] loader.c: Some non-required modules failed to load.
+[2026-09-05 05:17:12] WARNING[7] loader.c: The deprecated module 'chan_sip.so' has been loaded and is running, it may be removed in a future version
+[2026-09-05 05:17:12] WARNING[7] loader.c: The deprecated module 'res_adsi.so' has been loaded and is running, it may be removed in a future version
+[2026-09-05 05:17:12] WARNING[7] loader.c: The deprecated module 'app_adsiprog.so' has been loaded and is running, it may be removed in a future version
+[2026-09-05 05:17:12] WARNING[7] loader.c: The deprecated module 'app_getcpeid.so' has been loaded and is running, it may be removed in a future version
+[2026-09-05 05:17:12] ERROR[7] loader.c: Error loading module 'res_snmp.so': Error loading shared library /usr/lib/asterisk/modules/res_snmp.so: No such file or directory
+[2026-09-05 05:17:12] ERROR[7] loader.c: Error loading module 'res_monitor.so': Error loading shared library /usr/lib/asterisk/modules/res_monitor.so: No such file or directory
+[2026-09-05 05:17:12] ERROR[7] loader.c: Error loading module 'res_pjsip_publish_optimizer.so': Error loading shared library /usr/lib/asterisk/modules/res_pjsip_publish_optimizer.so: No such file or directory
+[2026-09-05 05:17:12] ERROR[7] loader.c: Error loading module 'res_pjsip_session_renegotiation.so': Error loading shared library /usr/lib/asterisk/modules/res_pjsip_session_renegotiation.so: No such file or directory
+[2026-09-05 05:17:12] ERROR[7] loader.c: Error loading module 'res_pjsip_simple_body_generator.so': Error loading shared library /usr/lib/asterisk/modules/res_pjsip_simple_body_generator.so: No such file or directory
+[2026-09-05 05:17:12] ERROR[7] loader.c: Error loading module 'res_pjsip_transport_management.so': Error loading shared library /usr/lib/asterisk/modules/res_pjsip_transport_management.so: No such file or directory
+[2026-09-05 05:17:12] ERROR[7] loader.c: Error loading module 'res_pjsip_voicemail.so': Error loading shared library /usr/lib/asterisk/modules/res_pjsip_voicemail.so: No such file or directory
+[2026-09-05 05:17:12] ERROR[7] loader.c: Error loading module 'app_ivr.so': Error loading shared library /usr/lib/asterisk/modules/app_ivr.so: No such file or directory
+[2026-09-05 05:17:12] ERROR[7] loader.c: Error loading module 'app_macro.so': Error loading shared library /usr/lib/asterisk/modules/app_macro.so: No such file or directory
+[2026-09-05 05:17:12] ERROR[7] loader.c: Error loading module 'app_pickup.so': Error loading shared library /usr/lib/asterisk/modules/app_pickup.so: No such file or directory
+[2026-09-05 05:17:12] ERROR[7] loader.c: Error loading module 'app_set_callerid.so': Error loading shared library /usr/lib/asterisk/modules/app_set_callerid.so: No such file or directory
+[2026-09-05 05:17:12] ERROR[7] loader.c: Error loading module 'app_wait.so': Error loading shared library /usr/lib/asterisk/modules/app_wait.so: No such file or directory
+[2026-09-05 05:17:12] ERROR[7] loader.c: Error loading module 'app_bridge.so': Error loading shared library /usr/lib/asterisk/modules/app_bridge.so: No such file or directory
+[2026-09-05 05:17:12] ERROR[7] loader.c: Error loading module 'app_celgen.so': Error loading shared library /usr/lib/asterisk/modules/app_celgen.so: No such file or directory
+[2026-09-05 05:17:12] ERROR[7] loader.c: Error loading module 'format_mp3.so': Error loading shared library /usr/lib/asterisk/modules/format_mp3.so: No such file or directory
+[2026-09-05 05:17:12] ERROR[7] loader.c: Error loading module 'format_ogg_vorbis.so': Error loading shared library /usr/lib/asterisk/modules/format_ogg_vorbis.so: No such file or directory
+[2026-09-05 05:17:12] ERROR[7] loader.c: Error loading module 'codec_opus.so': Error loading shared library /usr/lib/asterisk/modules/codec_opus.so: No such file or directory
+[2026-09-05 05:17:12] ERROR[7] loader.c: Error loading module 'codec_g729.so': Error loading shared library /usr/lib/asterisk/modules/codec_g729.so: No such file or directory
+[2026-09-05 05:17:12] ERROR[7] loader.c: Error loading module 'res_http_post.so': Error loading shared library /usr/lib/asterisk/modules/res_http_post.so: No such file or directory
+[2026-09-05 05:17:12] ERROR[7] loader.c: Error loading module 'res_manager.so': Error loading shared library /usr/lib/asterisk/modules/res_manager.so: No such file or directory
+[2026-09-05 05:17:12] ERROR[7] loader.c: Error loading module 'res_fax_spandsp.so': Error relocating /usr/lib/asterisk/modules/res_fax_spandsp.so: ast_fax_session_operation_str: symbol not found
+[2026-09-05 05:17:12] ERROR[7] loader.c: Error loading module 'res_pjsip_phoneprov_provider.so': Error relocating /usr/lib/asterisk/modules/res_pjsip_phoneprov_provider.so: ast_phoneprov_std_variable_lookup: symbol not found
+[2026-09-05 05:17:12] ERROR[7] loader.c: chan_mobile declined to load.
+[2026-09-05 05:17:12] ERROR[7] loader.c: res_pjsip_notify declined to load.
+[2026-09-05 05:17:12] ERROR[7] loader.c: res_pjsip_transport_websocket declined to load.
+[2026-09-05 05:17:12] ERROR[7] loader.c: cdr_pgsql declined to load.
+[2026-09-05 05:17:12] ERROR[7] loader.c: cel_sqlite3_custom declined to load.
+[2026-09-05 05:17:12] ERROR[7] loader.c: cel_custom declined to load.
+[2026-09-05 05:17:12] ERROR[7] loader.c: cdr_sqlite3_custom declined to load.
+[2026-09-05 05:17:12] ERROR[7] loader.c: cdr_custom declined to load.
+[2026-09-05 05:17:12] ERROR[7] loader.c: pbx_config declined to load.
+[2026-09-05 05:17:12] ERROR[7] loader.c: app_voicemail_imap declined to load.
+[2026-09-05 05:17:12] ERROR[7] loader.c: res_hep_rtcp declined to load.
+[2026-09-05 05:17:12] ERROR[7] loader.c: res_hep_pjsip declined to load.
+[2026-09-05 05:17:12] WARNING[43] chan_sip.c: chan_sip has no official maintainer and is deprecated.  Migration to
+[2026-09-05 05:17:12] WARNING[43] chan_sip.c: chan_pjsip is recommended.  See guides at the Asterisk Wiki:
+[2026-09-05 05:17:12] WARNING[43] chan_sip.c: https://wiki.asterisk.org/wiki/display/AST/Migrating+from+chan_sip+to+res_pjsip
+[2026-09-05 05:17:12] WARNING[43] chan_sip.c: https://wiki.asterisk.org/wiki/display/AST/Configuring+res_pjsip

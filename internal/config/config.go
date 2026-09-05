@@ -1,9 +1,12 @@
 package config
 
 import (
+	"log"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/joho/godotenv"
 )
 
 // Config holds all application configuration loaded from environment variables.
@@ -62,10 +65,46 @@ type Config struct {
 
 	// System Prompt
 	SystemPrompt string
+
+	// Asterisk AMI (Asterisk Manager Interface) - Production call center integration
+	Asterisk AsteriskAMIConfig
+	// Asterisk ARI (Asterisk REST Interface) - WebRTC Stasis app integration
+	AsteriskARI AsteriskARIConfig
+}
+
+// AsteriskAMIConfig holds AMI connection settings for Asterisk PBX.
+type AsteriskAMIConfig struct {
+	Enabled  bool
+	Host     string
+	Port     int
+	Username string
+	Password string
+	Context  string
+	Trunk    string
+	Queue    string
+}
+
+// AsteriskARIConfig holds ARI connection settings for Asterisk WebSocket/REST.
+type AsteriskARIConfig struct {
+	Enabled      bool
+	BaseURL      string // e.g. "http://asterisk:8088" (HTTP, not ws://)
+	WSURL        string // e.g. "ws://asterisk:8088/ari/events"
+	Username     string
+	Password     string
+	AppName      string // Stasis app name, e.g. "dongdo-ivr"
+	ReconnectSec int
 }
 
 // Load reads configuration from environment variables with sensible defaults.
+// It first loads variables from .env file using dotenv, then falls back to OS environment variables.
 func Load() *Config {
+	// Load .env file if present (doesn't error if file doesn't exist)
+	if err := godotenv.Load(); err != nil {
+		log.Println("[config] .env file not found, using environment variables only")
+	} else {
+		log.Println("[config] Loaded configuration from .env file")
+	}
+
 	return &Config{
 		// Server
 		ServerPort: getEnv("PORT", "8080"),
@@ -121,6 +160,28 @@ func Load() *Config {
 
 		// System Prompt
 		SystemPrompt: getEnv("SYSTEM_PROMPT", defaultSystemPrompt),
+
+		// Asterisk AMI
+		Asterisk: AsteriskAMIConfig{
+			Enabled:  getEnvBool("ASTERISK_ENABLED", false),
+			Host:     getEnv("ASTERISK_HOST", "localhost"),
+			Port:     getEnvInt("ASTERISK_PORT", 5038),
+			Username: getEnv("ASTERISK_USER", "dongdo"),
+			Password: getEnv("ASTERISK_PASS", ""),
+			Context:  getEnv("ASTERISK_CONTEXT", "from-internal"),
+			Trunk:    getEnv("ASTERISK_TRUNK", "PJSIP/trunk"),
+			Queue:    getEnv("ASTERISK_QUEUE", "dongdo-queue"),
+		},
+		// Asterisk ARI (WebRTC / Stasis)
+		AsteriskARI: AsteriskARIConfig{
+			Enabled:      getEnvBool("ASTERISK_ARI_ENABLED", true),
+			BaseURL:      getEnv("ASTERISK_ARI_BASE_URL", "http://asterisk:8088"),
+			WSURL:        getEnv("ASTERISK_ARI_WS_URL", "ws://asterisk:8088/ari/events"),
+			Username:     getEnv("ASTERISK_ARI_USER", "dongdo"),
+			Password:     getEnv("ASTERISK_ARI_PASS", ""),
+			AppName:      getEnv("ASTERISK_ARI_APP", "dongdo-ivr"),
+			ReconnectSec: getEnvInt("ASTERISK_ARI_RECONNECT_SEC", 5),
+		},
 	}
 }
 

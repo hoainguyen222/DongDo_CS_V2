@@ -3,10 +3,10 @@ import { WSEvent, WSEventType } from './types';
 type MessageHandler = (event: WSEvent) => void;
 
 export class WSClient {
+  public readonly sessionID: string;
+  public readonly userID: string;
   private ws: WebSocket | null = null;
   private url: string;
-  private sessionID: string;
-  private userID: string;
   private role: string;
   private handlers: Map<WSEventType | '*', Set<MessageHandler>> = new Map();
   private reconnectAttempts = 0;
@@ -154,5 +154,9 @@ export class WSClient {
       this.ws.close();
       this.ws = null;
     }
+  }
+
+  public isConnected(): boolean {
+    return !!this.ws && this.ws.readyState === WebSocket.OPEN;
   }
 }

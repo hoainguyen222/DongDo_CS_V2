@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
 	voicedb "github.com/hoainguyen222/DongDo_CS_V2/internal/repository/sqlcdb/voice"
@@ -150,6 +151,105 @@ func (r *VoiceCallRepo) Delete(ctx context.Context, id int64) error {
 		return err
 	}
 	return nil
+}
+
+// SetAsteriskChannels stores Asterisk identifiers on the call record. The
+// query bypasses sqlc because the AMI tracking columns were added by a later
+// migration that has not been re-generated.
+func (r *VoiceCallRepo) SetAsteriskChannels(ctx context.Context, id int64, channelID, uniqueID, linkedID, targetExten string) error {
+	const q = `
+		UPDATE voice_calls
+		SET channel_id = $2,
+		    unique_id = $3,
+		    linked_id = $4,
+		    target_exten = $5
+		WHERE id = $1
+	`
+	if _, err := r.db.Pool.Exec(ctx, q, id, channelID, uniqueID, linkedID, targetExten); err != nil {
+		r.logger.Error().Err(err).Int64("call_id", id).
+			Str("channel_id", channelID).
+			Msg("SetAsteriskChannels failed")
+		return fmt.Errorf("set asterisk channels: %w", err)
+	}
+	return nil
+}
+
+// GetByChannelID looks up a call by its AMI channel id.
+func (r *VoiceCallRepo) GetByChannelID(ctx context.Context, channelID string) (*domain.VoiceCall, error) {
+	const q = `
+		SELECT id, session_id, caller_type, caller_id, callee_type, callee_id,
+		       status, duration_seconds, recording_url, transcript, created_at, ended_at
+		FROM voice_calls
+		WHERE channel_id = $1
+		LIMIT 1
+	`
+	row := r.db.Pool.QueryRow(ctx, q, channelID)
+	vc, err := scanVoiceCall(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get by channel id: %w", err)
+	}
+	return vc, nil
+}
+
+// GetByLinkedID looks up a call by its AMI linked id (Asterisk groups both
+// legs of a call under a single linked id once bridged).
+func (r *VoiceCallRepo) GetByLinkedID(ctx context.Context, linkedID string) (*domain.VoiceCall, error) {
+	const q = `
+		SELECT id, session_id, caller_type, caller_id, callee_type, callee_id,
+		       status, duration_seconds, recording_url, transcript, created_at, ended_at
+		FROM voice_calls
+		WHERE linked_id = $1
+		LIMIT 1
+	`
+	row := r.db.Pool.QueryRow(ctx, q, linkedID)
+	vc, err := scanVoiceCall(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get by linked id: %w", err)
+	}
+	return vc, nil
+}
+
+func scanVoiceCall(row pgx.Row) (*domain.VoiceCall, error) {
+	var (
+		vc           domain.VoiceCall
+		duration     int32
+		recordingURL pgtype.Text
+		transcript   pgtype.Text
+		endedAt      pgtype.Timestamptz
+	)
+	if err := row.Scan(
+		&vc.ID,
+		&vc.SessionID,
+		&vc.CallerType,
+		&vc.CallerID,
+		&vc.CalleeType,
+		&vc.CalleeID,
+		&vc.Status,
+		&duration,
+		&recordingURL,
+		&transcript,
+		&vc.CreatedAt,
+		&endedAt,
+	); err != nil {
+		return nil, err
+	}
+	vc.DurationSeconds = int(duration)
+	if recordingURL.Valid {
+		vc.RecordingURL = recordingURL.String
+	}
+	if transcript.Valid {
+		vc.Transcript = transcript.String
+	}
+	if endedAt.Valid {
+		vc.EndedAt = &endedAt.Time
+	}
+	return &vc, nil
 }
 
 // Suppress unused imports

@@ -144,6 +144,7 @@ export type WSEventType =
   | 'call_ice'
   | 'call_end'
   | 'call_ring'
+  | 'call_status_update'
   | 'ai_status'
   | 'team_agent_call';
 

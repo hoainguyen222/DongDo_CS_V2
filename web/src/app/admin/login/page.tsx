@@ -6,10 +6,15 @@
  * Flow:
  *   /admin/* (no cookie) → middleware → /admin/login
  *   Đăng nhập thành công → window.location → /admin/inbox
+ *
+ *   Inbound call rings are STILL surfaced here as a floating banner so CSKH
+ *   staff don't have to log in first to pick up an incoming call — accepting
+ *   from the banner auto-routes to /admin/login?next=/admin/inbox?... so they
+ *   can finish auth and immediately land in the call view.
  */
 
-import React, { useState, useEffect, useSyncExternalStore } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, useSyncExternalStore, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { ShieldCheck, AlertCircle } from 'lucide-react';
 import { useForm } from 'react-hook-form';
@@ -17,6 +22,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { loginSchema, type LoginFormData } from '@/lib/schemas';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { api } from '@/lib/api';
+import { useGuestCallRing } from '@/lib/hooks/useGuestCallRing';
+import { GuestCallFloatBanner } from '@/components/admin/GuestCallFloatBanner';
 import type { SessionUser } from '@/lib/types';
 import styles from './page.module.scss';
 
@@ -29,11 +36,27 @@ function useHasHydrated() {
   );
 }
 
-export default function AdminLoginPage() {
+/**
+ * Inner page that owns WS + search-params + auth effects. Wrapped in <Suspense>
+ * in the default export because useSearchParams() requires it.
+ */
+function AdminLoginInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextUrl = searchParams.get('next') || '/admin/inbox';
+
   const login = useAuthStore((s) => s.login);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const hasHydrated = useHasHydrated();
+
+  // Listen for inbound guest calls as a floating banner. Mounted on this page
+  // specifically because the admin layout skips WS setup on public paths.
+  const { incomingRing, dismissRing } = useGuestCallRing({
+    enabled: hasHydrated && !isAuthenticated,
+    channelId: 'admin_login_watcher',
+    userId: 'admin_login_watcher',
+    role: 'admin',
+  });
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -61,7 +84,7 @@ export default function AdminLoginPage() {
   // Already authenticated — middleware would normally catch this,
   // but guard here too in case cookie isn't set yet
   if (isAuthenticated) {
-    router.replace('/admin/inbox');
+    router.replace(nextUrl || '/admin/inbox');
     return (
       <div className={styles.page}>
         <div className={styles.loadingOverlay}>
@@ -78,7 +101,7 @@ export default function AdminLoginPage() {
       const session: SessionUser = await api.login(data.username, data.password);
       login(session.token, session);
       // Hard navigation to ensure middleware sees the new cookie
-      window.location.href = '/admin/inbox';
+      window.location.href = nextUrl || '/admin/inbox';
     } catch (err: any) {
       setError(err?.message || 'Đăng nhập thất bại');
       setIsLoading(false);
@@ -173,6 +196,30 @@ export default function AdminLoginPage() {
           <span>Hệ thống bảo mật • Phiên đăng nhập 7 ngày</span>
         </div>
       </div>
+
+      {/* Floating inbound-call banner for unauthenticated staff */}
+      <GuestCallFloatBanner
+        ring={incomingRing}
+        onDismiss={dismissRing}
+        pageLabel="/admin/login"
+        disableAccept={true}
+      />
     </div>
+  );
+}
+
+export default function AdminLoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className={styles.page}>
+          <div className={styles.loadingOverlay}>
+            <span className={styles.spinner} />
+          </div>
+        </div>
+      }
+    >
+      <AdminLoginInner />
+    </Suspense>
   );
 }

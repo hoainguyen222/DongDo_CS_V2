@@ -97,6 +97,10 @@ export const api = {
     }
     return voiceApi.list({ sessionId: sessionIdOrParams as string | undefined, page, limit });
   },
+  initiateVoiceCall: voiceApi.initiateCall,
+  getCallStatus: voiceApi.getCallStatus,
+  acceptCall: voiceApi.acceptCall,
+  webrtcAcceptCall: voiceApi.webrtcAcceptCall,
   deleteVoiceCall: voiceApi.delete,
   endCall: voiceApi.endCall,
   declineCall: voiceApi.declineCall,

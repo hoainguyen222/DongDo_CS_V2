@@ -109,6 +109,24 @@ func SetupRouter(
 	r.POST("/api/voice/end", handler.HandleEndCall)
 	r.POST("/api/voice/decline", handler.HandleDeclineCall)
 	r.POST("/api/voice/upload-recording", handler.HandleUploadRecording)
+
+	// Asterisk-backed voice call endpoints. These do not require auth so
+	// they can be invoked by the staff/guest WebRTC clients in the same
+	// way as /api/voice/initiate.
+	r.POST("/api/voice/accept/:call_id", handler.HandleAcceptCall)
+	r.POST("/api/voice/webrtc-accept/:call_id", handler.HandleAcceptCallWebRTC)
+	r.POST("/api/voice/transfer/:call_id", handler.HandleTransferCall)
+	r.GET("/api/voice/status/:call_id", handler.HandleGetCallStatus)
+	r.POST("/api/voice/hangup/:call_id", handler.HandleHangupCall)
+	r.POST("/api/voice/record/:call_id", handler.HandleStartRecording)
+	r.GET("/api/voice/asterisk", handler.HandleAsteriskStatus)
+
+	// Refactored call lifecycle endpoints (docs/call-architecture.md §4).
+	// These take precedence over the legacy /api/voice/* endpoints;
+	// the old endpoints are kept as thin wrappers for backward compat.
+	r.POST("/api/calls", handler.HandleCreateCall)
+	r.GET("/api/calls/:call_id", handler.HandleGetCall)
+	r.POST("/api/calls/:call_id/reject", handler.HandleCallReject)
 	r.GET("/static/recordings/:filename", func(c *gin.Context) {
 		filename := filepath.Base(c.Param("filename"))
 		recordingsDir := filepath.Join(handler.docsDir, "..", "recordings")
@@ -132,6 +150,10 @@ func SetupRouter(
 	{
 		admin.GET("/auth/me", handler.HandleGetMe)
 		admin.POST("/auth/logout", handler.HandleLogout)
+
+		// Asterisk SIP config (per-user) — frontend sip.js reads this to
+		// register the agent's WebRTC extension with Asterisk.
+		admin.GET("/api/me/sip-config", handler.HandleGetMySipConfig)
 
 		// User Accounts Management - Admin+ only
 		admin.GET("/api/admin/users", RequireRoles(RoleAdmin, RoleOwner), handler.HandleListUsers)

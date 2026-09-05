@@ -43,6 +43,12 @@ type Client struct {
 	stateMgr  domain.StateManager
 	eventBus  domain.EventBus
 	logger    zerolog.Logger
+
+	// extraSessions holds additional hub channels this client should
+	// receive events from (e.g. "admin_inbox" for staff clients). All
+	// channels share the same `send` buffer so the browser sees a
+	// single ordered stream regardless of source.
+	extraSessions []string
 }
 
 func NewClient(hub *Hub, conn *websocket.Conn, sessionID, userID, userRole string, chatUC *usecase.ChatUseCase, voiceUC *usecase.VoiceUseCase, stateMgr domain.StateManager, eventBus domain.EventBus) *Client {
@@ -310,6 +316,17 @@ func ServeWS(
 			stateMgr:  stateMgr,
 			eventBus:  eventBus,
 			logger:    clientLogger,
+		}
+
+		// Admin and CSKH staff clients also listen on the "admin_inbox"
+		// channel. This is critical for use cases like the /admin/login
+		// page where staff haven't authenticated yet (so their WS
+		// session_id is a random placeholder) but still need to see
+		// incoming guest call rings + status transitions. The hub will
+		// register this client under both channels, sharing one `send`
+		// buffer so the browser sees a single ordered stream.
+		if userRole == "admin" || userRole == "cskh" {
+			client.extraSessions = append(client.extraSessions, "admin_inbox")
 		}
 
 		client.hub.register <- client

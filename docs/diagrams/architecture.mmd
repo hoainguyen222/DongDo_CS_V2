@@ -1,0 +1,75 @@
+%%{init: {'theme': 'default', 'themeVariables': { 'primaryColor': '#1f6feb', 'primaryTextColor': '#fff'}}}%%
+
+flowchart TB
+    subgraph Client["Client Tier"]
+        GB[Guest Browser<br/>Next.js Guest Page]
+        AB[Admin Browser<br/>Next.js Admin UI]
+        SP[SIP Softphone<br/>e.g. Linphone]
+    end
+
+    subgraph Frontend["Frontend Tier (Next.js :3000)"]
+        FE[web/src/app<br/>App Router + API routes]
+        WSC[WSClient<br/>lib/ws.ts]
+        RTC[WebRTCVoiceManager<br/>lib/webrtc.ts]
+    end
+
+    subgraph Backend["Backend Tier (Go :8080)"]
+        API[Gin Router<br/>delivery/http]
+        WS[WebSocket Hub<br/>delivery/ws]
+        UC[Use Cases<br/>usecase/*]
+        WKR[Workers<br/>worker/*]
+        AMI[AMI Client<br/>infra/ami]
+        EMB[Embedder<br/>infra/embedding]
+        LLM[Claude Client<br/>infra/claude]
+    end
+
+    subgraph Telephony["Telephony Tier (Asterisk 20)"]
+        PJSIP[chan_pjsip<br/>5060/udp]
+        AMI2[AMI daemon<br/>5038/tcp]
+        Q[Queue<br/>dongdo-queue]
+        MIX[MixMonitor<br/>/var/spool/asterisk/monitor]
+    end
+
+    subgraph Data["Data Tier"]
+        PG[(PostgreSQL 16<br/>:5432)]
+        RD[(Redis 7<br/>:6379)]
+        QD[(Qdrant<br/>:6333/6334)]
+    end
+
+    GB -->|HTTP/WS| FE
+    AB -->|HTTP/WS| FE
+    SP -->|SIP| PJSIP
+
+    FE -->|REST| API
+    FE <-->|WebSocket| WS
+    FE -.->|WebRTC fallback| RTC
+
+    API --> UC
+    WS --> UC
+    WKR --> UC
+    UC --> AMI
+    UC --> EMB
+    UC --> LLM
+    UC --> PG
+    UC --> RD
+
+    WKR --> RD
+    AMI <-->|AMI TCP| AMI2
+    AMI2 --> PJSIP
+    PJSIP --> Q
+    Q --> MIX
+
+    LLM --> QD
+    EMB --> QD
+
+    classDef client fill:#fef3c7,stroke:#d97706,color:#000
+    classDef frontend fill:#dbeafe,stroke:#2563eb,color:#000
+    classDef backend fill:#dcfce7,stroke:#16a34a,color:#000
+    classDef telephony fill:#fee2e2,stroke:#dc2626,color:#000
+    classDef data fill:#ede9fe,stroke:#7c3aed,color:#000
+
+    class GB,AB,SP client
+    class FE,WSC,RTC frontend
+    class API,WS,UC,WKR,AMI,EMB,LLM backend
+    class PJSIP,AMI2,Q,MIX telephony
+    class PG,RD,QD data

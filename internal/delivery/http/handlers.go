@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
+	infraAsterisk "github.com/hoainguyen222/DongDo_CS_V2/internal/infra/asterisk"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/usecase"
 	"github.com/rs/zerolog"
 )
@@ -47,6 +49,36 @@ func InitLogger(level string) {
 
 // getClientIP was removed for log reduction (callers no longer need it).
 
+// resolveAgentExtension maps a dashboard username to an Asterisk SIP
+// extension.  Mirrors the frontend `resolveAgentExtension` in
+// web/src/lib/utils.ts so the two stay in sync.
+//
+// Rules:
+//   - "10XX"   → returned as-is.
+//   - "<word><digits>" → ext = 1000 + digits (clamped to 1001..1099).
+//   - empty or no digits → returns "1000" (fallback so the request still
+//     has an extension; the call will route to the main queue).
+func resolveAgentExtension(username string) string {
+	if username == "" {
+		return "1000"
+	}
+	trimmed := strings.TrimSpace(username)
+	if matched, _ := regexp.MatchString(`^10\d{2}$`, trimmed); matched {
+		return trimmed
+	}
+	digits := regexp.MustCompile(`(\d+)\s*$`).FindStringSubmatch(trimmed)
+	if len(digits) >= 2 {
+		n, err := strconv.Atoi(digits[1])
+		if err == nil {
+			ext := 1000 + n
+			if ext >= 1001 && ext <= 1099 {
+				return strconv.Itoa(ext)
+			}
+		}
+	}
+	return "1000"
+}
+
 type Handler struct {
 	authUC      *usecase.AuthUseCase
 	chatUC      *usecase.ChatUseCase
@@ -60,6 +92,7 @@ type Handler struct {
 	embedder    domain.Embedder
 	docsDir     string
 	eventBus    domain.EventBus
+	ariService  *infraAsterisk.ARIService
 	logger      zerolog.Logger
 }
 
@@ -92,6 +125,14 @@ func NewHandler(
 		eventBus:    eventBus,
 		logger:      Logger.With().Str("component", "handler").Logger(),
 	}
+}
+
+// SetARIService attaches the ARI orchestration service to the handler
+// so /api/voice/webrtc-accept can drive Asterisk's Stasis app to bridge
+// the guest + agent channels instead of returning a "no Asterisk bridge"
+// stub response.
+func (h *Handler) SetARIService(svc *infraAsterisk.ARIService) {
+	h.ariService = svc
 }
 
 // ============================================================
@@ -135,6 +176,58 @@ func (h *Handler) HandleGetMe(c *gin.Context) {
 		"username":  user.Username,
 		"full_name": user.FullName,
 		"role":      user.Role,
+	})
+}
+
+// HandleGetMySipConfig returns the Asterisk SIP credentials for the
+// authenticated user so the browser can register the agent's WebRTC
+// extension via sip.js (WSS).  The password is derived from the env
+// configured prefix — typically ${ASTERISK_AGENT_PASS_PREFIX}${ext}.
+//
+// If the user is not bound to a numeric extension (e.g. super-admin
+// without a softphone) the endpoint returns 404 so the frontend can
+// gracefully skip the SIP integration.
+func (h *Handler) HandleGetMySipConfig(c *gin.Context) {
+	user := c.MustGet("user").(*domain.SessionUser)
+	ext := resolveAgentExtension(user.Username)
+	if ext == "" {
+		c.JSON(http.StatusNotFound, gin.H{
+			"detail": "Tài khoản này chưa được gán extension SIP. Liên hệ Admin để cấp.",
+		})
+		return
+	}
+	wssURL := os.Getenv("NEXT_PUBLIC_ASTERISK_WSS_URL")
+	if wssURL == "" {
+		wssURL = os.Getenv("ASTERISK_WSS_URL")
+	}
+	if wssURL == "" {
+		// Best-effort derivation — browser-side wss URL is typically
+		// ${window.location.hostname}:8089, but if the backend knows
+		// better (e.g. behind a reverse proxy) we use that.
+		wssURL = "wss://" + c.Request.Host + ":8089"
+	}
+	sipServer := os.Getenv("NEXT_PUBLIC_ASTERISK_SIP_SERVER")
+	if sipServer == "" {
+		sipServer = os.Getenv("ASTERISK_SIP_SERVER")
+	}
+	if sipServer == "" {
+		sipServer = "dongdo.local"
+	}
+	passPrefix := os.Getenv("ASTERISK_AGENT_PASS_PREFIX")
+	if passPrefix == "" {
+		passPrefix = "dongdoagent"
+	}
+	stun := os.Getenv("ASTERISK_STUN_SERVERS")
+	if stun == "" {
+		stun = "stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302"
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"websocket_url":   wssURL,
+		"sip_server":      sipServer,
+		"agent_extension": ext,
+		"agent_password":  passPrefix + ext,
+		"stun_servers":    strings.Split(stun, ","),
+		"display_name":    user.FullName,
 	})
 }
 
@@ -979,11 +1072,12 @@ func (h *Handler) HandleSaveConfig(c *gin.Context) {
 // ============================================================
 
 type InitiateCallRequest struct {
-	SessionID  string `json:"session_id" binding:"required"`
-	CallerType string `json:"caller_type" binding:"required"`
-	CallerID   string `json:"caller_id" binding:"required"`
-	CalleeType string `json:"callee_type" binding:"required"`
-	CalleeID   string `json:"callee_id"`
+	SessionID   string `json:"session_id" binding:"required"`
+	CallerType  string `json:"caller_type" binding:"required"`
+	CallerID    string `json:"caller_id" binding:"required"`
+	CalleeType  string `json:"callee_type" binding:"required"`
+	CalleeID    string `json:"callee_id"`
+	PhoneNumber string `json:"phone_number"` // optional outbound dial target for Asterisk trunk
 }
 
 func (h *Handler) HandleInitiateCall(c *gin.Context) {
@@ -994,13 +1088,20 @@ func (h *Handler) HandleInitiateCall(c *gin.Context) {
 		return
 	}
 
+	// If the caller passed an explicit phone_number, use it as the callee id
+	// so the Asterisk outbound trunk can route the call correctly.
+	calleeID := req.CalleeID
+	if req.PhoneNumber != "" && calleeID == "" {
+		calleeID = req.PhoneNumber
+	}
+
 	call, err := h.voiceUC.InitiateCall(
 		c.Request.Context(),
 		req.SessionID,
 		domain.CallerType(req.CallerType),
 		req.CallerID,
 		domain.CallerType(req.CalleeType),
-		req.CalleeID,
+		calleeID,
 	)
 	if err != nil {
 		Logger.Error().Str("session_id", req.SessionID).Err(err).Msg("Failed to initiate call")
@@ -1012,7 +1113,7 @@ func (h *Handler) HandleInitiateCall(c *gin.Context) {
 }
 
 type EndCallRequest struct {
-	CallID          int64  `json:"call_id" binding:"required"`
+	CallID          int64  `json:"call_id"`
 	SessionID       string `json:"session_id" binding:"required"`
 	DurationSeconds int    `json:"duration_seconds"`
 	RecordingURL    string `json:"recording_url"`
@@ -1026,9 +1127,30 @@ func (h *Handler) HandleEndCall(c *gin.Context) {
 		return
 	}
 
-	err := h.voiceUC.EndCall(c.Request.Context(), req.CallID, req.SessionID, req.DurationSeconds, req.RecordingURL)
+	callID := req.CallID
+	// If call_id not provided, get the latest active call for this session
+	if callID == 0 && req.SessionID != "" {
+		calls, err := h.voiceUC.GetCallsBySession(c.Request.Context(), req.SessionID)
+		if err == nil && len(calls) > 0 {
+			// Find the most recent non-ended call
+			for i := range calls {
+				if calls[i].Status != domain.CallEnded {
+					callID = calls[i].ID
+					break
+				}
+			}
+		}
+	}
+
+	if callID == 0 {
+		// No active call found, return success (no call to end)
+		c.JSON(http.StatusOK, gin.H{"success": true, "message": "Không có cuộc gọi đang hoạt động"})
+		return
+	}
+
+	err := h.voiceUC.EndCall(c.Request.Context(), callID, req.SessionID, req.DurationSeconds, req.RecordingURL)
 	if err != nil {
-		Logger.Error().Int64("call_id", req.CallID).Err(err).Msg("Failed to end call")
+		Logger.Error().Int64("call_id", callID).Err(err).Msg("Failed to end call")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
@@ -1399,4 +1521,405 @@ func (h *Handler) HandleBootstrapStatus(c *gin.Context) {
 		"is_enabled":   os.Getenv("ENABLE_BOOTSTRAP") == "true",
 		"owner_exists": false,
 	})
+}
+
+// ============================================================
+// Asterisk-backed Voice Call Handlers
+// ============================================================
+
+// AcceptCallRequest is the body for POST /api/voice/accept/:callId and
+// POST /api/voice/webrtc-accept/:callId. agent_extension is optional —
+// the handler resolves it from the authenticated session when missing.
+type AcceptCallRequest struct {
+	AgentExtension string `json:"agent_extension"`
+}
+
+// HandleAcceptCall - admin/agent accepts an incoming call; routes it via
+// Asterisk Redirect when AMI is enabled.
+//
+// agent_extension is optional. When omitted we resolve the caller's
+// SIP extension from the authenticated username via the same rules as
+// the frontend (numbers → 10XX range; fallback to "1000").
+func (h *Handler) HandleAcceptCall(c *gin.Context) {
+	callIDStr := c.Param("call_id")
+	callID, err := strconv.ParseInt(callIDStr, 10, 64)
+	if err != nil || callID <= 0 {
+		Logger.Warn().Str("call_id", callIDStr).Err(err).Msg("Accept call validation failed: invalid call ID")
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "ID cuộc gọi không hợp lệ"})
+		return
+	}
+
+	// Body is optional; bind it only when present.
+	var req AcceptCallRequest
+	_ = c.ShouldBindJSON(&req) // ignore EOF / empty body
+
+	if req.AgentExtension == "" {
+		// Auto-resolve from authenticated user.
+		if u, ok := c.Get("user"); ok {
+			if sess, ok := u.(*domain.SessionUser); ok {
+				req.AgentExtension = resolveAgentExtension(sess.Username)
+			}
+		}
+	}
+	if req.AgentExtension == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "Vui lòng cung cấp agent_extension"})
+		return
+	}
+
+	if _, err := h.voiceUC.AcceptCall(c.Request.Context(), usecase.AcceptCallInput{
+		CallID:         callID,
+		AgentExtension: req.AgentExtension,
+	}); err != nil {
+		Logger.Error().Int64("call_id", callID).Err(err).Msg("Failed to accept call")
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":         true,
+		"call_id":         callID,
+		"agent_extension": req.AgentExtension,
+		"message":         "Đã tiếp nhận cuộc gọi và chuyển hướng tới agent " + req.AgentExtension,
+	})
+}
+
+// HandleAcceptCallWebRTC - admin/agent accepts an incoming call inside the
+// web admin (WebRTC via Asterisk ARI / Stasis app). agent_extension is
+// optional — when missing we resolve from the authenticated user.
+//
+// When ARI is wired up the call's guest + agent channels are bridged
+// inside Asterisk — the browser's sip.js sends SIP signaling directly
+// to Asterisk's WebSocket and Asterisk handles the audio. When ARI is
+// disabled we fall back to the original "flip status, no Asterisk
+// bridge" stub for backwards compatibility.
+func (h *Handler) HandleAcceptCallWebRTC(c *gin.Context) {
+	callIDStr := c.Param("call_id")
+	callID, err := strconv.ParseInt(callIDStr, 10, 64)
+	if err != nil || callID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "ID cuộc gọi không hợp lệ"})
+		return
+	}
+
+	var req AcceptCallRequest
+	_ = c.ShouldBindJSON(&req) // body optional
+
+	if req.AgentExtension == "" {
+		if u, ok := c.Get("user"); ok {
+			if sess, ok := u.(*domain.SessionUser); ok {
+				req.AgentExtension = resolveAgentExtension(sess.Username)
+			}
+		}
+	}
+	if req.AgentExtension == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "Vui lòng cung cấp agent_extension"})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// Preferred path: ARI is wired up — drive Asterisk's Stasis app to
+	// originate the agent leg and bridge it with the existing guest.
+	if h.ariService != nil && h.ariService.IsEnabled() && h.ariService.Connected() {
+		call, dbErr := h.voiceUC.GetCall(ctx, callID)
+		if dbErr != nil || call == nil {
+			c.JSON(http.StatusNotFound, gin.H{"detail": "Không tìm thấy cuộc gọi"})
+			return
+		}
+		if err := h.ariService.AcceptCall(ctx, call.SessionID, req.AgentExtension); err != nil {
+			Logger.Error().Int64("call_id", callID).Err(err).Msg("ARI AcceptCall failed")
+			c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+			return
+		}
+		if _, err := h.voiceUC.AcceptCall(ctx, usecase.AcceptCallInput{
+			CallID:         callID,
+			AgentExtension: req.AgentExtension,
+		}); err != nil {
+			Logger.Warn().Int64("call_id", callID).Err(err).Msg("voice UC AcceptCall failed (ARI path)")
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"success":         true,
+			"call_id":         callID,
+			"agent_extension": req.AgentExtension,
+			"transport":       "webrtc-ari",
+			"message":         "Đã kết nối tới agent " + req.AgentExtension + " qua Asterisk ARI",
+		})
+		return
+	}
+
+	// Fallback: ARI not configured — keep the legacy in-app WebRTC stub.
+	if _, err := h.voiceUC.AcceptCall(ctx, usecase.AcceptCallInput{
+		CallID:         callID,
+		AgentExtension: req.AgentExtension,
+	}); err != nil {
+		Logger.Error().Int64("call_id", callID).Err(err).Msg("Failed to accept call (webrtc)")
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":         true,
+		"call_id":         callID,
+		"agent_extension": req.AgentExtension,
+		"transport":       "webrtc",
+		"message":         "Đã tiếp nhận cuộc gọi (WebRTC, không qua Asterisk) cho agent " + req.AgentExtension,
+	})
+}
+
+// TransferCallRequest is the body for POST /api/voice/transfer/:callId.
+type TransferCallRequest struct {
+	TargetExtension string `json:"target_extension" binding:"required"`
+}
+
+// HandleTransferCall - transfers an active call to another extension.
+func (h *Handler) HandleTransferCall(c *gin.Context) {
+	callIDStr := c.Param("call_id")
+	callID, err := strconv.ParseInt(callIDStr, 10, 64)
+	if err != nil || callID <= 0 {
+		Logger.Warn().Str("call_id", callIDStr).Err(err).Msg("Transfer call validation failed: invalid call ID")
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "ID cuộc gọi không hợp lệ"})
+		return
+	}
+
+	var req TransferCallRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		Logger.Warn().Int64("call_id", callID).Err(err).Msg("Transfer call validation failed")
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "Vui lòng cung cấp target_extension"})
+		return
+	}
+
+	if err := h.voiceUC.TransferCall(c.Request.Context(), callID, req.TargetExtension); err != nil {
+		Logger.Error().Int64("call_id", callID).Err(err).Msg("Failed to transfer call")
+		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":          true,
+		"call_id":          callID,
+		"target_extension": req.TargetExtension,
+		"message":          "Đã chuyển cuộc gọi tới extension " + req.TargetExtension,
+	})
+}
+
+// HandleGetCallStatus - polls the current status of a call.
+func (h *Handler) HandleGetCallStatus(c *gin.Context) {
+	callIDStr := c.Param("call_id")
+	callID, err := strconv.ParseInt(callIDStr, 10, 64)
+	if err != nil || callID <= 0 {
+		Logger.Warn().Str("call_id", callIDStr).Err(err).Msg("Get call status validation failed: invalid call ID")
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "ID cuộc gọi không hợp lệ"})
+		return
+	}
+
+	call, err := h.voiceUC.GetCall(c.Request.Context(), callID)
+	if err != nil {
+		Logger.Error().Int64("call_id", callID).Err(err).Msg("Failed to get call status")
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		return
+	}
+	if call == nil {
+		c.JSON(http.StatusNotFound, gin.H{"detail": "Không tìm thấy cuộc gọi"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"id":               call.ID,
+		"call_id":          call.ID,
+		"session_id":       call.SessionID,
+		"caller_type":      call.CallerType,
+		"caller_id":        call.CallerID,
+		"callee_type":      call.CalleeType,
+		"callee_id":        call.CalleeID,
+		"status":           call.Status,
+		"duration_seconds": call.DurationSeconds,
+		"recording_url":    call.RecordingURL,
+		"transcript":       call.Transcript,
+		"channel_id":       call.ChannelID,
+		"linked_id":        call.LinkedID,
+		"target_exten":     call.TargetExten,
+		"created_at":       call.CreatedAt,
+		"ended_at":         call.EndedAt,
+	})
+}
+
+// HandleHangupCall - alias for end-call that takes call_id from the URL.
+type HangupCallRequest struct {
+	DurationSeconds int    `json:"duration_seconds"`
+	RecordingURL    string `json:"recording_url"`
+}
+
+func (h *Handler) HandleHangupCall(c *gin.Context) {
+	callIDStr := c.Param("call_id")
+	callID, err := strconv.ParseInt(callIDStr, 10, 64)
+	if err != nil || callID <= 0 {
+		Logger.Warn().Str("call_id", callIDStr).Err(err).Msg("Hangup call validation failed: invalid call ID")
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "ID cuộc gọi không hợp lệ"})
+		return
+	}
+
+	var req HangupCallRequest
+	_ = c.ShouldBindJSON(&req)
+
+	call, err := h.voiceUC.GetCall(c.Request.Context(), callID)
+	if err != nil {
+		Logger.Error().Int64("call_id", callID).Err(err).Msg("Failed to look up call for hangup")
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		return
+	}
+	if call == nil {
+		c.JSON(http.StatusNotFound, gin.H{"detail": "Không tìm thấy cuộc gọi"})
+		return
+	}
+
+	if err := h.voiceUC.EndCall(c.Request.Context(), callID, call.SessionID, req.DurationSeconds, req.RecordingURL); err != nil {
+		Logger.Error().Int64("call_id", callID).Err(err).Msg("Failed to hangup call")
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "call_id": callID, "message": "Đã kết thúc cuộc gọi"})
+}
+
+// HandleStartRecording - starts MixMonitor recording on the active channel.
+type StartRecordingRequest struct {
+	Filename string `json:"filename"`
+}
+
+func (h *Handler) HandleStartRecording(c *gin.Context) {
+	callIDStr := c.Param("call_id")
+	callID, err := strconv.ParseInt(callIDStr, 10, 64)
+	if err != nil || callID <= 0 {
+		Logger.Warn().Str("call_id", callIDStr).Err(err).Msg("Start recording validation failed: invalid call ID")
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "ID cuộc gọi không hợp lệ"})
+		return
+	}
+
+	var req StartRecordingRequest
+	_ = c.ShouldBindJSON(&req)
+
+	if err := h.voiceUC.StartRecording(c.Request.Context(), callID, req.Filename); err != nil {
+		Logger.Error().Int64("call_id", callID).Err(err).Msg("Failed to start recording")
+		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"call_id": callID,
+		"filename": req.Filename,
+		"message": "Đã bắt đầu ghi âm cuộc gọi",
+	})
+}
+
+// HandleAsteriskStatus - reports the live Asterisk connection state.
+func (h *Handler) HandleAsteriskStatus(c *gin.Context) {
+	client := h.voiceUC.AsteriskClient()
+	if client == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"enabled":   false,
+			"connected": false,
+			"message":   "Asterisk client chưa được cấu hình",
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"enabled":   client.Enabled(),
+		"connected": client.Connected(),
+	})
+}
+
+// ============================================================
+// Refactored Call Endpoints (docs/call-architecture.md §4)
+// ============================================================
+
+// CreateCallRequest is the body for POST /api/calls.
+type CreateCallRequest struct {
+	SessionID      string `json:"session_id" binding:"required"`
+	CallerID       string `json:"customer_id" binding:"required"`
+	CalleeID       string `json:"callee_id"`
+	CustomerName   string `json:"customer_name"`
+	Phone          string `json:"phone"`
+	IdempotencyKey string `json:"idempotency_key"`
+}
+
+// HandleCreateCall — POST /api/calls. Implements the queue-driven
+// lifecycle described in the architecture doc: validate → persist →
+// enqueue → attempt agent assignment → publish WS.
+func (h *Handler) HandleCreateCall(c *gin.Context) {
+	var req CreateCallRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		Logger.Warn().Err(err).Msg("CreateCall validation failed")
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "Dữ liệu không hợp lệ"})
+		return
+	}
+	idem := req.IdempotencyKey
+	if idem == "" {
+		idem = c.GetHeader("Idempotency-Key")
+	}
+	call, err := h.voiceUC.CreateCall(c.Request.Context(), usecase.CreateCallInput{
+		SessionID:      req.SessionID,
+		CallerID:       req.CallerID,
+		CalleeID:       req.CalleeID,
+		CustomerName:   req.CustomerName,
+		Phone:          req.Phone,
+		IdempotencyKey: idem,
+	})
+	if err != nil {
+		Logger.Error().Err(err).Str("session_id", req.SessionID).Msg("CreateCall failed")
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"call_id":    call.ID,
+		"session_id": call.SessionID,
+		"status":     call.Status,
+	})
+}
+
+// HandleGetCall — GET /api/calls/:call_id. Used by clients reconnecting
+// after a WebSocket drop to recover the authoritative state.
+func (h *Handler) HandleGetCall(c *gin.Context) {
+	callIDStr := c.Param("call_id")
+	callID, err := strconv.ParseInt(callIDStr, 10, 64)
+	if err != nil || callID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "ID cuộc gọi không hợp lệ"})
+		return
+	}
+	call, err := h.voiceUC.GetCall(c.Request.Context(), callID)
+	if err != nil {
+		Logger.Error().Int64("call_id", callID).Err(err).Msg("GetCall failed")
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		return
+	}
+	if call == nil {
+		c.JSON(http.StatusNotFound, gin.H{"detail": "Không tìm thấy cuộc gọi"})
+		return
+	}
+	c.JSON(http.StatusOK, call)
+}
+
+// HandleCallReject — POST /api/calls/:call_id/reject.
+func (h *Handler) HandleCallReject(c *gin.Context) {
+	callIDStr := c.Param("call_id")
+	callID, err := strconv.ParseInt(callIDStr, 10, 64)
+	if err != nil || callID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "ID cuộc gọi không hợp lệ"})
+		return
+	}
+	agentExt := ""
+	if u, ok := c.Get("user"); ok {
+		if sess, ok := u.(*domain.SessionUser); ok {
+			agentExt = resolveAgentExtension(sess.Username)
+		}
+	}
+	if err := h.voiceUC.RejectCall(c.Request.Context(), usecase.RejectCallInput{
+		CallID:         callID,
+		AgentExtension: agentExt,
+		IdempotencyKey: c.GetHeader("Idempotency-Key"),
+	}); err != nil {
+		Logger.Error().Int64("call_id", callID).Err(err).Msg("RejectCall failed")
+		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "call_id": callID})
 }

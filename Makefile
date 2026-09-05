@@ -3,6 +3,13 @@
 .PHONY: up down logs ps restart sync-init rebuild up-fresh migrate-status migrate-create
 
 # =============================================================================
+# Asterisk-related
+# =============================================================================
+ASTERISK_SVC := asterisk
+ASTERISK_CONTAINER := dongdo_asterisk
+ASTERISK_DOCKER := docker/asterisk
+
+# =============================================================================
 # Migrations (goose — embedded in the server binary)
 # =============================================================================
 # goose CLI (from tools/bin/) for manual migration control.
@@ -40,7 +47,7 @@ sync-init:
 	@cp db/migrations/*.sql db/init/
 	@echo "✅ Synced $$(ls db/init/*.sql 2>/dev/null | wc -l | tr -d ' ') migrations to db/init/"
 
-# Bring up the full stack. The server binary runs goose migrations on startup.
+# Bring up the full stack (postgres, redis, qdrant, server, web, asterisk).
 up:
 	docker compose up -d --build
 
@@ -70,6 +77,64 @@ restart:
 rebuild:
 	docker compose build server
 	docker compose up -d server
+
+# =============================================================================
+# Asterisk PBX targets (NEW)
+# =============================================================================
+
+# Build only the asterisk container
+asterisk-build:
+	docker compose build $(ASTERISK_SVC)
+
+# (Re-)Start only asterisk
+asterisk-up:
+	docker compose up -d $(ASTERISK_SVC)
+
+# Tail asterisk logs
+asterisk-logs:
+	docker compose logs -f $(ASTERISK_SVC)
+
+# Open the asterisk CLI (`exit` to leave)
+asterisk-cli:
+	docker exec -it $(ASTERISK_CONTAINER) asterisk -rvvv
+
+# Quick health check (without entering CLI)
+asterisk-health:
+	docker exec $(ASTERISK_CONTAINER) asterisk -rx "core show version"
+	@docker exec $(ASTERISK_CONTAINER) asterisk -rx "pjsip show endpoints" 2>&1 | head -10
+
+# Restart only asterisk (config change pickup)
+asterisk-restart:
+	docker compose restart $(ASTERISK_SVC)
+
+# Reload chan_pjsip only (fast, no channel teardown)
+asterisk-reload-pjsip:
+	docker exec $(ASTERISK_CONTAINER) asterisk -rx "module reload res_pjsip.so"
+
+# Force-rebuild asterisk image from scratch
+asterisk-rebuild:
+	docker compose build --no-cache $(ASTERISK_SVC)
+	docker compose up -d $(ASTERISK_CONTAINER)
+
+# Run E2E smoke tests against a running asterisk container
+test-call:
+	./scripts/test_call.sh
+
+# Wait until asterisk becomes healthy (used in CI / deploys)
+wait-asterisk:
+	./scripts/wait-asterisk.sh
+
+# Clean up asterisk recordings + logs (preserve config)
+asterisk-clean:
+	docker compose stop $(ASTERISK_SVC) || true
+	docker volume rm dongdo-cskh_asterisk-spool 2>/dev/null || true
+	@echo "Volumes removed. Bring asterisk back with: make asterisk-up"
+
+# Add an extra agent extension on a running stack
+#   make register-agent ext=1006
+register-agent:
+	@if [ -z "$(ext)" ]; then echo "Usage: make register-agent ext=1006"; exit 2; fi
+	./scripts/register-agent.sh $(ext)
 
 # =============================================================================
 # Dev shortcuts

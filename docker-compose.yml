@@ -1,3 +1,5 @@
+name: dongdo-cskh
+
 services:
   # 1. PostgreSQL (Source of Truth)
   postgres:
@@ -26,6 +28,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - dongdo-net
 
   # 2. Redis (Event Bus Streams & State)
   redis:
@@ -42,6 +46,8 @@ services:
       interval: 2s
       timeout: 2s
       retries: 10
+    networks:
+      - dongdo-net
 
   # 3. Qdrant Vector DB (RAG Knowledge Base)
   qdrant:
@@ -53,6 +59,8 @@ services:
       - "6334:6334"
     volumes:
       - qdrantdata:/qdrant/storage
+    networks:
+      - dongdo-net
 
   # 4. Backend Golang Server
   server:
@@ -76,9 +84,21 @@ services:
       LLM_MODEL: "${LLM_MODEL:-claude-haiku-4-5-20251001}"
       LLM_TEMPERATURE: "0.1"
       DOCUMENTS_DIR: "/app/tailieu"
+      # Asterisk integration - backend will reach AMI / ARI via service DNS.
+      ASTERISK_ENABLED: "${ASTERISK_ENABLED:-true}"
+      ASTERISK_HOST: "asterisk"
+      ASTERISK_AMI_PORT: "5038"
+      ASTERISK_ARI_PORT: "8088"
+      ASTERISK_USER: "${ASTERISK_USER:-dongdo}"
+      ASTERISK_PASS: "${ASTERISK_PASS:-dongdoami}"
+      ASTERISK_ARI_USER: "${ASTERISK_ARI_USER:-dongdo}"
+      ASTERISK_ARI_PASS: "${ASTERISK_ARI_PASS:-dongdoari}"
+      ASTERISK_RECORDINGS_DIR: "/var/spool/asterisk/monitor"
     volumes:
       - ./recordings:/app/recordings
       - ./tailieu:/app/tailieu
+      # The asterisk recorder dir (host-mirror of container /var/spool/asterisk/monitor).
+      - asterisk-monitor:/var/spool/asterisk/monitor:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -86,8 +106,100 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_started
+      asterisk:
+        condition: service_started
+    networks:
+      - dongdo-net
+
+  # 5. Web Frontend (Next.js)
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: dongdo_web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: "${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8080}"
+      NEXT_PUBLIC_WS_URL: "${NEXT_PUBLIC_WS_URL:-ws://localhost:8080}"
+      NEXT_PUBLIC_ADMIN_PATH: "${NEXT_PUBLIC_ADMIN_PATH:-/admin}"
+      NEXT_PUBLIC_ASTERISK_ENABLED: "${ASTERISK_ENABLED:-true}"
+    depends_on:
+      - server
+    networks:
+      - dongdo-net
+
+  # 6. Asterisk PBX (PJSIP / AMI / ARI)
+  asterisk:
+    build:
+      context: .
+      dockerfile: docker/asterisk/Dockerfile
+    container_name: dongdo_asterisk
+    restart: unless-stopped
+    init: false    # entrypoint already uses tini
+    hostname: asterisk
+    environment:
+      # Service-discovery (matches compose service names)
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      # AMI / ARI passwords (templated into manager.conf / ari.conf)
+      ASTERISK_AMI_PASS: "${ASTERISK_PASS:-dongdoami}"
+      ASTERISK_MONITOR_PASS: "${ASTERISK_MONITOR_PASS:-dongdomonitor}"
+      ASTERISK_ARI_PASS: "${ASTERISK_ARI_PASS:-dongdoari}"
+      ASTERISK_ARI_READ_PASS: "${ASTERISK_ARI_READ_PASS:-dongdoread}"
+      # SIP endpoint secrets
+      ASTERISK_GUEST_PASS: "${ASTERISK_GUEST_PASS:-dongdoguest}"
+      ASTERISK_AGENT_PASS_PREFIX: "${ASTERISK_AGENT_PASS_PREFIX:-dongdoagent}"
+      ASTERISK_TRUNK_USER: "${ASTERISK_TRUNK_USER:-mocktrunk}"
+      ASTERISK_TRUNK_PASS: "${ASTERISK_TRUNK_PASS:-mocktrunkpass}"
+      # Voicemail
+      ASTERISK_VM_PASS: "${ASTERISK_VM_PASS:-1234}"
+      # Optional: enable ODBC CDR pipeline
+      ASTERISK_CDR_ODBC_DSN: "${ASTERISK_CDR_ODBC_DSN:-}"
+    ports:
+      # SIP signaling
+      - "5060:5060/udp"
+      - "5061:5061/tcp"
+      # AMI control
+      - "5038:5038/tcp"
+      # ARI REST + WebSocket
+      - "8088:8088/tcp"
+      # WSS for browser SIP (sip.js) — same cert as TLS signaling
+      - "8089:8089/tcp"
+      # RTP media (sample range; tune for prod)
+      - "10000-10100:10000-10100/udp"
+    volumes:
+      # Recordings (shared with backend for mixed recording streams)
+      - ./recordings:/var/spool/asterisk/monitor
+      # Persistent logs
+      - ./logs/asterisk:/var/log/asterisk
+      # Spool persistence
+      - asterisk-spool:/var/spool/asterisk
+    healthcheck:
+      test: ["CMD-SHELL", "asterisk -rx \"pjsip show endpoints\" >/dev/null 2>&1 || asterisk -rx \"core show version\" >/dev/null 2>&1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - dongdo-net
 
 volumes:
   pgdata:
   redisdata:
   qdrantdata:
+  asterisk-spool:
+  asterisk-monitor:
+
+networks:
+  dongdo-net:
+    driver: bridge
+    name: dongdo-net
