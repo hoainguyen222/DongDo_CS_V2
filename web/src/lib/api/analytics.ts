@@ -8,6 +8,8 @@ import type { AnalyticsStats } from '@/lib/types';
 export interface DateRange {
   startDate?: string;
   endDate?: string;
+  channel?: string;
+  staffId?: string;
 }
 
 export const analyticsApi = {
@@ -15,36 +17,36 @@ export const analyticsApi = {
     return apiClient.get<AnalyticsStats>('/api/admin/analytics');
   },
 
-  async getGeneralOverview({ startDate, endDate }: DateRange = {}): Promise<any> {
-    const qs = buildQuery({ start_date: startDate, end_date: endDate });
+  async getGeneralOverview({ startDate, endDate, channel, staffId }: DateRange = {}): Promise<any> {
+    const qs = buildQuery({ start_date: startDate, end_date: endDate, channel, staff_id: staffId });
     return apiClient.get<any>(`/api/admin/partner/reports/overview?${qs}`);
   },
 
-  async getAIPerformance({ startDate, endDate }: DateRange = {}): Promise<any> {
-    const qs = buildQuery({ start_date: startDate, end_date: endDate });
-    return apiClient.get<any>(`/api/admin/partner/reports/ai-perf?${qs}`);
+  async getAIPerformance({ startDate, endDate, channel, staffId }: DateRange = {}): Promise<any> {
+    const qs = buildQuery({ start_date: startDate, end_date: endDate, channel, staff_id: staffId });
+    return apiClient.get<any>(`/api/admin/partner/reports/ai-performance?${qs}`);
   },
 
-  async getStaffPerformance({ startDate, endDate }: DateRange = {}): Promise<any[]> {
-    const qs = buildQuery({ start_date: startDate, end_date: endDate });
-    const data = await apiClient.get<{ staff_reports: any[] }>(`/api/admin/partner/reports/staff-perf?${qs}`);
+  async getStaffPerformance({ startDate, endDate, channel, staffId }: DateRange = {}): Promise<any[]> {
+    const qs = buildQuery({ start_date: startDate, end_date: endDate, channel, staff_id: staffId });
+    const data = await apiClient.get<{ staff_reports: any[] }>(`/api/admin/partner/reports/staff-performance?${qs}`);
     return data.staff_reports || [];
   },
 
-  async getCX({ startDate, endDate }: DateRange = {}): Promise<any> {
-    const qs = buildQuery({ start_date: startDate, end_date: endDate });
+  async getCX({ startDate, endDate, channel, staffId }: DateRange = {}): Promise<any> {
+    const qs = buildQuery({ start_date: startDate, end_date: endDate, channel, staff_id: staffId });
     return apiClient.get<any>(`/api/admin/partner/reports/cx?${qs}`);
   },
 
-  async getOperational({ startDate, endDate }: DateRange = {}): Promise<any[]> {
-    const qs = buildQuery({ start_date: startDate, end_date: endDate });
+  async getOperational({ startDate, endDate, channel, staffId }: DateRange = {}): Promise<any[]> {
+    const qs = buildQuery({ start_date: startDate, end_date: endDate, channel, staff_id: staffId });
     const data = await apiClient.get<{ hourly_load: any[] }>(`/api/admin/partner/reports/operational?${qs}`);
     return data.hourly_load || [];
   },
 
-  async getIssueAnalysis({ startDate, endDate }: DateRange = {}): Promise<any[]> {
-    const qs = buildQuery({ start_date: startDate, end_date: endDate });
-    const data = await apiClient.get<{ issues: any[] }>(`/api/admin/partner/reports/issues?${qs}`);
+  async getIssueAnalysis({ startDate, endDate, channel, staffId }: DateRange = {}): Promise<any[]> {
+    const qs = buildQuery({ start_date: startDate, end_date: endDate, channel, staff_id: staffId });
+    const data = await apiClient.get<{ issues: any[] }>(`/api/admin/partner/reports/issue-analysis?${qs}`);
     return data.issues || [];
   },
 

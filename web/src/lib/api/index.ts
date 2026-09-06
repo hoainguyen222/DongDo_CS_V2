@@ -136,18 +136,18 @@ export const api = {
 
   // Analytics
   getAnalytics: analyticsApi.getStats,
-  getGeneralOverviewReport: (startDate?: string, endDate?: string) =>
-    analyticsApi.getGeneralOverview({ startDate, endDate }),
-  getAIPerformanceReport: (startDate?: string, endDate?: string) =>
-    analyticsApi.getAIPerformance({ startDate, endDate }),
-  getStaffPerformanceReport: (startDate?: string, endDate?: string) =>
-    analyticsApi.getStaffPerformance({ startDate, endDate }),
-  getCXReport: (startDate?: string, endDate?: string) =>
-    analyticsApi.getCX({ startDate, endDate }),
-  getOperationalReport: (startDate?: string, endDate?: string) =>
-    analyticsApi.getOperational({ startDate, endDate }),
-  getIssueAnalysisReport: (startDate?: string, endDate?: string) =>
-    analyticsApi.getIssueAnalysis({ startDate, endDate }),
+  getGeneralOverviewReport: (startDate?: string, endDate?: string, channel?: string, staffId?: string) =>
+    analyticsApi.getGeneralOverview({ startDate, endDate, channel, staffId }),
+  getAIPerformanceReport: (startDate?: string, endDate?: string, channel?: string, staffId?: string) =>
+    analyticsApi.getAIPerformance({ startDate, endDate, channel, staffId }),
+  getStaffPerformanceReport: (startDate?: string, endDate?: string, channel?: string, staffId?: string) =>
+    analyticsApi.getStaffPerformance({ startDate, endDate, channel, staffId }),
+  getCXReport: (startDate?: string, endDate?: string, channel?: string, staffId?: string) =>
+    analyticsApi.getCX({ startDate, endDate, channel, staffId }),
+  getOperationalReport: (startDate?: string, endDate?: string, channel?: string, staffId?: string) =>
+    analyticsApi.getOperational({ startDate, endDate, channel, staffId }),
+  getIssueAnalysisReport: (startDate?: string, endDate?: string, channel?: string, staffId?: string) =>
+    analyticsApi.getIssueAnalysis({ startDate, endDate, channel, staffId }),
   getAILearningReportStats: analyticsApi.getAILearningStats,
 
   // Config

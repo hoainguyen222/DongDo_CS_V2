@@ -469,6 +469,7 @@ func (r *PartnerRepo) GetAIPerformanceReport(ctx context.Context, startDate, end
 		HandoffCases:    int(row.HandoffCases),
 		AvgAICSAT:       row.AvgAiCsat,
 		AvgResponseTime: "1.18s",
+		DailyTrend:      []*domain.AIPerformanceDailyItem{},
 	}
 
 	if row.TotalCases > 0 {
@@ -477,6 +478,26 @@ func (r *PartnerRepo) GetAIPerformanceReport(ctx context.Context, startDate, end
 	} else {
 		m.AIResolutionRate = "0%"
 		m.HandoffRate = "0%"
+	}
+
+	trendRows, err := r.db.Partner.GetAITrendDaily(ctx, partnerdb.GetAITrendDailyParams{
+		CreatedAt:   startDate,
+		CreatedAt_2: endDate,
+	})
+	if err == nil {
+		for _, tr := range trendRows {
+			rateStr := "0%"
+			if tr.TotalCases > 0 {
+				rateStr = fmt.Sprintf("%.1f%%", (float64(tr.AiResolvedCases)/float64(tr.TotalCases))*100.0)
+			}
+			m.DailyTrend = append(m.DailyTrend, &domain.AIPerformanceDailyItem{
+				DateDay:          tr.DateDay,
+				Label:            tr.DateDay.Format("02/01"),
+				TotalCases:       int(tr.TotalCases),
+				AIResolvedCases:  int(tr.AiResolvedCases),
+				AIResolutionRate: rateStr,
+			})
+		}
 	}
 
 	return m, nil

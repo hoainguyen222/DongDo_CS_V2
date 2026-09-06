@@ -380,14 +380,23 @@ type GeneralOverviewMetrics struct {
 	ResolutionRate string `json:"resolution_rate"`
 }
 
+type AIPerformanceDailyItem struct {
+	DateDay          time.Time `json:"date_day"`
+	Label            string    `json:"label"`
+	TotalCases       int       `json:"total_cases"`
+	AIResolvedCases  int       `json:"ai_resolved_cases"`
+	AIResolutionRate string    `json:"ai_resolution_rate"`
+}
+
 type AIPerformanceMetrics struct {
-	TotalCases       int     `json:"total_cases"`
-	AIResolvedCases  int     `json:"ai_resolved_cases"`
-	HandoffCases     int     `json:"handoff_cases"`
-	AIResolutionRate string  `json:"ai_resolution_rate"`
-	HandoffRate      string  `json:"handoff_rate"`
-	AvgAICSAT        float64 `json:"avg_ai_csat"`
-	AvgResponseTime  string  `json:"avg_response_time"`
+	TotalCases       int                       `json:"total_cases"`
+	AIResolvedCases  int                       `json:"ai_resolved_cases"`
+	HandoffCases     int                       `json:"handoff_cases"`
+	AIResolutionRate string                    `json:"ai_resolution_rate"`
+	HandoffRate      string                    `json:"handoff_rate"`
+	AvgAICSAT        float64                   `json:"avg_ai_csat"`
+	AvgResponseTime  string                    `json:"avg_response_time"`
+	DailyTrend       []*AIPerformanceDailyItem `json:"daily_trend"`
 }
 
 type StaffPerformanceItem struct {
