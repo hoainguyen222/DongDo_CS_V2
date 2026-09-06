@@ -373,7 +373,7 @@ export function AdminSidebar({
       <nav className={styles.nav}>
         <div className={styles.section}>
           {getFeaturePermission('partner_dashboard', role, permissions) !== 'none' && (
-            <NavButton href="/admin" icon={navIcon.dashboard} label="Trang Chủ / Dashboard" />
+            <NavButton href="/admin/dashboard" icon={navIcon.dashboard} label="Trang Chủ / Dashboard" />
           )}
           {getFeaturePermission('inbox', role, permissions) !== 'none' && (
             <NavButton

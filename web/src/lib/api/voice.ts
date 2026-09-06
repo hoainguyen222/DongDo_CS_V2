@@ -29,6 +29,8 @@ export interface VoiceCallResponse {
 
 export interface ListVoiceCallsParams {
   sessionId?: string;
+  status?: string;
+  search?: string;
   page?: number;
   limit?: number;
 }
@@ -70,13 +72,16 @@ export const voiceApi = {
   },
 
   async list(params: ListVoiceCallsParams = {}): Promise<ListVoiceCallsResult> {
-    const { sessionId, page = 1, limit = 10 } = params;
+    const { sessionId, status, search, page = 1, limit = 10 } = params;
     const qs = new URLSearchParams();
     if (sessionId) qs.append('session_id', sessionId);
+    if (status) qs.append('status', status);
+    if (search) qs.append('search', search);
     qs.append('page', page.toString());
     qs.append('limit', limit.toString());
     return apiClient.get<ListVoiceCallsResult>(`/api/admin/voice/calls?${qs.toString()}`);
   },
+
 
   async delete(callID: number): Promise<void> {
     await apiClient.delete(`/api/admin/voice/calls/${callID}`);

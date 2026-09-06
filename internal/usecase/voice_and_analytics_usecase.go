@@ -179,6 +179,16 @@ func (uc *VoiceUseCase) ListAllCalls(ctx context.Context) ([]*domain.VoiceCall, 
 	return calls, nil
 }
 
+func (uc *VoiceUseCase) ListVoiceCallsPaginated(ctx context.Context, filter domain.VoiceCallFilter) ([]*domain.VoiceCall, int64, error) {
+	calls, total, err := uc.voiceRepo.ListPaginated(ctx, filter)
+	if err != nil {
+		uc.logger.Error().Err(err).Msg("failed to list voice calls paginated")
+		return nil, 0, err
+	}
+	return calls, total, nil
+}
+
+
 func (uc *VoiceUseCase) SetTranscript(ctx context.Context, id int64, transcript string) error {
 	if err := uc.voiceRepo.SetTranscript(ctx, id, transcript); err != nil {
 		uc.logger.Error().Err(err).Int64("call_id", id).

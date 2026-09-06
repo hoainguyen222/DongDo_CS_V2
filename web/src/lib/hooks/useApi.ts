@@ -15,7 +15,8 @@ import {
   type UseQueryOptions,
   type UseMutationOptions,
 } from '@tanstack/react-query';
-import { api, tagsApi } from '@/lib/api';
+import { api, tagsApi, type ListCasesResult } from '@/lib/api';
+
 import type {
   GuestSession,
   ChatCase,
@@ -52,8 +53,9 @@ export const queryKeys = {
     ['customers', { page, limit, search }] as const,
 
   // Voice calls
-  voiceCalls: (sessionId?: string, page?: number, limit?: number) =>
-    ['voiceCalls', { sessionId, page, limit }] as const,
+  voiceCalls: (sessionId?: string, page?: number, limit?: number, search?: string, status?: string) =>
+    ['voiceCalls', { sessionId, page, limit, search, status }] as const,
+
 
   // Learning
   pendingLearning: (page?: number, limit?: number) =>
@@ -108,8 +110,9 @@ export function useCases(
   page = 1,
   limit = 10,
   search?: string,
-  options?: QueryOpts<{ cases: ChatCase[]; total: number }>
+  options?: QueryOpts<ListCasesResult>
 ) {
+
   return useQuery({
     queryKey: queryKeys.cases(status, page, limit, search),
     queryFn: () => api.listCases(status, page, limit, search),
@@ -240,15 +243,22 @@ export function useVoiceCalls(
   sessionId?: string,
   page = 1,
   limit = 10,
+  searchOrOptions?: string | QueryOpts<{ calls: any[]; total: number }>,
+  status?: string,
   options?: QueryOpts<{ calls: any[]; total: number }>
 ) {
+  const search = typeof searchOrOptions === 'string' ? searchOrOptions : undefined;
+  const opts = typeof searchOrOptions === 'object' && searchOrOptions !== null ? searchOrOptions : options;
+
   return useQuery({
-    queryKey: queryKeys.voiceCalls(sessionId, page, limit),
-    queryFn: () => api.getVoiceCalls(sessionId, page, limit),
+    queryKey: queryKeys.voiceCalls(sessionId, page, limit, search, status),
+    queryFn: () => api.getVoiceCalls(sessionId, page, limit, search),
     staleTime: 10_000,
-    ...options,
+    ...opts,
   });
 }
+
+
 
 export function useDeleteVoiceCall() {
   const qc = useQueryClient();

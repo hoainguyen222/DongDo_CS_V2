@@ -53,6 +53,16 @@ func (uc *CaseUseCase) ListCustomers(ctx context.Context) ([]*domain.CustomerPro
 	return customers, nil
 }
 
+func (uc *CaseUseCase) ListCustomersPaginated(ctx context.Context, filter domain.GuestFilter) ([]*domain.CustomerProfile, int64, error) {
+	customers, total, err := uc.guestRepo.ListPaginated(ctx, filter)
+	if err != nil {
+		uc.logger.Error().Err(err).Msg("failed to list customers paginated")
+		return nil, 0, err
+	}
+	return customers, total, nil
+}
+
+
 func (uc *CaseUseCase) UpdateCustomer(ctx context.Context, guestIDStr, displayName, phone string) error {
 	gID, err := uuid.Parse(guestIDStr)
 	if err != nil {
@@ -150,6 +160,23 @@ func (uc *CaseUseCase) ListCases(ctx context.Context, status domain.CaseStatus) 
 	}
 	return cases, nil
 }
+
+func (uc *CaseUseCase) ListCasesPaginated(ctx context.Context, filter domain.CaseListFilter) ([]*domain.ChatCase, int64, *domain.CaseStatusCounts, error) {
+	cases, total, err := uc.caseRepo.ListPaginated(ctx, filter)
+	if err != nil {
+		uc.logger.Error().Err(err).Msg("failed to list cases paginated")
+		return nil, 0, nil, err
+	}
+
+	counts, err := uc.caseRepo.GetStatusCounts(ctx)
+	if err != nil {
+		uc.logger.Warn().Err(err).Msg("failed to get case status counts")
+		counts = &domain.CaseStatusCounts{}
+	}
+
+	return cases, total, counts, nil
+}
+
 
 func (uc *CaseUseCase) GetCase(ctx context.Context, sessionID string) (*domain.ChatCase, error) {
 	chatCase, err := uc.caseRepo.Get(ctx, sessionID)

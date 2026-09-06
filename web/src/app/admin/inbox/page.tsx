@@ -68,10 +68,16 @@ export default function InboxPage() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Data fetching: fetch up to 100 cases to allow real-time tab counting & filtering
-  const { data: casesData, isLoading: isLoadingCases } = useCases('', 1, 100);
+  // Data fetching: DB-level pagination & filtering by tab status and search keyword
+  const { data: casesData, isLoading: isLoadingCases } = useCases(
+    activeTab === 'all' ? '' : activeTab,
+    casePage,
+    casePageSize,
+    caseFilter
+  );
   const { data: caseDetailData, refetch: refetchCaseDetail } = useCaseDetail(selectedCase?.session_id ?? '');
   const { data: voiceCallsData } = useVoiceCalls();
+
 
   // Tags state & hooks
   const [showTagPicker, setShowTagPicker] = useState(false);
@@ -181,35 +187,15 @@ export default function InboxPage() {
     [lastSenderMap, selectedCase?.session_id, caseMessages]
   );
 
-  // Real-time tab counts calculation
-  const unrepliedAllCount = allCases.filter((c) => isCaseUnreplied(c)).length;
-  const waitingCount = allCases.filter((c) => c.status === 'NEEDS_HUMAN_CS').length;
-  const unrepliedActiveCount = allCases.filter(
-    (c) => c.status === 'HUMAN_CS_ACTIVE' && isCaseUnreplied(c)
-  ).length;
-  const resolvedCount = allCases.filter((c) => c.status === 'RESOLVED').length;
+  // Status counts returned from database GetCaseStatusCounts query
+  const statusCounts = casesData?.status_counts;
+  const unrepliedAllCount = statusCounts?.needs_human ?? 0;
+  const waitingCount = statusCounts?.needs_human ?? 0;
+  const unrepliedActiveCount = statusCounts?.human_active ?? 0;
+  const resolvedCount = statusCounts?.resolved ?? 0;
 
-  // Filter cases based on active tab and search keyword
-  let tabFilteredCases = allCases.filter((c) => {
-    if (activeTab === 'NEEDS_HUMAN_CS') return c.status === 'NEEDS_HUMAN_CS';
-    if (activeTab === 'HUMAN_CS_ACTIVE') return c.status === 'HUMAN_CS_ACTIVE';
-    if (activeTab === 'RESOLVED') return c.status === 'RESOLVED';
-    return true; // 'all'
-  });
-
-  if (caseFilter.trim()) {
-    const sLower = caseFilter.trim().toLowerCase();
-    tabFilteredCases = tabFilteredCases.filter(
-      (c) =>
-        c.customer_name.toLowerCase().includes(sLower) ||
-        (c.customer_phone && c.customer_phone.toLowerCase().includes(sLower)) ||
-        c.session_id.toLowerCase().includes(sLower) ||
-        (c.last_message && c.last_message.toLowerCase().includes(sLower))
-    );
-  }
-
-  // Sorting logic: unreplied customer conversations ALWAYS pinned at the top!
-  const sortedCases = [...tabFilteredCases].sort((a, b) => {
+  // Sorting logic: unreplied customer conversations ALWAYS pinned at the top within current page!
+  const pagedCases = [...allCases].sort((a, b) => {
     const unrepliedA = isCaseUnreplied(a);
     const unrepliedB = isCaseUnreplied(b);
 
@@ -220,9 +206,8 @@ export default function InboxPage() {
     return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
   });
 
-  // Pagination calculation
-  const caseTotal = sortedCases.length;
-  const pagedCases = sortedCases.slice((casePage - 1) * casePageSize, casePage * casePageSize);
+  const caseTotal = casesData?.total ?? 0;
+
 
   // Scroll to bottom when messages change
   useEffect(() => {

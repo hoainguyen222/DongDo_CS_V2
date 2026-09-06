@@ -6,7 +6,8 @@ export { apiClient, ApiError, API_BASE, getAuthToken, setAuthToken, setAuthUser 
 
 export { authApi } from './auth';
 export { guestApi } from './guest';
-export { casesApi } from './cases';
+export { casesApi, type ListCasesResult } from './cases';
+
 export { customersApi } from './customers';
 export { voiceApi } from './voice';
 export { learningApi } from './learning';
@@ -90,15 +91,17 @@ export const api = {
 
   // Voice
   getVoiceCalls: (
-    sessionIdOrParams?: string | { sessionId?: string; page?: number; limit?: number },
+    sessionIdOrParams?: string | { sessionId?: string; status?: string; search?: string; page?: number; limit?: number },
     page?: number,
-    limit?: number
+    limit?: number,
+    search?: string
   ): Promise<ListVoiceCallsResult> => {
     if (typeof sessionIdOrParams === 'object' && sessionIdOrParams !== null) {
       return voiceApi.list(sessionIdOrParams);
     }
-    return voiceApi.list({ sessionId: sessionIdOrParams as string | undefined, page, limit });
+    return voiceApi.list({ sessionId: sessionIdOrParams as string | undefined, page, limit, search });
   },
+
   deleteVoiceCall: voiceApi.delete,
   endCall: voiceApi.endCall,
   declineCall: voiceApi.declineCall,

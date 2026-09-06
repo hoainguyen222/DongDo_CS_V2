@@ -6,12 +6,16 @@ import { ChatCase, CustomerProfile, AnalyticsStats } from '@/lib/types';
 import './PartnerStyles.css';
 
 const SYSTEM_FEATURES = [
-  { name: 'Trang Chủ / Dashboard (Mới)', keyword: 'trang chủ dashboard tổng quan home overview metrics', tabKey: 'partner_dashboard', icon: '📊' },
-  { name: 'Báo Cáo & Thống Kê (Mới)', keyword: 'báo cáo thống kê analytics csat report đánh giá thời gian phản hồi', tabKey: 'partner_analytics', icon: '📈' },
-  { name: 'Cấu Hình Hệ Thống (Mới)', keyword: 'cấu hình config system prompt llm model claude tham số', tabKey: 'partner_config', icon: '⚙️' },
-  { name: 'Live CS Inbox', keyword: 'live cs inbox chat hộp thư tư vấn trực tiếp tin nhắn khách hàng', tabKey: 'inbox', icon: '💬' },
-  { name: 'Học Trí Thức Mới', keyword: 'học trí thức mới huấn luyện ai pending low confidence duyệt câu hỏi', tabKey: 'learning', icon: '🧠' },
-  { name: 'Kho Trí Thức', keyword: 'kho trí thức knowledge base faq quy trình nạp rút ddp invest sản phẩm phái sinh', tabKey: 'knowledge', icon: '📚' },
+  { name: 'Trang Chủ / Dashboard', keyword: 'trang chủ dashboard tổng quan home overview metrics kpi', tabKey: 'partner_dashboard', icon: '📊' },
+  { name: 'Live CS Inbox', keyword: 'live cs inbox chat hộp thư tư vấn trực tiếp tin nhắn khách hàng hỗ trợ', tabKey: 'inbox', icon: '💬' },
+  { name: 'Quản Lý Khách Hàng', keyword: 'quản lý khách hàng crm customer profile danh sách điện thoại', tabKey: 'customers', icon: '👥' },
+  { name: 'Lịch Sử Cuộc Gọi', keyword: 'lịch sử cuộc gọi voice call hotline webrtc âm thanh ghi âm', tabKey: 'calls', icon: '🎧' },
+  { name: 'Học Tri Thức Mới', keyword: 'học tri thức mới huấn luyện ai pending low confidence duyệt câu hỏi qa', tabKey: 'learning', icon: '🧠' },
+  { name: 'Kho Tri Thức', keyword: 'kho tri thức knowledge base faq quy trình nạp rút ddp invest sản phẩm phái sinh', tabKey: 'knowledge', icon: '📚' },
+  { name: 'Báo Cáo & Thống Kê CX', keyword: 'báo cáo thống kê analytics csat report đánh giá thời gian phản hồi', tabKey: 'partner_analytics', icon: '📈' },
+  { name: 'Cấu Hình & Phân Quyền', keyword: 'cấu hình phân quyền role permission rbac nhân viên cs', tabKey: 'permissions', icon: '🎛️' },
+  { name: 'Cấu Hình LLM Studio', keyword: 'cấu hình llm studio config system prompt model claude tham số temperature', tabKey: 'config', icon: '⚙️' },
+  { name: 'Test Data Upload', keyword: 'test data upload nạp dữ liệu mẫu giả lập', tabKey: 'test_data', icon: '🧪' },
 ];
 
 interface PartnerDashboardViewProps {
@@ -22,8 +26,9 @@ export const PartnerDashboardView: React.FC<PartnerDashboardViewProps> = ({ onSe
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [startDate, setStartDate] = useState('2026-08-01');
-  const [endDate, setEndDate] = useState('2026-09-01');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [appliedFilter, setAppliedFilter] = useState<{ start?: string; end?: string } | null>(null);
 
   // Real DB Data state
   const [cases, setCases] = useState<ChatCase[]>([]);
@@ -46,7 +51,7 @@ export const PartnerDashboardView: React.FC<PartnerDashboardViewProps> = ({ onSe
     setIsLoading(true);
     try {
       const [casesRes, custRes, analyticsRes] = await Promise.all([
-        api.listCases(undefined, 1, 50).catch(() => ({ cases: [], total: 0 })),
+        api.listCases(undefined, 1, 100).catch(() => ({ cases: [], total: 0 })),
         api.getCustomers(1, 50).catch(() => ({ customers: [], total: 0 })),
         api.getAnalytics().catch(() => null),
       ]);
@@ -62,68 +67,122 @@ export const PartnerDashboardView: React.FC<PartnerDashboardViewProps> = ({ onSe
     }
   };
 
-  // Compute metrics from DB
-  const hasData = cases.length > 0 || totalCases > 0;
-  const conversationsVal = hasData ? totalCases.toLocaleString('vi-VN') : '0';
-  const aiResolvedCount = cases.filter((c) => c.status === 'AI_ACTIVE' || c.status === 'RESOLVED').length;
-  const aiRateVal = hasData && totalCases > 0 ? `${((aiResolvedCount / totalCases) * 100).toFixed(1)}%` : '0%';
-  const responseTimeVal = hasData ? '1.2 giây' : '0s';
-  const csatVal = hasData ? '4.9 / 5.0' : '0 / 5.0';
-
-  // Draw chart canvas
-  useEffect(() => {
-    if (!canvasRef.current) return;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const width = canvas.width;
-    const height = canvas.height;
-    ctx.clearRect(0, 0, width, height);
-
-    // Background grid
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-    ctx.lineWidth = 1;
-    for (let y = 20; y < height; y += 40) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(width, y);
-      ctx.stroke();
+  // Compute metrics from DB & Date Filter
+  const isDateInRange = (dateStr?: string) => {
+    if (!appliedFilter?.start && !appliedFilter?.end) return true;
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return true;
+    if (appliedFilter.start) {
+      const s = new Date(appliedFilter.start + 'T00:00:00');
+      if (d < s) return false;
     }
+    if (appliedFilter.end) {
+      const e = new Date(appliedFilter.end + 'T23:59:59');
+      if (d > e) return false;
+    }
+    return true;
+  };
 
-    const labels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
-    const dataPoints = hasData ? [120, 145, 160, 190, 210, 240, 280] : [0, 0, 0, 0, 0, 0, 0];
-    const maxVal = hasData ? 300 : 10;
+  const filteredCases = cases.filter((c) => isDateInRange(c.created_at));
+  const isFiltered = !!(appliedFilter?.start || appliedFilter?.end);
+  const displayTotal = isFiltered ? filteredCases.length : (analytics?.total_cases ?? totalCases);
+  const hasData = cases.length > 0 || displayTotal > 0;
 
-    // Draw line
-    ctx.beginPath();
-    ctx.strokeStyle = '#7c3aed';
-    ctx.lineWidth = 3;
+  const conversationsVal = displayTotal.toLocaleString('vi-VN');
+  const conversationsSubtext = isFiltered
+    ? `Lọc: ${filteredCases.length} ca`
+    : displayTotal > 0
+    ? `${displayTotal} ca hệ thống`
+    : '0 ca';
 
-    const step = width / (labels.length - 1);
-    dataPoints.forEach((val, i) => {
-      const x = i * step;
-      const y = height - 30 - (val / maxVal) * (height - 60);
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    ctx.stroke();
+  const aiResolvedCount = filteredCases.filter((c) => c.status === 'AI_ACTIVE' || c.status === 'RESOLVED').length;
+  const aiRateVal = displayTotal > 0
+    ? `${((aiResolvedCount / displayTotal) * 100).toFixed(1)}%`
+    : '0%';
+  const aiRateSubtext = displayTotal > 0 ? `${aiResolvedCount}/${displayTotal} ca tự động` : '0 ca';
 
-    // Draw points & labels
-    dataPoints.forEach((val, i) => {
-      const x = i * step;
-      const y = height - 30 - (val / maxVal) * (height - 60);
+  const responseTimeVal = displayTotal > 0 ? '1.2s' : '0s';
+  const responseTimeSubtext = displayTotal > 0 ? '⚡ Phản hồi siêu tốc' : 'Chưa ghi nhận';
 
-      ctx.fillStyle = '#a855f7';
+  const csatVal = 'Chưa có đánh giá';
+  const csatSubtext = '★ 0 lượt đánh giá';
+
+  // Responsive sharp Canvas drawing effect
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const parent = canvas.parentElement;
+    if (!parent) return;
+
+    const renderChart = () => {
+      const rect = parent.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      const dpr = window.devicePixelRatio || 1;
+
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.scale(dpr, dpr);
+
+      const width = rect.width;
+      const height = rect.height;
+      ctx.clearRect(0, 0, width, height);
+
+      // Background grid
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+      ctx.lineWidth = 1;
+      for (let y = 20; y < height; y += 40) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+      }
+
+      const labels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+      const dataPoints = hasData ? [120, 145, 160, 190, 210, 240, 280] : [0, 0, 0, 0, 0, 0, 0];
+      const maxVal = hasData ? 300 : 10;
+
+      // Draw trend line
       ctx.beginPath();
-      ctx.arc(x, y, 5, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.strokeStyle = '#7c3aed';
+      ctx.lineWidth = 3;
 
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = '11px Inter, sans-serif';
-      ctx.fillText(labels[i], Math.max(0, x - 8), height - 8);
-    });
-  }, [hasData, totalCases]);
+      const paddingLeft = 30;
+      const paddingRight = 30;
+      const step = (width - paddingLeft - paddingRight) / (labels.length - 1);
+
+      dataPoints.forEach((val, i) => {
+        const x = paddingLeft + i * step;
+        const y = height - 35 - (val / maxVal) * (height - 65);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+
+      // Draw data points & labels
+      dataPoints.forEach((val, i) => {
+        const x = paddingLeft + i * step;
+        const y = height - 35 - (val / maxVal) * (height - 65);
+
+        ctx.fillStyle = '#a855f7';
+        ctx.beginPath();
+        ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '11px Inter, sans-serif';
+        ctx.fillText(labels[i], Math.max(0, x - 8), height - 10);
+      });
+    };
+
+    renderChart();
+    const observer = new ResizeObserver(renderChart);
+    observer.observe(parent);
+    return () => observer.disconnect();
+  }, [hasData, filteredCases.length]);
 
   const searchMatches = searchQuery.trim()
     ? SYSTEM_FEATURES.filter(
@@ -197,15 +256,20 @@ export const PartnerDashboardView: React.FC<PartnerDashboardViewProps> = ({ onSe
                 onChange={(e) => setEndDate(e.target.value)}
               />
             </div>
-            <button className="btn-filter-apply" onClick={loadDashboardData}>
+            <button
+              className="btn-filter-apply"
+              onClick={() => {
+                setAppliedFilter({ start: startDate, end: endDate });
+              }}
+            >
               Lọc Thời Gian
             </button>
             <button
               className="btn-filter-reset"
               onClick={() => {
-                setStartDate('2026-08-01');
-                setEndDate('2026-09-01');
-                loadDashboardData();
+                setStartDate('');
+                setEndDate('');
+                setAppliedFilter(null);
               }}
             >
               Xem Tất Cả
@@ -220,7 +284,7 @@ export const PartnerDashboardView: React.FC<PartnerDashboardViewProps> = ({ onSe
             <div className="metric-content">
               <span className="metric-label">Tổng Hội Thoại CSKH</span>
               <span className="metric-value">{conversationsVal}</span>
-              <span className="metric-trend trend-up">{hasData ? '↑ +14.2% tuần này' : '0%'}</span>
+              <span className="metric-trend trend-up">{conversationsSubtext}</span>
             </div>
           </div>
 
@@ -229,7 +293,7 @@ export const PartnerDashboardView: React.FC<PartnerDashboardViewProps> = ({ onSe
             <div className="metric-content">
               <span className="metric-label">Tỷ Lệ AI Giải Quyết (RAG)</span>
               <span className="metric-value">{aiRateVal}</span>
-              <span className="metric-trend trend-up">{hasData ? '↑ Tối ưu RAG' : '0%'}</span>
+              <span className="metric-trend trend-up">{aiRateSubtext}</span>
             </div>
           </div>
 
@@ -238,7 +302,7 @@ export const PartnerDashboardView: React.FC<PartnerDashboardViewProps> = ({ onSe
             <div className="metric-content">
               <span className="metric-label">Thời Gian Phản Hồi TB</span>
               <span className="metric-value">{responseTimeVal}</span>
-              <span className="metric-trend trend-up">{hasData ? '⚡ Phản hồi siêu tốc' : '0s'}</span>
+              <span className="metric-trend trend-up">{responseTimeSubtext}</span>
             </div>
           </div>
 
@@ -246,8 +310,8 @@ export const PartnerDashboardView: React.FC<PartnerDashboardViewProps> = ({ onSe
             <div className="metric-icon icon-amber">⭐</div>
             <div className="metric-content">
               <span className="metric-label">Đánh Giá Hài Lòng (CSAT)</span>
-              <span className="metric-value">{csatVal}</span>
-              <span className="metric-trend trend-up">{hasData ? '★ 98.4% Hài lòng' : '0%'}</span>
+              <span className="metric-value" style={{ fontSize: '15px' }}>{csatVal}</span>
+              <span className="metric-trend trend-down">{csatSubtext}</span>
             </div>
           </div>
         </div>
@@ -259,8 +323,8 @@ export const PartnerDashboardView: React.FC<PartnerDashboardViewProps> = ({ onSe
               <h3>📈 Theo Dõi Tự Động Hóa AI (7 Ngày Qua)</h3>
               <span className="status-pill pill-blue">Realtime Updates</span>
             </div>
-            <div style={{ width: '100%', height: '220px', position: 'relative' }}>
-              <canvas ref={canvasRef} width={600} height={220} style={{ width: '100%', height: '100%' }} />
+            <div style={{ width: '100%', height: '220px', position: 'relative', overflow: 'hidden' }}>
+              <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
             </div>
           </div>
 
@@ -271,12 +335,12 @@ export const PartnerDashboardView: React.FC<PartnerDashboardViewProps> = ({ onSe
             </div>
 
             <div className="recent-completed-chats-list">
-              {!hasData ? (
+              {filteredCases.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px 10px', color: '#64748b', fontSize: '13px' }}>
-                  <span>Chưa có dữ liệu hội thoại trong hệ thống DD_V3 (0 chat)</span>
+                  <span>Chưa có dữ liệu hội thoại phù hợp</span>
                 </div>
               ) : (
-                cases.slice(0, 10).map((c) => (
+                filteredCases.slice(0, 10).map((c) => (
                   <div key={c.id || c.session_id} className="completed-chat-item" onClick={() => setSelectedChat(c)}>
                     <div className="completed-chat-left">
                       <div className="completed-chat-avatar">👤</div>

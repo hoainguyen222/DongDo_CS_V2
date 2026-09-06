@@ -13,6 +13,24 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countGuests = `-- name: CountGuests :one
+SELECT COUNT(*)
+FROM guests g
+WHERE (
+    $1::text = '' OR
+    g.display_name ILIKE '%' || $1::text || '%' OR
+    g.phone ILIKE '%' || $1::text || '%' OR
+    g.guest_id::text ILIKE '%' || $1::text || '%'
+)
+`
+
+func (q *Queries) CountGuests(ctx context.Context, dollar_1 string) (int64, error) {
+	row := q.db.QueryRow(ctx, countGuests, dollar_1)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createGuest = `-- name: CreateGuest :one
 
 INSERT INTO guests (guest_id, display_name, phone, created_at)
@@ -114,6 +132,84 @@ func (q *Queries) ListGuestsWithLastCase(ctx context.Context) ([]ListGuestsWithL
 	items := []ListGuestsWithLastCaseRow{}
 	for rows.Next() {
 		var i ListGuestsWithLastCaseRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.GuestID,
+			&i.DisplayName,
+			&i.Phone,
+			&i.LastSessionID,
+			&i.LastMessage,
+			&i.LastStatus,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGuestsWithLastCasePaginated = `-- name: ListGuestsWithLastCasePaginated :many
+SELECT
+    g.id,
+    g.guest_id::text                              AS guest_id,
+    g.display_name,
+    COALESCE(g.phone, '')                         AS phone,
+    COALESCE(c.session_id, '')                    AS last_session_id,
+    COALESCE(c.last_message, '')                  AS last_message,
+    COALESCE(c.status::text, '')                  AS last_status,
+    g.created_at,
+    COALESCE(c.updated_at, g.created_at)          AS updated_at
+FROM guests g
+LEFT JOIN LATERAL (
+    SELECT session_id, last_message, status, updated_at
+    FROM chat_cases
+    WHERE guest_id = g.guest_id
+       OR (g.display_name <> '' AND customer_name = g.display_name)
+    ORDER BY updated_at DESC
+    LIMIT 1
+) c ON true
+WHERE (
+    $1::text = '' OR
+    g.display_name ILIKE '%' || $1::text || '%' OR
+    g.phone ILIKE '%' || $1::text || '%' OR
+    g.guest_id::text ILIKE '%' || $1::text || '%'
+)
+ORDER BY g.created_at DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListGuestsWithLastCasePaginatedParams struct {
+	Column1 string `json:"column_1"`
+	Limit   int32  `json:"limit"`
+	Offset  int32  `json:"offset"`
+}
+
+type ListGuestsWithLastCasePaginatedRow struct {
+	ID            int64       `json:"id"`
+	GuestID       string      `json:"guest_id"`
+	DisplayName   string      `json:"display_name"`
+	Phone         string      `json:"phone"`
+	LastSessionID string      `json:"last_session_id"`
+	LastMessage   string      `json:"last_message"`
+	LastStatus    interface{} `json:"last_status"`
+	CreatedAt     time.Time   `json:"created_at"`
+	UpdatedAt     time.Time   `json:"updated_at"`
+}
+
+func (q *Queries) ListGuestsWithLastCasePaginated(ctx context.Context, arg ListGuestsWithLastCasePaginatedParams) ([]ListGuestsWithLastCasePaginatedRow, error) {
+	rows, err := q.db.Query(ctx, listGuestsWithLastCasePaginated, arg.Column1, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListGuestsWithLastCasePaginatedRow{}
+	for rows.Next() {
+		var i ListGuestsWithLastCasePaginatedRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.GuestID,

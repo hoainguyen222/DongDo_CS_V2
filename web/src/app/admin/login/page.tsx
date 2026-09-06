@@ -61,7 +61,7 @@ export default function AdminLoginPage() {
   // Already authenticated — middleware would normally catch this,
   // but guard here too in case cookie isn't set yet
   if (isAuthenticated) {
-    router.replace('/admin/inbox');
+    router.replace('/admin/dashboard');
     return (
       <div className={styles.page}>
         <div className={styles.loadingOverlay}>
@@ -78,7 +78,7 @@ export default function AdminLoginPage() {
       const session: SessionUser = await api.login(data.username, data.password);
       login(session.token, session);
       // Hard navigation to ensure middleware sees the new cookie
-      window.location.href = '/admin/inbox';
+      window.location.href = '/admin/dashboard';
     } catch (err: any) {
       setError(err?.message || 'Đăng nhập thất bại');
       setIsLoading(false);

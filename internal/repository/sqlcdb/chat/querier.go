@@ -13,6 +13,8 @@ import (
 
 type Querier interface {
 	AssignCase(ctx context.Context, arg AssignCaseParams) error
+	CountCases(ctx context.Context, arg CountCasesParams) (int64, error)
+	CountGuests(ctx context.Context, dollar_1 string) (int64, error)
 	// ============================================================
 	// Guests (customer pre-chat)
 	// ============================================================
@@ -24,6 +26,7 @@ type Querier interface {
 	DeleteSessionMessages(ctx context.Context, sessionID string) error
 	GetCase(ctx context.Context, sessionID string) (GetCaseRow, error)
 	GetCaseDetailWithGuest(ctx context.Context, sessionID string) (GetCaseDetailWithGuestRow, error)
+	GetCaseStatusCounts(ctx context.Context) (GetCaseStatusCountsRow, error)
 	GetGuestByID(ctx context.Context, guestID uuid.UUID) (Guest, error)
 	GetRecentCompletedChats(ctx context.Context, arg GetRecentCompletedChatsParams) ([]GetRecentCompletedChatsRow, error)
 	GetSessionHistory(ctx context.Context, sessionID string) ([]ChatMessage, error)
@@ -34,7 +37,9 @@ type Querier interface {
 	InsertMessage(ctx context.Context, arg InsertMessageParams) (ChatMessage, error)
 	ListCases(ctx context.Context) ([]ListCasesRow, error)
 	ListCasesByStatus(ctx context.Context, dollar_1 domain.CaseStatus) ([]ListCasesByStatusRow, error)
+	ListCasesPaginated(ctx context.Context, arg ListCasesPaginatedParams) ([]ListCasesPaginatedRow, error)
 	ListGuestsWithLastCase(ctx context.Context) ([]ListGuestsWithLastCaseRow, error)
+	ListGuestsWithLastCasePaginated(ctx context.Context, arg ListGuestsWithLastCasePaginatedParams) ([]ListGuestsWithLastCasePaginatedRow, error)
 	MarkMessagesLearned(ctx context.Context, dollar_1 []int64) error
 	ResetLearnedFlags(ctx context.Context) error
 	ResolveCase(ctx context.Context, arg ResolveCaseParams) error

@@ -32,6 +32,7 @@ type GuestRepository interface {
 	Create(ctx context.Context, guestID uuid.UUID, displayName, phone string) (*Guest, error)
 	GetByID(ctx context.Context, guestID uuid.UUID) (*Guest, error)
 	List(ctx context.Context) ([]*CustomerProfile, error)
+	ListPaginated(ctx context.Context, filter GuestFilter) ([]*CustomerProfile, int64, error)
 	Update(ctx context.Context, guestID uuid.UUID, displayName, phone string) error
 	Delete(ctx context.Context, guestID uuid.UUID) error
 }
@@ -50,6 +51,8 @@ type MessageRepository interface {
 type CaseRepository interface {
 	Upsert(ctx context.Context, sessionID string, guestID *uuid.UUID, customerName, customerPhone string, status CaseStatus, assignedCS, lastMessage string) (*ChatCase, error)
 	List(ctx context.Context, statusFilter CaseStatus) ([]*ChatCase, error)
+	ListPaginated(ctx context.Context, filter CaseListFilter) ([]*ChatCase, int64, error)
+	GetStatusCounts(ctx context.Context) (*CaseStatusCounts, error)
 	Get(ctx context.Context, sessionID string) (*ChatCase, error)
 	Assign(ctx context.Context, sessionID, csUsername string) error
 	Resolve(ctx context.Context, sessionID, csUsername, resolutionNote string) error
@@ -80,9 +83,11 @@ type VoiceCallRepository interface {
 	SetTranscript(ctx context.Context, id int64, transcript string) error
 	GetBySession(ctx context.Context, sessionID string) ([]*VoiceCall, error)
 	ListAll(ctx context.Context) ([]*VoiceCall, error)
+	ListPaginated(ctx context.Context, filter VoiceCallFilter) ([]*VoiceCall, int64, error)
 	GetByID(ctx context.Context, id int64) (*VoiceCall, error)
 	Delete(ctx context.Context, id int64) error
 }
+
 
 type AnalyticsRepository interface {
 	GetStats(ctx context.Context) (*AnalyticsStats, error)

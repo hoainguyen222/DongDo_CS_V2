@@ -3,7 +3,7 @@
 // ============================================================
 
 import { apiClient } from './client';
-import type { ChatCase, Message, QAPair } from '@/lib/types';
+import type { ChatCase, CaseStatusCounts, Message, QAPair } from '@/lib/types';
 
 export interface ListCasesParams {
   status?: string;
@@ -18,7 +18,9 @@ export interface ListCasesResult {
   page: number;
   limit: number;
   total_pages: number;
+  status_counts?: CaseStatusCounts;
 }
+
 
 export const casesApi = {
   async list(params: ListCasesParams = {}): Promise<ListCasesResult> {

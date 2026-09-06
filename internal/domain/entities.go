@@ -136,7 +136,37 @@ type ChatCase struct {
 	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
+type CaseListFilter struct {
+	Status CaseStatus `json:"status"`
+	Search string     `json:"search"`
+	Page   int        `json:"page"`
+	Limit  int        `json:"limit"`
+}
+
+type CaseStatusCounts struct {
+	Total       int64 `json:"total"`
+	NeedsHuman  int64 `json:"needs_human"`
+	HumanActive int64 `json:"human_active"`
+	Resolved    int64 `json:"resolved"`
+	AIActive    int64 `json:"ai_active"`
+}
+
+type VoiceCallFilter struct {
+	SessionID string `json:"session_id"`
+	Status    string `json:"status"`
+	Search    string `json:"search"`
+	Page      int    `json:"page"`
+	Limit     int    `json:"limit"`
+}
+
+type GuestFilter struct {
+	Search string `json:"search"`
+	Page   int    `json:"page"`
+	Limit  int    `json:"limit"`
+}
+
 // ============================================================
+
 // Learning Queue
 // ============================================================
 
