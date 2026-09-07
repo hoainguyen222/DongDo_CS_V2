@@ -85,3 +85,48 @@ SELECT
 FROM chat_cases c
 LEFT JOIN guests g ON c.guest_id = g.guest_id
 WHERE c.session_id = $1;
+
+-- name: ListCasesPaginated :many
+SELECT
+    c.id, c.session_id, c.guest_id, c.customer_name, c.customer_phone,
+    c.status, c.assigned_cs, c.last_message, c.resolution_note, c.created_at, c.updated_at,
+    COALESCE((
+        SELECT sender_type::text
+        FROM chat_messages m
+        WHERE m.session_id = c.session_id
+        ORDER BY m.created_at DESC, m.id DESC
+        LIMIT 1
+    ), '') AS last_sender_type
+FROM chat_cases c
+WHERE ($1::text = '' OR c.status::text = $1::text)
+  AND (
+      $2::text = '' OR
+      c.customer_name ILIKE '%' || $2::text || '%' OR
+      c.customer_phone ILIKE '%' || $2::text || '%' OR
+      c.session_id ILIKE '%' || $2::text || '%' OR
+      c.last_message ILIKE '%' || $2::text || '%'
+  )
+ORDER BY c.updated_at DESC
+LIMIT $3 OFFSET $4;
+
+-- name: CountCases :one
+SELECT COUNT(*)
+FROM chat_cases c
+WHERE ($1::text = '' OR c.status::text = $1::text)
+  AND (
+      $2::text = '' OR
+      c.customer_name ILIKE '%' || $2::text || '%' OR
+      c.customer_phone ILIKE '%' || $2::text || '%' OR
+      c.session_id ILIKE '%' || $2::text || '%' OR
+      c.last_message ILIKE '%' || $2::text || '%'
+  );
+
+-- name: GetCaseStatusCounts :one
+SELECT
+    COUNT(*) AS total_count,
+    COUNT(*) FILTER (WHERE status = 'NEEDS_HUMAN_CS'::case_status) AS needs_human_count,
+    COUNT(*) FILTER (WHERE status = 'HUMAN_CS_ACTIVE'::case_status) AS human_active_count,
+    COUNT(*) FILTER (WHERE status = 'RESOLVED'::case_status) AS resolved_count,
+    COUNT(*) FILTER (WHERE status = 'AI_ACTIVE'::case_status) AS ai_active_count
+FROM chat_cases;
+

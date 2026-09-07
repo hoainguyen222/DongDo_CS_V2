@@ -271,7 +271,7 @@
 /* Charts Layout */
 .partner-wrapper .charts-row {
   display: grid;
-  grid-template-columns: 2fr 1fr;
+  grid-template-columns: 1.3fr 1fr;
   gap: 20px;
 }
 
@@ -286,6 +286,7 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: 22px;
+  min-width: 0; /* Prevents grid layout blowout from canvas/flex children */
 }
 
 .partner-wrapper .chart-header {
@@ -333,6 +334,8 @@
   align-items: center;
   gap: 10px;
   overflow: hidden;
+  min-width: 0;
+  flex: 1;
 }
 
 .partner-wrapper .completed-chat-avatar {
@@ -353,6 +356,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-width: 0;
 }
 
 .partner-wrapper .completed-chat-name {

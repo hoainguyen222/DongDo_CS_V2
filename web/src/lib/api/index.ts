@@ -6,7 +6,8 @@ export { apiClient, ApiError, API_BASE, getAuthToken, setAuthToken, setAuthUser 
 
 export { authApi } from './auth';
 export { guestApi } from './guest';
-export { casesApi } from './cases';
+export { casesApi, type ListCasesResult } from './cases';
+
 export { customersApi } from './customers';
 export { voiceApi } from './voice';
 export { learningApi } from './learning';
@@ -90,15 +91,17 @@ export const api = {
 
   // Voice
   getVoiceCalls: (
-    sessionIdOrParams?: string | { sessionId?: string; page?: number; limit?: number },
+    sessionIdOrParams?: string | { sessionId?: string; status?: string; search?: string; page?: number; limit?: number },
     page?: number,
-    limit?: number
+    limit?: number,
+    search?: string
   ): Promise<ListVoiceCallsResult> => {
     if (typeof sessionIdOrParams === 'object' && sessionIdOrParams !== null) {
       return voiceApi.list(sessionIdOrParams);
     }
-    return voiceApi.list({ sessionId: sessionIdOrParams as string | undefined, page, limit });
+    return voiceApi.list({ sessionId: sessionIdOrParams as string | undefined, page, limit, search });
   },
+
   deleteVoiceCall: voiceApi.delete,
   endCall: voiceApi.endCall,
   declineCall: voiceApi.declineCall,
@@ -133,18 +136,18 @@ export const api = {
 
   // Analytics
   getAnalytics: analyticsApi.getStats,
-  getGeneralOverviewReport: (startDate?: string, endDate?: string) =>
-    analyticsApi.getGeneralOverview({ startDate, endDate }),
-  getAIPerformanceReport: (startDate?: string, endDate?: string) =>
-    analyticsApi.getAIPerformance({ startDate, endDate }),
-  getStaffPerformanceReport: (startDate?: string, endDate?: string) =>
-    analyticsApi.getStaffPerformance({ startDate, endDate }),
-  getCXReport: (startDate?: string, endDate?: string) =>
-    analyticsApi.getCX({ startDate, endDate }),
-  getOperationalReport: (startDate?: string, endDate?: string) =>
-    analyticsApi.getOperational({ startDate, endDate }),
-  getIssueAnalysisReport: (startDate?: string, endDate?: string) =>
-    analyticsApi.getIssueAnalysis({ startDate, endDate }),
+  getGeneralOverviewReport: (startDate?: string, endDate?: string, channel?: string, staffId?: string) =>
+    analyticsApi.getGeneralOverview({ startDate, endDate, channel, staffId }),
+  getAIPerformanceReport: (startDate?: string, endDate?: string, channel?: string, staffId?: string) =>
+    analyticsApi.getAIPerformance({ startDate, endDate, channel, staffId }),
+  getStaffPerformanceReport: (startDate?: string, endDate?: string, channel?: string, staffId?: string) =>
+    analyticsApi.getStaffPerformance({ startDate, endDate, channel, staffId }),
+  getCXReport: (startDate?: string, endDate?: string, channel?: string, staffId?: string) =>
+    analyticsApi.getCX({ startDate, endDate, channel, staffId }),
+  getOperationalReport: (startDate?: string, endDate?: string, channel?: string, staffId?: string) =>
+    analyticsApi.getOperational({ startDate, endDate, channel, staffId }),
+  getIssueAnalysisReport: (startDate?: string, endDate?: string, channel?: string, staffId?: string) =>
+    analyticsApi.getIssueAnalysis({ startDate, endDate, channel, staffId }),
   getAILearningReportStats: analyticsApi.getAILearningStats,
 
   // Config

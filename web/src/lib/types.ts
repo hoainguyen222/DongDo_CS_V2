@@ -78,6 +78,15 @@ export interface ChatCase {
   updated_at: string;
 }
 
+export interface CaseStatusCounts {
+  total: number;
+  needs_human: number;
+  human_active: number;
+  resolved: number;
+  ai_active: number;
+}
+
+
 export interface LearningItem {
   id: number;
   session_id: string;

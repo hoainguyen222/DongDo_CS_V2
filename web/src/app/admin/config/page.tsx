@@ -10,14 +10,13 @@ import type { SystemConfig } from '@/lib/types';
 import {
   Settings,
   RefreshCw,
-  Check,
-  Save,
   AlertCircle,
   CheckCircle,
   Bot,
   Cpu,
   Sparkles,
 } from 'lucide-react';
+import styles from './page.module.scss';
 
 export default function ConfigPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -47,93 +46,89 @@ export default function ConfigPage() {
   };
 
   return (
-    <div className="p-6 space-y-6 bg-[#0A0F1D] min-h-full">
+    <div className={styles.container}>
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <div className="w-12 h-12 rounded-xl bg-slate-500/20 border border-slate-500/30 flex items-center justify-center text-slate-400">
-            <Settings className="w-6 h-6" />
+      <div className={styles.header}>
+        <div className={styles.headerLeft}>
+          <div className={styles.headerIcon}>
+            <Settings style={{ width: 22, height: 22 }} />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-white">Cấu Hình LLM Studio</h1>
-            <p className="text-sm text-slate-400">System Prompt, Model và Temperature cho AI</p>
+            <h1 className={styles.title}>Cấu Hình LLM Studio</h1>
+            <p className={styles.subtitle}>System Prompt, Model và Temperature cho AI</p>
           </div>
         </div>
-        <button
-          onClick={() => refetch()}
-          className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-semibold flex items-center space-x-2 cursor-pointer"
-        >
-          <RefreshCw className="w-4 h-4" />
+        <button onClick={() => refetch()} className={styles.refreshBtn}>
+          <RefreshCw style={{ width: 14, height: 14 }} />
           <span>Làm mới</span>
         </button>
       </div>
 
       {/* Info Cards */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-[#0D1527] border border-slate-800/80 rounded-2xl p-4">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center text-purple-400">
-              <Bot className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-400 font-medium">Model</p>
-              <p className="text-sm font-semibold text-white mt-0.5">
-                {configData?.llm_model?.split('-')[0] || 'Claude'} {configData?.llm_model?.includes('haiku') ? 'Haiku' : configData?.llm_model?.includes('sonnet') ? 'Sonnet' : 'Opus'}
-              </p>
-            </div>
+      <div className={styles.statsGrid}>
+        <div className={styles.statCard}>
+          <div className={`${styles.statIcon} ${styles.statIconPurple}`}>
+            <Bot style={{ width: 20, height: 20 }} />
+          </div>
+          <div className={styles.statInfo}>
+            <span className={styles.statLabel}>Model</span>
+            <span className={styles.statValue}>
+              {configData?.llm_model?.split('-')[0] || 'Claude'}{' '}
+              {configData?.llm_model?.includes('haiku')
+                ? 'Haiku'
+                : configData?.llm_model?.includes('sonnet')
+                ? 'Sonnet'
+                : 'Opus'}
+            </span>
           </div>
         </div>
-        <div className="bg-[#0D1527] border border-slate-800/80 rounded-2xl p-4">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center text-blue-400">
-              <Cpu className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-400 font-medium">Temperature</p>
-              <p className="text-sm font-semibold text-white mt-0.5">
-                {configData?.temperature?.toFixed(1) || '0.1'}
-              </p>
-            </div>
+        <div className={styles.statCard}>
+          <div className={`${styles.statIcon} ${styles.statIconBlue}`}>
+            <Cpu style={{ width: 20, height: 20 }} />
+          </div>
+          <div className={styles.statInfo}>
+            <span className={styles.statLabel}>Temperature</span>
+            <span className={styles.statValue}>
+              {configData?.temperature !== undefined ? configData.temperature.toFixed(1) : '0.1'}
+            </span>
           </div>
         </div>
-        <div className="bg-[#0D1527] border border-slate-800/80 rounded-2xl p-4">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-400 font-medium">Prompt Length</p>
-              <p className="text-sm font-semibold text-white mt-0.5">
-                {configData?.system_prompt?.length || 0} chars
-              </p>
-            </div>
+        <div className={styles.statCard}>
+          <div className={`${styles.statIcon} ${styles.statIconEmerald}`}>
+            <Sparkles style={{ width: 20, height: 20 }} />
+          </div>
+          <div className={styles.statInfo}>
+            <span className={styles.statLabel}>Prompt Length</span>
+            <span className={styles.statValue}>
+              {configData?.system_prompt?.length || 0} chars
+            </span>
           </div>
         </div>
       </div>
 
       {/* Config Form */}
       {isLoading ? (
-        <div className="bg-[#0D1527] border border-slate-800/80 rounded-2xl p-12">
-          <div className="flex flex-col items-center justify-center text-slate-400">
-            <RefreshCw className="w-8 h-8 animate-spin mb-3" />
-            <span className="text-sm">Đang tải cấu hình...</span>
+        <div className={styles.formCard}>
+          <div className={styles.loadingBox}>
+            <RefreshCw style={{ width: 24, height: 24 }} className="spin-anim" />
+            <span>Đang tải cấu hình...</span>
           </div>
         </div>
       ) : (
-        <div className="bg-[#0D1527] border border-slate-800/80 rounded-2xl p-6">
+        <div className={styles.formCard}>
           {/* Success Message */}
           {successMessage && (
-            <div className="mb-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center space-x-2 text-emerald-300">
-              <CheckCircle className="w-5 h-5 shrink-0" />
-              <span className="text-sm">{successMessage}</span>
+            <div className={styles.alertSuccess}>
+              <CheckCircle style={{ width: 18, height: 18, flexShrink: 0 }} />
+              <span>{successMessage}</span>
             </div>
           )}
 
           {/* Error Message */}
           {errorMessage && (
-            <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center space-x-2 text-rose-300">
-              <AlertCircle className="w-5 h-5 shrink-0" />
-              <span className="text-sm">{errorMessage}</span>
+            <div className={styles.alertError}>
+              <AlertCircle style={{ width: 18, height: 18, flexShrink: 0 }} />
+              <span>{errorMessage}</span>
             </div>
           )}
 
@@ -147,12 +142,12 @@ export default function ConfigPage() {
       )}
 
       {/* Tips Section */}
-      <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-2xl p-4">
-        <h3 className="text-sm font-semibold text-indigo-400 mb-2 flex items-center space-x-2">
-          <Sparkles className="w-4 h-4" />
-          <span>Mẹo cấu hình</span>
+      <div className={styles.tipsBox}>
+        <h3 className={styles.tipsTitle}>
+          <Sparkles style={{ width: 16, height: 16 }} />
+          <span>Mẹo cấu hình LLM</span>
         </h3>
-        <ul className="text-xs text-indigo-300/80 space-y-1.5 ml-6">
+        <ul className={styles.tipsList}>
           <li>• <strong>Claude Haiku:</strong> Nhanh, rẻ, phù hợp cho hầu hết tác vụ CSKH thông thường</li>
           <li>• <strong>Claude Sonnet:</strong> Cân bằng giữa tốc độ và chất lượng</li>
           <li>• <strong>Claude Opus:</strong> Mạnh nhất, dùng cho các truy vấn phức tạp, chi phí cao hơn</li>

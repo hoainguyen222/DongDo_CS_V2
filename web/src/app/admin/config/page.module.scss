@@ -1,0 +1,210 @@
+@use '../../../styles/_shared.scss' as s;
+
+.container {
+  padding: s.$space-6;
+  display: flex;
+  flex-direction: column;
+  gap: s.$space-6;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: s.$space-4;
+  flex-wrap: wrap;
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: s.$space-3;
+}
+
+.headerIcon {
+  width: 44px;
+  height: 44px;
+  border-radius: s.$radius-xl;
+  background: rgba(124, 58, 237, 0.15);
+  border: 1px solid rgba(124, 58, 237, 0.3);
+  color: #c4b5fd;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.title {
+  font-size: s.$text-xl;
+  font-weight: 700;
+  color: #fff;
+}
+
+.subtitle {
+  font-size: s.$text-xs;
+  color: s.$text-muted;
+  margin-top: 2px;
+}
+
+.refreshBtn {
+  padding: 8px 16px;
+  border-radius: s.$radius-xl;
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+  font-size: s.$text-xs;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all s.$transition-fast;
+
+  &:hover {
+    background: rgba(51, 65, 85, 0.9);
+    color: #fff;
+  }
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: s.$space-4;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.statCard {
+  background: linear-gradient(135deg, rgba(s.$brand-navy, 0.85) 0%, rgba(s.$brand-navy-light, 0.85) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: s.$radius-xl;
+  padding: s.$space-4;
+  display: flex;
+  align-items: center;
+  gap: s.$space-3;
+}
+
+.statIcon {
+  width: 42px;
+  height: 42px;
+  border-radius: s.$radius-lg;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  &Purple {
+    background: rgba(168, 85, 247, 0.15);
+    border: 1px solid rgba(168, 85, 247, 0.3);
+    color: #c084fc;
+  }
+
+  &Blue {
+    background: rgba(59, 130, 246, 0.15);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    color: #60a5fa;
+  }
+
+  &Emerald {
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: #34d399;
+  }
+}
+
+.statInfo {
+  display: flex;
+  flex-direction: column;
+}
+
+.statLabel {
+  font-size: s.$text-xs;
+  color: s.$text-muted;
+}
+
+.statValue {
+  font-size: s.$text-sm;
+  font-weight: 700;
+  color: #fff;
+  margin-top: 2px;
+}
+
+.formCard {
+  background: linear-gradient(135deg, rgba(s.$brand-navy, 0.9) 0%, rgba(s.$brand-navy-light, 0.9) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: s.$radius-xl;
+  padding: s.$space-6;
+}
+
+.loadingBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px;
+  color: s.$text-muted;
+  gap: s.$space-3;
+  font-size: s.$text-sm;
+}
+
+.alertSuccess {
+  margin-bottom: s.$space-4;
+  padding: s.$space-3;
+  border-radius: s.$radius-xl;
+  background-color: rgba(s.$accent-green, 0.1);
+  border: 1px solid rgba(s.$accent-green, 0.3);
+  color: #6ee7b7;
+  font-size: s.$text-xs;
+  display: flex;
+  align-items: center;
+  gap: s.$space-2;
+}
+
+.alertError {
+  margin-bottom: s.$space-4;
+  padding: s.$space-3;
+  border-radius: s.$radius-xl;
+  background-color: rgba(s.$accent-red, 0.1);
+  border: 1px solid rgba(s.$accent-red, 0.3);
+  color: #fca5a5;
+  font-size: s.$text-xs;
+  display: flex;
+  align-items: center;
+  gap: s.$space-2;
+}
+
+.tipsBox {
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: s.$radius-xl;
+  padding: s.$space-4 s.$space-5;
+}
+
+.tipsTitle {
+  font-size: s.$text-xs;
+  font-weight: 700;
+  color: #a5b4fc;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: s.$space-2;
+}
+
+.tipsList {
+  font-size: s.$text-xs;
+  color: rgba(199, 210, 254, 0.8);
+  line-height: 1.7;
+  padding-left: 18px;
+
+  li {
+    margin-bottom: 4px;
+  }
+
+  strong {
+    color: #e0e7ff;
+  }
+}

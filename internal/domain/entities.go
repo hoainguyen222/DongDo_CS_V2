@@ -136,7 +136,37 @@ type ChatCase struct {
 	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
+type CaseListFilter struct {
+	Status CaseStatus `json:"status"`
+	Search string     `json:"search"`
+	Page   int        `json:"page"`
+	Limit  int        `json:"limit"`
+}
+
+type CaseStatusCounts struct {
+	Total       int64 `json:"total"`
+	NeedsHuman  int64 `json:"needs_human"`
+	HumanActive int64 `json:"human_active"`
+	Resolved    int64 `json:"resolved"`
+	AIActive    int64 `json:"ai_active"`
+}
+
+type VoiceCallFilter struct {
+	SessionID string `json:"session_id"`
+	Status    string `json:"status"`
+	Search    string `json:"search"`
+	Page      int    `json:"page"`
+	Limit     int    `json:"limit"`
+}
+
+type GuestFilter struct {
+	Search string `json:"search"`
+	Page   int    `json:"page"`
+	Limit  int    `json:"limit"`
+}
+
 // ============================================================
+
 // Learning Queue
 // ============================================================
 
@@ -350,14 +380,23 @@ type GeneralOverviewMetrics struct {
 	ResolutionRate string `json:"resolution_rate"`
 }
 
+type AIPerformanceDailyItem struct {
+	DateDay          time.Time `json:"date_day"`
+	Label            string    `json:"label"`
+	TotalCases       int       `json:"total_cases"`
+	AIResolvedCases  int       `json:"ai_resolved_cases"`
+	AIResolutionRate string    `json:"ai_resolution_rate"`
+}
+
 type AIPerformanceMetrics struct {
-	TotalCases       int     `json:"total_cases"`
-	AIResolvedCases  int     `json:"ai_resolved_cases"`
-	HandoffCases     int     `json:"handoff_cases"`
-	AIResolutionRate string  `json:"ai_resolution_rate"`
-	HandoffRate      string  `json:"handoff_rate"`
-	AvgAICSAT        float64 `json:"avg_ai_csat"`
-	AvgResponseTime  string  `json:"avg_response_time"`
+	TotalCases       int                       `json:"total_cases"`
+	AIResolvedCases  int                       `json:"ai_resolved_cases"`
+	HandoffCases     int                       `json:"handoff_cases"`
+	AIResolutionRate string                    `json:"ai_resolution_rate"`
+	HandoffRate      string                    `json:"handoff_rate"`
+	AvgAICSAT        float64                   `json:"avg_ai_csat"`
+	AvgResponseTime  string                    `json:"avg_response_time"`
+	DailyTrend       []*AIPerformanceDailyItem `json:"daily_trend"`
 }
 
 type StaffPerformanceItem struct {

@@ -13,20 +13,13 @@ export default function CallsPage() {
   const [pageSize, setPageSize] = useState(10);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const { data, isLoading } = useVoiceCalls();
+  const { data, isLoading } = useVoiceCalls(undefined, page, pageSize, searchTerm);
   const deleteVoiceMutation = useDeleteVoiceCall();
 
   const calls = data?.calls ?? [];
   const total = data?.total ?? 0;
+  const filteredCalls = calls;
 
-  const filteredCalls = calls.filter((call: any) => {
-    if (!searchTerm) return true;
-    const term = searchTerm.toLowerCase();
-    return (
-      call.caller_id?.toLowerCase().includes(term) ||
-      call.session_id?.toLowerCase().includes(term)
-    );
-  });
 
   const handleDelete = async (id: number) => {
     try {

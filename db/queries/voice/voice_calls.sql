@@ -51,3 +51,31 @@ SET status = 'MISSED'::call_status,
     duration_seconds = 0,
     ended_at         = NOW()
 WHERE id = $1;
+
+-- name: ListVoiceCallsPaginated :many
+SELECT id, session_id, caller_type, caller_id, callee_type, callee_id,
+       status, duration_seconds, recording_url, transcript, created_at, ended_at
+FROM voice_calls
+WHERE ($1::text = '' OR session_id = $1::text)
+  AND ($2::text = '' OR status::text = $2::text)
+  AND (
+      $3::text = '' OR
+      caller_id ILIKE '%' || $3::text || '%' OR
+      callee_id ILIKE '%' || $3::text || '%' OR
+      session_id ILIKE '%' || $3::text || '%'
+  )
+ORDER BY created_at DESC
+LIMIT $4 OFFSET $5;
+
+-- name: CountVoiceCalls :one
+SELECT COUNT(*)
+FROM voice_calls
+WHERE ($1::text = '' OR session_id = $1::text)
+  AND ($2::text = '' OR status::text = $2::text)
+  AND (
+      $3::text = '' OR
+      caller_id ILIKE '%' || $3::text || '%' OR
+      callee_id ILIKE '%' || $3::text || '%' OR
+      session_id ILIKE '%' || $3::text || '%'
+  );
+

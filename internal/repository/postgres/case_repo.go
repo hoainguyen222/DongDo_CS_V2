@@ -164,50 +164,96 @@ func (r *CaseRepo) Upsert(
 	return upsertCaseRowToDomain(&row), nil
 }
 
-func (r *CaseRepo) populateLastSenderTypes(ctx context.Context, cases []*domain.ChatCase) {
-	for i := range cases {
-		var senderType string
-		err := r.db.Pool.QueryRow(ctx, `
-			SELECT sender_type 
-			FROM chat_messages 
-			WHERE session_id = $1 
-			ORDER BY created_at DESC, id DESC 
-			LIMIT 1
-		`, cases[i].SessionID).Scan(&senderType)
-		if err == nil {
-			cases[i].LastSenderType = senderType
-		}
+func (r *CaseRepo) ListPaginated(ctx context.Context, filter domain.CaseListFilter) ([]*domain.ChatCase, int64, error) {
+	page := filter.Page
+	if page < 1 {
+		page = 1
 	}
+	limit := filter.Limit
+	if limit < 1 || limit > 100 {
+		limit = 10
+	}
+	offset := (page - 1) * limit
+
+	statusStr := string(filter.Status)
+	rows, err := r.db.Chat.ListCasesPaginated(ctx, chatdb.ListCasesPaginatedParams{
+		Column1: statusStr,
+		Column2: filter.Search,
+		Limit:   int32(limit),
+		Offset:  int32(offset),
+	})
+	if err != nil {
+		r.logger.Error().Err(err).Msg("ListCasesPaginated failed")
+		return nil, 0, err
+	}
+
+	total, err := r.db.Chat.CountCases(ctx, chatdb.CountCasesParams{
+		Column1: statusStr,
+		Column2: filter.Search,
+	})
+	if err != nil {
+		r.logger.Error().Err(err).Msg("CountCases failed")
+		return nil, 0, err
+	}
+
+	out := make([]*domain.ChatCase, 0, len(rows))
+	for i := range rows {
+		c := &rows[i]
+		item := &domain.ChatCase{
+			ID:             c.ID,
+			SessionID:      c.SessionID,
+			CustomerName:   c.CustomerName,
+			CustomerPhone:  c.CustomerPhone,
+			Status:         c.Status,
+			LastSenderType: stringFromInterface(c.LastSenderType),
+			CreatedAt:      c.CreatedAt,
+			UpdatedAt:      c.UpdatedAt,
+		}
+		if c.GuestID.Valid {
+			id := uuid.UUID(c.GuestID.Bytes)
+			item.GuestID = &id
+		}
+		if c.AssignedCs.Valid {
+			item.AssignedCS = c.AssignedCs.String
+		}
+		if c.LastMessage.Valid {
+			item.LastMessage = c.LastMessage.String
+		}
+		if c.ResolutionNote.Valid {
+			item.ResolutionNote = c.ResolutionNote.String
+		}
+		out = append(out, item)
+	}
+
+	return out, total, nil
 }
+
+func (r *CaseRepo) GetStatusCounts(ctx context.Context) (*domain.CaseStatusCounts, error) {
+	row, err := r.db.Chat.GetCaseStatusCounts(ctx)
+	if err != nil {
+		r.logger.Error().Err(err).Msg("GetCaseStatusCounts failed")
+		return nil, err
+	}
+	return &domain.CaseStatusCounts{
+		Total:       row.TotalCount,
+		NeedsHuman:  row.NeedsHumanCount,
+		HumanActive: row.HumanActiveCount,
+		Resolved:    row.ResolvedCount,
+		AIActive:    row.AiActiveCount,
+	}, nil
+}
+
 
 // List returns chatdb cases, optionally filtered by status.
 func (r *CaseRepo) List(ctx context.Context, statusFilter domain.CaseStatus) ([]*domain.ChatCase, error) {
-	var out []*domain.ChatCase
-	if statusFilter != "" {
-		rows, err := r.db.Chat.ListCasesByStatus(ctx, statusFilter)
-		if err != nil {
-			r.logger.Error().Err(err).Str("status_filter", string(statusFilter)).Msg("ListCasesByStatus failed")
-			return nil, err
-		}
-		out = make([]*domain.ChatCase, 0, len(rows))
-		for i := range rows {
-			out = append(out, listCasesByStatusRowToDomain(&rows[i]))
-		}
-	} else {
-		rows, err := r.db.Chat.ListCases(ctx)
-		if err != nil {
-			r.logger.Error().Err(err).Msg("ListCases failed")
-			return nil, err
-		}
-		out = make([]*domain.ChatCase, 0, len(rows))
-		for i := range rows {
-			out = append(out, listCasesRowToDomain(&rows[i]))
-		}
-	}
-
-	r.populateLastSenderTypes(ctx, out)
-	return out, nil
+	cases, _, err := r.ListPaginated(ctx, domain.CaseListFilter{
+		Status: statusFilter,
+		Page:   1,
+		Limit:  1000,
+	})
+	return cases, err
 }
+
 
 // Get returns a single case by sessionID. Returns (nil, nil) when not found.
 func (r *CaseRepo) Get(ctx context.Context, sessionID string) (*domain.ChatCase, error) {

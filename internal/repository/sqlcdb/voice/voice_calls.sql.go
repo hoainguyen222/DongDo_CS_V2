@@ -12,6 +12,32 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countVoiceCalls = `-- name: CountVoiceCalls :one
+SELECT COUNT(*)
+FROM voice_calls
+WHERE ($1::text = '' OR session_id = $1::text)
+  AND ($2::text = '' OR status::text = $2::text)
+  AND (
+      $3::text = '' OR
+      caller_id ILIKE '%' || $3::text || '%' OR
+      callee_id ILIKE '%' || $3::text || '%' OR
+      session_id ILIKE '%' || $3::text || '%'
+  )
+`
+
+type CountVoiceCallsParams struct {
+	Column1 string `json:"column_1"`
+	Column2 string `json:"column_2"`
+	Column3 string `json:"column_3"`
+}
+
+func (q *Queries) CountVoiceCalls(ctx context.Context, arg CountVoiceCallsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countVoiceCalls, arg.Column1, arg.Column2, arg.Column3)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createVoiceCall = `-- name: CreateVoiceCall :one
 
 INSERT INTO voice_calls (session_id, caller_type, caller_id, callee_type, callee_id, status, created_at)
@@ -60,19 +86,6 @@ func (q *Queries) CreateVoiceCall(ctx context.Context, arg CreateVoiceCallParams
 const deleteCall = `-- name: DeleteCall :exec
 DELETE FROM voice_calls WHERE id = $1
 `
-
-const markMissedCall = `-- name: MarkMissedCall :exec
-UPDATE voice_calls
-SET status = 'MISSED'::call_status,
-    duration_seconds = 0,
-    ended_at         = NOW()
-WHERE id = $1
-`
-
-func (q *Queries) MarkMissedCall(ctx context.Context, id int64) error {
-	_, err := q.db.Exec(ctx, markMissedCall, id)
-	return err
-}
 
 func (q *Queries) DeleteCall(ctx context.Context, id int64) error {
 	_, err := q.db.Exec(ctx, deleteCall, id)
@@ -206,6 +219,82 @@ func (q *Queries) ListAllCalls(ctx context.Context) ([]VoiceCall, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const listVoiceCallsPaginated = `-- name: ListVoiceCallsPaginated :many
+SELECT id, session_id, caller_type, caller_id, callee_type, callee_id,
+       status, duration_seconds, recording_url, transcript, created_at, ended_at
+FROM voice_calls
+WHERE ($1::text = '' OR session_id = $1::text)
+  AND ($2::text = '' OR status::text = $2::text)
+  AND (
+      $3::text = '' OR
+      caller_id ILIKE '%' || $3::text || '%' OR
+      callee_id ILIKE '%' || $3::text || '%' OR
+      session_id ILIKE '%' || $3::text || '%'
+  )
+ORDER BY created_at DESC
+LIMIT $4 OFFSET $5
+`
+
+type ListVoiceCallsPaginatedParams struct {
+	Column1 string `json:"column_1"`
+	Column2 string `json:"column_2"`
+	Column3 string `json:"column_3"`
+	Limit   int32  `json:"limit"`
+	Offset  int32  `json:"offset"`
+}
+
+func (q *Queries) ListVoiceCallsPaginated(ctx context.Context, arg ListVoiceCallsPaginatedParams) ([]VoiceCall, error) {
+	rows, err := q.db.Query(ctx, listVoiceCallsPaginated,
+		arg.Column1,
+		arg.Column2,
+		arg.Column3,
+		arg.Limit,
+		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []VoiceCall{}
+	for rows.Next() {
+		var i VoiceCall
+		if err := rows.Scan(
+			&i.ID,
+			&i.SessionID,
+			&i.CallerType,
+			&i.CallerID,
+			&i.CalleeType,
+			&i.CalleeID,
+			&i.Status,
+			&i.DurationSeconds,
+			&i.RecordingUrl,
+			&i.Transcript,
+			&i.CreatedAt,
+			&i.EndedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markMissedCall = `-- name: MarkMissedCall :exec
+UPDATE voice_calls
+SET status = 'MISSED'::call_status,
+    duration_seconds = 0,
+    ended_at         = NOW()
+WHERE id = $1
+`
+
+func (q *Queries) MarkMissedCall(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, markMissedCall, id)
+	return err
 }
 
 const setCallTranscript = `-- name: SetCallTranscript :exec
