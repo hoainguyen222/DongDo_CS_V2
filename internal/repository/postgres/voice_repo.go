@@ -3,6 +3,8 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
 	voicedb "github.com/hoainguyen222/DongDo_CS_V2/internal/repository/sqlcdb/voice"
@@ -130,6 +132,8 @@ func (r *VoiceCallRepo) ListPaginated(ctx context.Context, filter domain.VoiceCa
 	}
 	offset := (page - 1) * limit
 
+	// Defensive: handle missing `status` column (older databases without
+	// migration 00005). Fall back to a query that ignores the status filter.
 	rows, err := r.db.Voice.ListVoiceCallsPaginated(ctx, voicedb.ListVoiceCallsPaginatedParams{
 		Column1: filter.SessionID,
 		Column2: filter.Status,
@@ -138,8 +142,19 @@ func (r *VoiceCallRepo) ListPaginated(ctx context.Context, filter domain.VoiceCa
 		Offset:  int32(offset),
 	})
 	if err != nil {
-		r.logger.Error().Err(err).Msg("ListVoiceCallsPaginated failed")
-		return nil, 0, err
+		if isMissingColumnError(err, "status") {
+			r.logger.Warn().Msg("status column missing on voice_calls; falling back to paginated query without status filter")
+			rows, err = r.db.Voice.ListVoiceCallsPaginatedNoStatus(ctx, voicedb.ListVoiceCallsPaginatedNoStatusParams{
+				Column1: filter.SessionID,
+				Column2: filter.Search,
+				Limit:   int32(limit),
+				Offset:  int32(offset),
+			})
+		}
+		if err != nil {
+			r.logger.Error().Err(err).Msg("ListVoiceCallsPaginated failed")
+			return nil, 0, err
+		}
 	}
 
 	total, err := r.db.Voice.CountVoiceCalls(ctx, voicedb.CountVoiceCallsParams{
@@ -147,10 +162,18 @@ func (r *VoiceCallRepo) ListPaginated(ctx context.Context, filter domain.VoiceCa
 		Column2: filter.Status,
 		Column3: filter.Search,
 	})
-
 	if err != nil {
-		r.logger.Error().Err(err).Msg("CountVoiceCalls failed")
-		return nil, 0, err
+		if isMissingColumnError(err, "status") {
+			r.logger.Warn().Msg("status column missing on voice_calls; falling back to count without status filter")
+			total, err = r.db.Voice.CountVoiceCallsNoStatus(ctx, voicedb.CountVoiceCallsNoStatusParams{
+				Column1: filter.SessionID,
+				Column2: filter.Search,
+			})
+		}
+		if err != nil {
+			r.logger.Error().Err(err).Msg("CountVoiceCalls failed")
+			return nil, 0, err
+		}
 	}
 
 	list := make([]*domain.VoiceCall, 0, len(rows))
@@ -158,6 +181,22 @@ func (r *VoiceCallRepo) ListPaginated(ctx context.Context, filter domain.VoiceCa
 		list = append(list, voiceCallFromRow(row))
 	}
 	return list, total, nil
+}
+
+// isMissingColumnError returns true if the underlying Postgres error
+// indicates a missing column (SQLSTATE 42703).
+func isMissingColumnError(err error, column string) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "42703") {
+		return false
+	}
+	if column == "" {
+		return strings.Contains(msg, "does not exist")
+	}
+	return strings.Contains(msg, fmt.Sprintf("column \"%s\" does not exist", column))
 }
 
 

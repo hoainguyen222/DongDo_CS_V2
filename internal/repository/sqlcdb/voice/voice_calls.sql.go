@@ -38,6 +38,91 @@ func (q *Queries) CountVoiceCalls(ctx context.Context, arg CountVoiceCallsParams
 	return count, err
 }
 
+// Fallback query for older voice_calls tables missing the `status` column.
+const listVoiceCallsPaginatedNoStatus = `-- name: ListVoiceCallsPaginatedNoStatus :many
+SELECT id, session_id, caller_type, caller_id, callee_type, callee_id,
+       'ENDED'::call_status AS status, duration_seconds, recording_url, transcript, created_at, ended_at
+FROM voice_calls
+WHERE ($1::text = '' OR session_id = $1::text)
+  AND (
+      $2::text = '' OR
+      caller_id ILIKE '%' || $2::text || '%' OR
+      callee_id ILIKE '%' || $2::text || '%' OR
+      session_id ILIKE '%' || $2::text || '%'
+  )
+ORDER BY created_at DESC
+LIMIT $3 OFFSET $4
+`
+
+type ListVoiceCallsPaginatedNoStatusParams struct {
+	Column1 string `json:"column_1"`
+	Column2 string `json:"column_2"`
+	Limit   int32  `json:"limit"`
+	Offset  int32  `json:"offset"`
+}
+
+func (q *Queries) ListVoiceCallsPaginatedNoStatus(ctx context.Context, arg ListVoiceCallsPaginatedNoStatusParams) ([]VoiceCall, error) {
+	rows, err := q.db.Query(ctx, listVoiceCallsPaginatedNoStatus,
+		arg.Column1,
+		arg.Column2,
+		arg.Limit,
+		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []VoiceCall{}
+	for rows.Next() {
+		var i VoiceCall
+		if err := rows.Scan(
+			&i.ID,
+			&i.SessionID,
+			&i.CallerType,
+			&i.CallerID,
+			&i.CalleeType,
+			&i.CalleeID,
+			&i.Status,
+			&i.DurationSeconds,
+			&i.RecordingUrl,
+			&i.Transcript,
+			&i.CreatedAt,
+			&i.EndedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const countVoiceCallsNoStatus = `-- name: CountVoiceCallsNoStatus :one
+SELECT COUNT(*)
+FROM voice_calls
+WHERE ($1::text = '' OR session_id = $1::text)
+  AND (
+      $2::text = '' OR
+      caller_id ILIKE '%' || $2::text || '%' OR
+      callee_id ILIKE '%' || $2::text || '%' OR
+      session_id ILIKE '%' || $2::text || '%'
+  )
+`
+
+type CountVoiceCallsNoStatusParams struct {
+	Column1 string `json:"column_1"`
+	Column2 string `json:"column_2"`
+}
+
+func (q *Queries) CountVoiceCallsNoStatus(ctx context.Context, arg CountVoiceCallsNoStatusParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countVoiceCallsNoStatus, arg.Column1, arg.Column2)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createVoiceCall = `-- name: CreateVoiceCall :one
 
 INSERT INTO voice_calls (session_id, caller_type, caller_id, callee_type, callee_id, status, created_at)

@@ -79,3 +79,30 @@ WHERE ($1::text = '' OR session_id = $1::text)
       session_id ILIKE '%' || $3::text || '%'
   );
 
+-- name: ListVoiceCallsPaginatedNoStatus :many
+-- Fallback for databases missing the `status` column on voice_calls.
+SELECT id, session_id, caller_type, caller_id, callee_type, callee_id,
+       'ENDED'::call_status AS status, duration_seconds, recording_url, transcript, created_at, ended_at
+FROM voice_calls
+WHERE ($1::text = '' OR session_id = $1::text)
+  AND (
+      $2::text = '' OR
+      caller_id ILIKE '%' || $2::text || '%' OR
+      callee_id ILIKE '%' || $2::text || '%' OR
+      session_id ILIKE '%' || $2::text || '%'
+  )
+ORDER BY created_at DESC
+LIMIT $3 OFFSET $4;
+
+-- name: CountVoiceCallsNoStatus :one
+-- Fallback for databases missing the `status` column on voice_calls.
+SELECT COUNT(*)
+FROM voice_calls
+WHERE ($1::text = '' OR session_id = $1::text)
+  AND (
+      $2::text = '' OR
+      caller_id ILIKE '%' || $2::text || '%' OR
+      callee_id ILIKE '%' || $2::text || '%' OR
+      session_id ILIKE '%' || $2::text || '%'
+  );
+

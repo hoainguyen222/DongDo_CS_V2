@@ -306,6 +306,15 @@ func (uc *CaseUseCase) DeleteCase(ctx context.Context, sessionID string) error {
 			Msg("failed to delete case")
 		return err
 	}
+
+	// Broadcast deletion so admin clients can refresh their case list via WS
+	// instead of polling the REST API.
+	_ = uc.eventBus.PublishWS(ctx, "admin_inbox", domain.WSEventCaseUpdate, map[string]interface{}{
+		"type":       "case_deleted",
+		"session_id": sessionID,
+	}, "admin")
+
+	uc.logger.Info().Str("session_id", sessionID).Msg("case deleted")
 	return nil
 }
 
@@ -319,6 +328,12 @@ func (uc *CaseUseCase) ClearAllCases(ctx context.Context) error {
 		uc.logger.Error().Err(err).Msg("failed to clear all cases")
 		return err
 	}
+
+	// Broadcast bulk-clear event so all admin clients refresh at once.
+	_ = uc.eventBus.PublishWS(ctx, "admin_inbox", domain.WSEventCaseUpdate, map[string]interface{}{
+		"type": "cases_cleared",
+	}, "admin")
+
 	uc.logger.Warn().Msg("all cases cleared")
 	return nil
 }

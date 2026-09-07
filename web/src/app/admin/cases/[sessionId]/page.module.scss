@@ -1,5 +1,5 @@
 // ============================================================
-// Inbox — Live CS Inbox page styles (SCSS module)
+// Cases detail page — split view: listPanel + chatPanel
 // ============================================================
 
 @import '@/styles/tokens/variables';
@@ -9,15 +9,6 @@
   display: flex;
   flex-direction: column;
   color: $text-main;
-}
-
-// Simplified shell for inbox list-only mode (no split view, navigate to detail page)
-.listOnlyShell {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  color: $text-main;
-  background: rgba($bg-dark, 0.4);
 }
 
 .header {
@@ -78,49 +69,10 @@
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s;
+  text-decoration: none;
 
   &:hover {
     background: rgba($accent-green, 0.25);
-  }
-}
-
-.searchRow {
-  display: flex;
-  align-items: center;
-  gap: $space-2;
-}
-
-.searchInput {
-  flex: 1;
-  padding: 8px 12px;
-  border-radius: $radius-sm;
-  background: $bg-dark;
-  border: 1px solid $border-subtle;
-  color: $text-main;
-  font-size: 0.75rem;
-  outline: none;
-  transition: border-color 0.15s;
-
-  &::placeholder {
-    color: $text-dim;
-  }
-  &:focus {
-    border-color: $brand-red;
-  }
-}
-
-.clearAllBtn {
-  padding: 6px 12px;
-  border-radius: $radius-sm;
-  background: $bg-card-solid;
-  color: lighten($accent-red, 12%);
-  border: 1px solid $border-subtle;
-  font-size: 0.6875rem;
-  cursor: pointer;
-  transition: background 0.15s;
-
-  &:hover {
-    background: rgba($accent-red, 0.1);
   }
 }
 
@@ -131,15 +83,16 @@
   overflow: hidden;
 }
 
+// ── List panel (left) ────────────────────────────────────
 .listPanel {
   width: 320px;
   border-right: 1px solid $border-subtle;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  background: rgba($bg-dark, 0.3);
 }
 
-// ── Filter tabs ──────────────────────────────────────────
 .filterTabs {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -208,9 +161,27 @@
   color: $text-muted;
 }
 
+.searchInput {
+  margin: 8px;
+  padding: 8px 12px;
+  border-radius: $radius-sm;
+  background: $bg-dark;
+  border: 1px solid $border-subtle;
+  color: $text-main;
+  font-size: 0.75rem;
+  outline: none;
+  transition: border-color 0.15s;
+
+  &::placeholder {
+    color: $text-dim;
+  }
+  &:focus {
+    border-color: $brand-red;
+  }
+}
+
 .listScroll {
-  flex: 1 1 0;
-  min-height: 0;
+  flex: 1;
   overflow-y: auto;
 }
 
@@ -222,11 +193,13 @@
 }
 
 .caseItem {
-  display: block;
   padding: $space-3;
   border-bottom: 1px solid rgba($border-subtle, 0.6);
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
+  display: block;
+  text-decoration: none;
+  color: inherit;
 
   &:hover {
     background: rgba($brand-navy, 0.5);
@@ -253,7 +226,6 @@
   }
 
   .statusBadge {
-    // Slightly lift the badge to stand out
     transform: scale(1.05);
   }
 }
@@ -357,7 +329,6 @@
   border-top: 1px solid $border-subtle;
 }
 
-// ── Loading spinner ──────────────────────────────────────
 .spinIcon {
   animation: spinInbox 0.9s linear infinite;
   display: inline-block;
@@ -373,11 +344,14 @@
   }
 }
 
-// ── Chat panel ───────────────────────────────────────────
+// ── Chat panel (right) ───────────────────────────────────
 .chatPanel {
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  min-height: 0; // allow messages to scroll instead of pushing replyForm off-screen
+  overflow: hidden;
 }
 
 .emptyChat {
@@ -426,12 +400,16 @@
   justify-content: space-between;
   flex-shrink: 0;
   background: rgba($bg-dark, 0.7);
+  gap: $space-3;
+  flex-wrap: wrap;
 }
 
 .detailTitle {
   display: flex;
   align-items: center;
   gap: $space-2;
+  flex: 1;
+  min-width: 0;
 }
 
 .detailName {
@@ -450,6 +428,7 @@
   background: rgba($accent-green, 0.1);
   color: lighten($accent-green, 12%);
   border: 1px solid rgba($accent-green, 0.3);
+  margin-left: 8px;
 }
 
 .detailSession {
@@ -466,6 +445,7 @@
   display: flex;
   align-items: center;
   gap: $space-2;
+  flex-shrink: 0;
 }
 
 .primaryBtn {
@@ -527,7 +507,8 @@
 
 // ── Messages ─────────────────────────────────────────────
 .messages {
-  flex: 1;
+  flex: 1 1 0;
+  min-height: 0; // critical for nested flex scrolling
   padding: $space-4;
   overflow-y: auto;
   display: flex;
@@ -640,7 +621,7 @@
   }
 }
 
-// ── Voice history modal ──────────────────────────────────
+// ── Resolve modal ────────────────────────────────────────
 .modalBackdrop {
   position: fixed;
   inset: 0;
@@ -652,99 +633,6 @@
   z-index: $z-modal;
 }
 
-.modal {
-  width: 100%;
-  max-width: 672px;
-  background: $bg-card-solid;
-  padding: $space-6;
-  border-radius: 16px;
-  border: 1px solid $border-subtle;
-  box-shadow: $shadow-elevated;
-  max-height: 85vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.modalHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: $space-4;
-  border-bottom: 1px solid $border-subtle;
-}
-
-.modalTitle {
-  font-size: 1rem;
-  font-weight: 700;
-  color: $text-main;
-  margin: 0;
-}
-
-.modalClose {
-  padding: 4px;
-  border-radius: $radius-sm;
-  background: transparent;
-  border: none;
-  color: $text-muted;
-  font-size: 1.125rem;
-  cursor: pointer;
-  transition: color 0.15s;
-
-  &:hover {
-    color: $text-main;
-  }
-}
-
-.modalBody {
-  flex: 1;
-  overflow-y: auto;
-  padding: $space-4 0;
-  display: flex;
-  flex-direction: column;
-  gap: $space-3;
-}
-
-.callItem {
-  padding: $space-4;
-  border-radius: $radius-md;
-  background: rgba($bg-dark, 0.8);
-  border: 1px solid $border-subtle;
-}
-
-.callRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.callLabel {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: lighten($accent-green, 12%);
-}
-
-.callDate {
-  font-size: 0.6875rem;
-  color: $text-muted;
-}
-
-.callMeta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 0.75rem;
-  color: $text-muted;
-  margin-top: 6px;
-}
-
-.callStatus {
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: rgba($accent-green, 0.1);
-  color: lighten($accent-green, 12%);
-}
-
-// ── Resolve modal ────────────────────────────────────────
 .resolveModal {
   width: 100%;
   max-width: 672px;

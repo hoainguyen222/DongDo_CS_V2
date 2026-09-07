@@ -116,7 +116,15 @@ export function useCases(
   return useQuery({
     queryKey: queryKeys.cases(status, page, limit, search),
     queryFn: () => api.listCases(status, page, limit, search),
-    staleTime: 30_000, // 30s; refreshed via WS case_update event
+    // Real-time updates via WebSocket case_update → setQueryData in layout.tsx.
+    // The stale time is a safety net in case WS disconnects; it does NOT cause
+    // polling because the query cache is kept fresh by the WS handler above.
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    // Avoid re-fetching on mount/remount once we have a fresh-enough cached value.
+    // WS pushes keep the cache fresh.
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     ...options,
   });
 }
@@ -395,7 +403,11 @@ export function useAnalytics(options?: QueryOpts<AnalyticsStats>) {
     queryKey: queryKeys.analytics,
     queryFn: () => api.getAnalytics(),
     staleTime: 30_000,
-    refetchInterval: 60_000, // 1 phút
+    // Real-time updates via WebSocket case_update → invalidates ['analytics'] in
+    // useWebSocket/layout. No refetchInterval: avoid periodic REST polling.
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     ...options,
   });
 }
