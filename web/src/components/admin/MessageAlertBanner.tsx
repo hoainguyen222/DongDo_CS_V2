@@ -1,13 +1,19 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { BellRing, ArrowRight, X } from 'lucide-react';
 import { useAlertConfig, useCases } from '@/lib/hooks/useApi';
+import { WSClient } from '@/lib/ws';
+import { useAuthStore } from '@/lib/stores/authStore';
 
 export const MessageAlertBanner: React.FC = () => {
   const router = useRouter();
   const pathname = usePathname();
+  const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+  const wsRef = useRef<WSClient | null>(null);
   const [dismissedAt, setDismissedAt] = useState<number | null>(null);
 
   // 1-second ticker to dynamically re-evaluate overdue time without needing page reload
@@ -21,9 +27,27 @@ export const MessageAlertBanner: React.FC = () => {
   }, []);
 
   const { data: alertConfig } = useAlertConfig();
-  const { data: casesData } = useCases('', 1, 100, '', {
-    refetchInterval: 3000, // Poll cases every 3s to stay synced
-  });
+  // One-shot fetch on mount; no polling — WebSocket keeps the cache fresh.
+  const { data: casesData } = useCases('', 1, 100, '');
+
+  // Subscribe to admin_inbox WebSocket to receive realtime case updates
+  useEffect(() => {
+    if (!user) return;
+    const ws = new WSClient('admin_inbox', user.username, user.role);
+    wsRef.current = ws;
+    ws.connect();
+
+    const unsubscribe = ws.on('*', () => {
+      // Any WS event for admin_inbox may indicate a case changed; invalidate cache
+      queryClient.invalidateQueries({ queryKey: ['cases'] });
+    });
+
+    return () => {
+      unsubscribe();
+      ws.disconnect();
+      wsRef.current = null;
+    };
+  }, [user?.username, user?.role, queryClient]);
 
   // Calculate overdue unreplied cases in real-time based on `now` ticker
   const overdueCases = useMemo(() => {

@@ -1,0 +1,57 @@
+// ============================================================
+// Loading overlay (Next.js App Router fallback for /admin/*)
+// This is rendered inside the admin layout's <main> container,
+// so the sidebar & global chrome persist while only the
+// content area shows a lightweight spinner.
+// ============================================================
+@use '../../styles/_shared.scss' as s;
+
+.overlay {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 60vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(
+    180deg,
+    rgba(s.$brand-navy-dark, 0.25) 0%,
+    rgba(s.$bg-dark, 0) 100%
+  );
+}
+
+.box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: s.$space-3;
+  padding: s.$space-6 s.$space-8;
+  border-radius: s.$radius-xl;
+  background: rgba(s.$brand-navy, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+}
+
+.spinner {
+  color: s.$accent-red;
+  animation: spin 0.9s linear infinite;
+  filter: drop-shadow(0 0 6px rgba(225, 29, 72, 0.4));
+}
+
+.label {
+  font-size: s.$text-sm;
+  color: s.$text-muted;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

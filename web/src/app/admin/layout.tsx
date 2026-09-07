@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback, Suspense } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/lib/stores/authStore';
@@ -146,7 +146,11 @@ export default function AdminLayout({
         onLogout={handleLogout}
       />
 
-      <main className={styles.main}>{children}</main>
+      <main className={styles.main}>
+        <Suspense fallback={<AdminLoadingScreen />}>
+          {children}
+        </Suspense>
+      </main>
 
       <VoiceHistoryModal
         isOpen={showVoiceHistoryModal}

@@ -1,27 +1,20 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Inbox, Trash2, CheckCircle2, UserCheck, Send, Headphones, Tag as TagIcon, X } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Inbox, Headphones, MessageCircle, RefreshCw } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useCases,
-  useCaseDetail,
   useVoiceCalls,
-  useTakeCase,
-  useResolveCase,
-  useDeleteCase,
   useClearAllCases,
-  useChatTags,
-  useCaseTags,
-  useAttachTag,
-  useDetachTag,
 } from '@/lib/hooks/useApi';
 import { useWebSocket } from '@/lib/hooks/useWebSocket';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { Pagination } from '@/components/admin/AdminSidebar';
-import { MarkdownRenderer } from '@/components/MarkdownRenderer';
 import { useUIStore } from '@/lib/stores/uiStore';
-import type { ChatCase, Message, QAPair } from '@/lib/types';
+import type { ChatCase } from '@/lib/types';
 import styles from './page.module.scss';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -40,33 +33,158 @@ const STATUS_CLASS: Record<string, string> = {
 
 type InboxTab = 'all' | 'NEEDS_HUMAN_CS' | 'HUMAN_CS_ACTIVE' | 'RESOLVED';
 
+const FILTER_STORAGE_KEY = 'inbox_filter_state';
+
+interface InboxFilterState {
+  status: InboxTab;
+  page: number;
+  limit: number;
+  q: string;
+}
+
+function readStoredFilter(): InboxFilterState | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(FILTER_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<InboxFilterState>;
+    if (typeof parsed !== 'object' || parsed === null) return null;
+    return {
+      status: (parsed.status as InboxTab) || 'all',
+      page: typeof parsed.page === 'number' && parsed.page > 0 ? parsed.page : 1,
+      limit: typeof parsed.limit === 'number' && parsed.limit > 0 ? parsed.limit : 10,
+      q: typeof parsed.q === 'string' ? parsed.q : '',
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredFilter(state: InboxFilterState): void {
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    /* sessionStorage may be unavailable (private mode, quota) — silently ignore */
+  }
+}
+
 export default function InboxPage() {
   const { addToast, openConfirm } = useUIStore();
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // ── URL-synced state: tab status, pagination, search keyword ────────────
+  // Priority: URL query params (shareable) > sessionStorage (back-navigation) > defaults.
+  const hasUrlQuery =
+    searchParams.has('status') ||
+    searchParams.has('page') ||
+    searchParams.has('limit') ||
+    searchParams.has('q');
+
+  const statusFromUrl = (searchParams.get('status') || 'all') as InboxTab;
+  const pageFromUrl = parseInt(searchParams.get('page') || '1', 10);
+  const limitFromUrl = parseInt(searchParams.get('limit') || '10', 10);
+  const qFromUrl = searchParams.get('q') || '';
+
+  // If the URL has no query string but sessionStorage does (e.g. user clicked
+  // into a case detail and hit the browser Back button), restore filter from
+  // sessionStorage and immediately rewrite the URL so it stays shareable.
+  const [bootstrapped] = useState(() => {
+    if (hasUrlQuery) return false;
+    const stored = readStoredFilter();
+    if (!stored) return false;
+    const params = new URLSearchParams();
+    if (stored.status !== 'all') params.set('status', stored.status);
+    if (stored.page > 1) params.set('page', String(stored.page));
+    if (stored.limit !== 10) params.set('limit', String(stored.limit));
+    if (stored.q) params.set('q', stored.q);
+    const qs = params.toString();
+    if (qs) {
+      // Use replace so the back-stack isn't polluted with a transient entry.
+      router.replace(`/admin/inbox?${qs}`, { scroll: false });
+    }
+    return true;
+  });
 
   // Tab & Pagination state
-  const [activeTab, setActiveTab] = useState<InboxTab>('all');
-  const [casePage, setCasePage] = useState(1);
-  const [casePageSize, setCasePageSize] = useState(10);
-  const [caseFilter, setCaseFilter] = useState('');
+  const [activeTab, setActiveTab] = useState<InboxTab>(statusFromUrl);
+  const [casePage, setCasePage] = useState(
+    Number.isFinite(pageFromUrl) && pageFromUrl > 0 ? pageFromUrl : 1
+  );
+  const [casePageSize, setCasePageSize] = useState(
+    Number.isFinite(limitFromUrl) && limitFromUrl > 0 ? limitFromUrl : 10
+  );
+  const [caseFilter, setCaseFilter] = useState(qFromUrl);
 
-  // Case selection
-  const [selectedCase, setSelectedCase] = useState<ChatCase | null>(null);
+  // Hydrate from sessionStorage on first mount when URL had no query string
+  useEffect(() => {
+    if (bootstrapped) {
+      const stored = readStoredFilter();
+      if (stored) {
+        setActiveTab(stored.status);
+        setCasePage(stored.page);
+        setCasePageSize(stored.limit);
+        setCaseFilter(stored.q);
+      }
+    }
+    // Run once on mount only
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist current filter to sessionStorage so navigating to a case detail
+  // and returning preserves the filter even when the URL query is dropped.
+  useEffect(() => {
+    writeStoredFilter({
+      status: activeTab,
+      page: casePage,
+      limit: casePageSize,
+      q: caseFilter,
+    });
+  }, [activeTab, casePage, casePageSize, caseFilter]);
+
+  // Sync URL -> state when user navigates back/forward
+  useEffect(() => {
+    setActiveTab(statusFromUrl);
+    setCasePage(Number.isFinite(pageFromUrl) && pageFromUrl > 0 ? pageFromUrl : 1);
+    setCasePageSize(
+      Number.isFinite(limitFromUrl) && limitFromUrl > 0 ? limitFromUrl : 10
+    );
+    setCaseFilter(qFromUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  // Sync state -> URL whenever any filter changes
+  const updateUrl = useCallback(
+    (next: { status?: InboxTab; page?: number; limit?: number; q?: string }) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (next.status !== undefined) {
+        if (next.status === 'all') params.delete('status');
+        else params.set('status', next.status);
+      }
+      if (next.page !== undefined) {
+        if (next.page <= 1) params.delete('page');
+        else params.set('page', String(next.page));
+      }
+      if (next.limit !== undefined) {
+        if (next.limit === 10) params.delete('limit');
+        else params.set('limit', String(next.limit));
+      }
+      if (next.q !== undefined) {
+        if (!next.q) params.delete('q');
+        else params.set('q', next.q);
+      }
+      const qs = params.toString();
+      router.replace(qs ? `/admin/inbox?${qs}` : '/admin/inbox', { scroll: false });
+    },
+    [router, searchParams]
+  );
+
+  // Track last sender from realtime WS so we can flag unread cases
   const [lastSenderMap, setLastSenderMap] = useState<Record<string, string>>({});
-
-  // UI state
-  const [replyText, setReplyText] = useState('');
-  const [isSendingReply, setIsSendingReply] = useState(false);
-  const [showResolveModal, setShowResolveModal] = useState(false);
   const [showVoiceHistoryModal, setShowVoiceHistoryModal] = useState(false);
-  const [resolveNote, setResolveNote] = useState('');
-  const [modalQAPairs, setModalQAPairs] = useState<QAPair[]>([{ question: '', answer: '' }]);
-  const [modalEnableLearn, setModalEnableLearn] = useState(true);
-
-  // Refs
-  const chatContainerRef = useRef<HTMLDivElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Data fetching: DB-level pagination & filtering by tab status and search keyword
   const { data: casesData, isLoading: isLoadingCases } = useCases(
@@ -75,18 +193,12 @@ export default function InboxPage() {
     casePageSize,
     caseFilter
   );
-  const { data: caseDetailData, refetch: refetchCaseDetail } = useCaseDetail(selectedCase?.session_id ?? '');
   const { data: voiceCallsData } = useVoiceCalls();
 
-
-  // Tags state & hooks
-  const [showTagPicker, setShowTagPicker] = useState(false);
-  const { data: allTags = [] } = useChatTags();
-  const { data: attachedTags = [] } = useCaseTags(selectedCase?.session_id ?? '');
-  const attachTagMutation = useAttachTag();
-  const detachTagMutation = useDetachTag();
-
-  // Real-time WebSocket connection to receive guest messages & case updates instantly
+  // Real-time WebSocket connection to receive case updates instantly
+  // The WS server broadcasts WSEventCaseUpdate to the `admin_inbox` channel whenever
+  // any case changes (new message, status change, etc.). This keeps the list in sync
+  // without polling the REST API on a timer.
   useWebSocket({
     sessionId: 'admin_inbox',
     username: user?.username || 'admin',
@@ -102,6 +214,7 @@ export default function InboxPage() {
       if (sid) {
         setLastSenderMap((prev) => ({ ...prev, [sid]: senderType }));
 
+        // Optimistically update the cached case list
         queryClient.setQueriesData({ queryKey: ['cases'] }, (oldData: any) => {
           if (!oldData || !oldData.cases) return oldData;
           const nowISO = new Date().toISOString();
@@ -124,14 +237,9 @@ export default function InboxPage() {
     },
   });
 
-  // Mutations
-  const takeCaseMutation = useTakeCase();
-  const resolveCaseMutation = useResolveCase();
-  const deleteCaseMutation = useDeleteCase();
   const clearAllMutation = useClearAllCases();
 
   const allCases = casesData?.cases ?? [];
-  const caseMessages = caseDetailData?.messages ?? [];
   const voiceCalls = voiceCallsData?.calls ?? [];
 
   // Populate lastSenderMap whenever allCases changes
@@ -147,44 +255,22 @@ export default function InboxPage() {
     });
   }, [allCases]);
 
-  // Sync lastSenderMap when case detail messages are loaded
-  useEffect(() => {
-    if (selectedCase && caseMessages.length > 0) {
-      const lastMsg = caseMessages[caseMessages.length - 1];
-      if (lastMsg) {
-        setLastSenderMap((prev) => {
-          if (prev[selectedCase.session_id] === lastMsg.sender_type) return prev;
-          return { ...prev, [selectedCase.session_id]: lastMsg.sender_type };
-        });
-      }
-    }
-  }, [selectedCase, caseMessages]);
-
-  // Robust multi-tier check to determine if a case has an unreplied customer message
+  // Robust check: case is unreplied if last sender is the guest
   const isCaseUnreplied = useCallback(
     (c: ChatCase): boolean => {
       if (c.status === 'RESOLVED') return false;
       if (c.status === 'NEEDS_HUMAN_CS') return true;
 
-      // 1. Explicit last_sender_type from ChatCase (backend)
       if (c.last_sender_type === 'guest') return true;
       if (c.last_sender_type === 'human_cs' || c.last_sender_type === 'cs' || c.last_sender_type === 'ai') return false;
 
-      // 2. Check local lastSenderMap state
       const mapSender = lastSenderMap[c.session_id];
       if (mapSender === 'guest') return true;
       if (mapSender === 'human_cs' || mapSender === 'cs' || mapSender === 'ai') return false;
 
-      // 3. Inspect currently loaded caseMessages for selected case
-      if (selectedCase?.session_id === c.session_id && caseMessages.length > 0) {
-        const lastMsg = caseMessages[caseMessages.length - 1];
-        if (lastMsg.sender_type === 'guest') return true;
-        if (lastMsg.sender_type === 'human_cs' || lastMsg.sender_type === 'cs' || lastMsg.sender_type === 'ai') return false;
-      }
-
       return false;
     },
-    [lastSenderMap, selectedCase?.session_id, caseMessages]
+    [lastSenderMap]
   );
 
   // Status counts returned from database GetCaseStatusCounts query
@@ -194,133 +280,25 @@ export default function InboxPage() {
   const unrepliedActiveCount = statusCounts?.human_active ?? 0;
   const resolvedCount = statusCounts?.resolved ?? 0;
 
-  // Sorting logic: unreplied customer conversations ALWAYS pinned at the top within current page!
+  // Sorting: unreplied customer conversations pinned at the top within current page
   const pagedCases = [...allCases].sort((a, b) => {
     const unrepliedA = isCaseUnreplied(a);
     const unrepliedB = isCaseUnreplied(b);
-
     if (unrepliedA !== unrepliedB) {
       return unrepliedA ? -1 : 1;
     }
-
     return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
   });
 
   const caseTotal = casesData?.total ?? 0;
 
-
-  // Scroll to bottom when messages change
-  useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-    }
-  }, [caseMessages]);
-
-  // Select case handler
-  const handleSelectCase = useCallback((c: ChatCase) => {
-    setSelectedCase(c);
-    setReplyText('');
-  }, []);
-
-  // Take case handler
-  const handleTakeCase = async () => {
-    if (!selectedCase) return;
-    try {
-      await takeCaseMutation.mutateAsync(selectedCase.session_id);
-      setSelectedCase({ ...selectedCase, status: 'HUMAN_CS_ACTIVE' });
-      addToast({ title: 'Đã tiếp nhận case', variant: 'success' });
-    } catch (err: any) {
-      addToast({ title: 'Lỗi tiếp nhận case', message: err.message, variant: 'error' });
-    }
-  };
-
-  // Send reply handler
-  const handleSendReply = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!replyText.trim() || !selectedCase || isSendingReply) return;
-    const content = replyText.trim();
-    setReplyText('');
-    setIsSendingReply(true);
-    try {
-      const { api } = await import('@/lib/api');
-      await api.sendCSMessage(selectedCase.session_id, content);
-      setSelectedCase((prev) => (prev ? { ...prev, last_sender_type: 'human_cs', last_message: content } : null));
-      refetchCaseDetail();
-    } catch (err: any) {
-      addToast({ title: err.message || 'Lỗi gửi tin nhắn', variant: 'error' });
-    } finally {
-      setIsSendingReply(false);
-    }
-  };
-
-  // Resolve case handlers
-  const extractAllQAPairs = (messages: Message[]): QAPair[] => {
-    const pairs: QAPair[] = [];
-    let lastUserText = '';
-    for (const m of messages) {
-      if (m.sender_type === 'guest') {
-        lastUserText = m.content.trim();
-      } else if ((m.sender_type === 'cs' || m.sender_type === 'human_cs') && lastUserText) {
-        const csReply = m.content.trim();
-        if (csReply && !csReply.includes('Em đã tham gia cuộc trò chuyện')) {
-          const existing = pairs[pairs.length - 1];
-          if (existing && existing.question === lastUserText) {
-            existing.answer += '\n' + csReply;
-          } else {
-            pairs.push({ question: lastUserText, answer: csReply });
-          }
-        }
-      }
-    }
-    return pairs;
-  };
-
-  const openResolveModal = () => {
-    if (!selectedCase) return;
-    const extracted = extractAllQAPairs(caseMessages);
-    setModalQAPairs(extracted.length > 0 ? extracted : [{ question: '', answer: '' }]);
-    setModalEnableLearn(true);
-    setResolveNote('');
-    setShowResolveModal(true);
-  };
-
-  const handleResolveCase = async () => {
-    if (!selectedCase) return;
-    const validPairs = modalEnableLearn
-      ? modalQAPairs.filter((p) => p.question.trim() && p.answer.trim())
-      : [];
-    try {
-      await resolveCaseMutation.mutateAsync({
-        sessionId: selectedCase.session_id,
-        resolutionNote: resolveNote,
-        extractPairs: validPairs,
-      });
-      setShowResolveModal(false);
-      setSelectedCase(null);
-      addToast({ title: 'Đã đóng case thành công!', variant: 'success' });
-    } catch (err: any) {
-      addToast({ title: err.message || 'Lỗi đóng case', variant: 'error' });
-    }
-  };
-
-  // Delete case handler
-  const handleDeleteCase = (sessionID: string) => {
-    openConfirm({
-      title: 'Xóa case?',
-      message: 'Xóa ca hỗ trợ này khỏi Live CS Inbox?',
-      confirmText: 'Xóa',
-      variant: 'danger',
-      onConfirm: async () => {
-        try {
-          await deleteCaseMutation.mutateAsync(sessionID);
-          if (selectedCase?.session_id === sessionID) setSelectedCase(null);
-          addToast({ title: 'Đã xóa case', variant: 'success' });
-        } catch (err: any) {
-          addToast({ title: err.message || 'Lỗi xóa case', variant: 'error' });
-        }
-      },
-    });
-  };
+  // Click case -> router push to detail page (Next.js route)
+  const handleSelectCase = useCallback(
+    (c: ChatCase) => {
+      router.push(`/admin/cases/${encodeURIComponent(c.session_id)}`);
+    },
+    [router]
+  );
 
   // Clear all cases
   const handleClearAllCases = () => {
@@ -332,7 +310,6 @@ export default function InboxPage() {
       onConfirm: async () => {
         try {
           await clearAllMutation.mutateAsync();
-          setSelectedCase(null);
           addToast({ title: 'Đã dọn dẹp toàn bộ case', variant: 'success' });
         } catch (err: any) {
           addToast({ title: err.message || 'Lỗi', variant: 'error' });
@@ -371,8 +348,10 @@ export default function InboxPage() {
             placeholder="Tìm kiếm..."
             value={caseFilter}
             onChange={(e) => {
-              setCaseFilter(e.target.value);
+              const v = e.target.value;
+              setCaseFilter(v);
               setCasePage(1);
+              updateUrl({ q: v, page: 1 });
             }}
             className={styles.searchInput}
           />
@@ -382,7 +361,7 @@ export default function InboxPage() {
         </div>
       </div>
 
-      {/* Main content - split view */}
+      {/* Main content - split view: listPanel (left) + emptyChat (right) */}
       <div className={styles.split}>
         {/* Case list - left panel */}
         <div className={styles.listPanel}>
@@ -394,6 +373,7 @@ export default function InboxPage() {
               onClick={() => {
                 setActiveTab('all');
                 setCasePage(1);
+                updateUrl({ status: 'all', page: 1 });
               }}
             >
               <span>Tất cả</span>
@@ -410,6 +390,7 @@ export default function InboxPage() {
               onClick={() => {
                 setActiveTab('NEEDS_HUMAN_CS');
                 setCasePage(1);
+                updateUrl({ status: 'NEEDS_HUMAN_CS', page: 1 });
               }}
             >
               <span>Chờ CSKH</span>
@@ -426,6 +407,7 @@ export default function InboxPage() {
               onClick={() => {
                 setActiveTab('HUMAN_CS_ACTIVE');
                 setCasePage(1);
+                updateUrl({ status: 'HUMAN_CS_ACTIVE', page: 1 });
               }}
             >
               <span>Đang CSKH</span>
@@ -442,6 +424,7 @@ export default function InboxPage() {
               onClick={() => {
                 setActiveTab('RESOLVED');
                 setCasePage(1);
+                updateUrl({ status: 'RESOLVED', page: 1 });
               }}
             >
               <span>Đã đóng</span>
@@ -455,21 +438,23 @@ export default function InboxPage() {
 
           <div className={styles.listScroll}>
             {isLoadingCases ? (
-              <div className={styles.empty}>Đang tải...</div>
+              <div className={styles.empty}>
+                <RefreshCw className={styles.spinIcon} style={{ display: 'inline', marginRight: 6 }} />
+                Đang tải...
+              </div>
             ) : pagedCases.length === 0 ? (
               <div className={styles.empty}>Không có case nào.</div>
             ) : (
               pagedCases.map((c) => {
                 const isUnreplied = isCaseUnreplied(c);
-                const isActive = selectedCase?.session_id === c.session_id;
                 const statusClass = STATUS_CLASS[c.status] || '';
                 return (
-                  <div
+                  <Link
                     key={c.id || c.session_id}
+                    href={`/admin/cases/${encodeURIComponent(c.session_id)}`}
                     onClick={() => handleSelectCase(c)}
-                    className={`${styles.caseItem} ${isActive ? styles.caseItemActive : ''} ${
-                      isUnreplied ? styles.caseItemUnreplied : ''
-                    }`}
+                    className={`${styles.caseItem} ${isUnreplied ? styles.caseItemUnreplied : ''}`}
+                    style={{ textDecoration: 'none', color: 'inherit' }}
                   >
                     <div className={styles.caseRow}>
                       <span className={styles.caseName}>
@@ -485,7 +470,7 @@ export default function InboxPage() {
                       {new Date(c.updated_at).toLocaleTimeString('vi-VN')}
                       {c.assigned_cs && <span> · 👨‍💼 {c.assigned_cs}</span>}
                     </div>
-                  </div>
+                  </Link>
                 );
               })
             )}
@@ -495,284 +480,33 @@ export default function InboxPage() {
               currentPage={casePage}
               pageSize={casePageSize}
               totalItems={caseTotal}
-              onPageChange={setCasePage}
-              onPageSizeChange={setCasePageSize}
+              onPageChange={(p) => {
+                setCasePage(p);
+                updateUrl({ page: p });
+              }}
+              onPageSizeChange={(s) => {
+                setCasePageSize(s);
+                setCasePage(1);
+                updateUrl({ limit: s, page: 1 });
+              }}
             />
           </div>
         </div>
 
-        {/* Chat area - right panel */}
+        {/* Empty chat - right panel (placeholder) */}
         <div className={styles.chatPanel}>
-          {!selectedCase ? (
-            <div className={styles.emptyChat}>
-              <div className={styles.emptyChatIcon}>💬</div>
-              <h3 className={styles.emptyChatTitle}>
-                Chọn một case bên trái để xem hội thoại
-              </h3>
-              <p className={styles.emptyChatDesc}>
-                Các câu hỏi khách hỏi mà AI chưa có dữ liệu sẽ tự động xuất hiện ở đây.
-              </p>
+          <div className={styles.emptyChat}>
+            <div className={styles.emptyChatIcon}>
+              <MessageCircle size={32} />
             </div>
-          ) : (
-            <>
-              {/* Detail Header */}
-              <div className={styles.detailHeader}>
-                <div className={styles.detailTitle}>
-                  <div>
-                    <span className={styles.detailName}>{selectedCase.customer_name}</span>
-                    {selectedCase.customer_phone && (
-                      <span className={styles.phonePill}>
-                        📱 {selectedCase.customer_phone}
-                      </span>
-                    )}
-                  </div>
-                  {attachedTags.length > 0 && (
-                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
-                      {attachedTags.map((t) => (
-                        <span
-                          key={t.id}
-                          style={{
-                            background: `${t.color || '#6366f1'}22`,
-                            color: t.color || '#6366f1',
-                            border: `1px solid ${t.color || '#6366f1'}66`,
-                            borderRadius: '12px',
-                            padding: '2px 8px',
-                            fontSize: '11px',
-                            fontWeight: 700,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                          }}
-                        >
-                          {t.tag_name}
-                          <X
-                            size={12}
-                            style={{ cursor: 'pointer', opacity: 0.8 }}
-                            onClick={async () => {
-                              try {
-                                await detachTagMutation.mutateAsync({
-                                  sessionId: selectedCase.session_id,
-                                  tagId: t.tag_id,
-                                });
-                                addToast({ title: 'Đã gỡ tag', variant: 'success' });
-                              } catch (err: any) {
-                                addToast({ title: err.message || 'Lỗi gỡ tag', variant: 'error' });
-                              }
-                            }}
-                          />
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div className={styles.detailSession}>
-                  Mã phiên: <code>{selectedCase.session_id}</code>
-                </div>
-
-                <div className={styles.actionBtnGroup}>
-                  {/* Tag Button & Popover */}
-                  <div style={{ position: 'relative' }}>
-                    <button
-                      onClick={() => setShowTagPicker(!showTagPicker)}
-                      className={styles.secondaryBtn}
-                      style={{
-                        background: showTagPicker ? 'rgba(99,102,241,0.2)' : undefined,
-                        borderColor: showTagPicker ? '#6366f1' : undefined,
-                      }}
-                    >
-                      <TagIcon size={14} />
-                      <span>Tag ({attachedTags.length})</span>
-                    </button>
-
-                    {showTagPicker && (
-                      <div
-                        style={{
-                          position: 'absolute',
-                          top: '100%',
-                          right: 0,
-                          marginTop: '6px',
-                          background: '#0f172a',
-                          border: '1px solid rgba(255,255,255,0.15)',
-                          borderRadius: '10px',
-                          padding: '10px',
-                          width: '220px',
-                          zIndex: 100,
-                          boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: '12px',
-                            fontWeight: 700,
-                            color: '#94a3b8',
-                            marginBottom: '8px',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                          }}
-                        >
-                          <span>Gắn / Gỡ Tag</span>
-                          <X
-                            size={14}
-                            style={{ cursor: 'pointer' }}
-                            onClick={() => setShowTagPicker(false)}
-                          />
-                        </div>
-
-                        {allTags.length === 0 ? (
-                          <div style={{ fontSize: '12px', color: '#64748b', textAlign: 'center', padding: '12px 0' }}>
-                            Chưa có tag nào.
-                          </div>
-                        ) : (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto' }}>
-                            {allTags.map((tag) => {
-                              const isAttached = attachedTags.some((at) => at.tag_id === tag.id);
-                              return (
-                                <button
-                                  key={tag.id}
-                                  onClick={async () => {
-                                    try {
-                                      if (isAttached) {
-                                        await detachTagMutation.mutateAsync({
-                                          sessionId: selectedCase.session_id,
-                                          tagId: tag.id,
-                                        });
-                                        addToast({ title: `Đã gỡ tag [${tag.name}]`, variant: 'success' });
-                                      } else {
-                                        await attachTagMutation.mutateAsync({
-                                          sessionId: selectedCase.session_id,
-                                          tagId: tag.id,
-                                        });
-                                        addToast({ title: `Đã gắn tag [${tag.name}]`, variant: 'success' });
-                                      }
-                                    } catch (err: any) {
-                                      addToast({ title: err.message || 'Thao tác tag thất bại', variant: 'error' });
-                                    }
-                                  }}
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    padding: '6px 10px',
-                                    borderRadius: '6px',
-                                    border: '1px solid rgba(255,255,255,0.06)',
-                                    background: isAttached ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.03)',
-                                    cursor: 'pointer',
-                                    fontSize: '12px',
-                                    color: '#fff',
-                                    transition: 'all 0.15s',
-                                  }}
-                                >
-                                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <span
-                                      style={{
-                                        width: '8px',
-                                        height: '8px',
-                                        borderRadius: '50%',
-                                        background: tag.color,
-                                        display: 'inline-block',
-                                      }}
-                                    />
-                                    {tag.name}
-                                  </span>
-                                  {isAttached && <span style={{ color: '#6366f1', fontWeight: 700 }}>✓</span>}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {selectedCase.status !== 'HUMAN_CS_ACTIVE' && (
-                    <button
-                      onClick={handleTakeCase}
-                      disabled={takeCaseMutation.isPending}
-                      className={styles.primaryBtn}
-                    >
-                      <UserCheck size={14} />
-                      <span>Tiếp Nhận</span>
-                    </button>
-                  )}
-                  <button onClick={openResolveModal} className={styles.secondaryBtn}>
-                    <CheckCircle2 size={14} />
-                    <span>Đóng Case</span>
-                  </button>
-                  <button
-                    onClick={() => handleDeleteCase(selectedCase.session_id)}
-                    className={styles.deleteBtn}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Messages */}
-              <div ref={chatContainerRef} className={styles.messages}>
-                {caseMessages.map((m, idx) => {
-                  const isGuest = m.sender_type === 'guest';
-                  const isCS = m.sender_type === 'cs' || m.sender_type === 'human_cs';
-                  const rowClass = isGuest ? styles.guest : styles.cs;
-                  const bubbleClass = isGuest
-                    ? styles.guestBubble
-                    : isCS
-                      ? styles.csBubble
-                      : styles.aiBubble;
-                  return (
-                    <div key={m.id || idx} className={`${styles.msgRow} ${rowClass}`}>
-                      <div className={styles.msgMeta}>
-                        {isGuest
-                          ? `👤 ${selectedCase.customer_name}`
-                          : isCS
-                            ? '👨‍💼 CSKH'
-                            : '🤖 AI'}
-                        {' · '}
-                        {new Date(m.created_at).toLocaleTimeString('vi-VN', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </div>
-                      <div className={`${styles.msgBubble} ${bubbleClass}`}>
-                        {isGuest ? (
-                          <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{m.content}</p>
-                        ) : (
-                          <MarkdownRenderer content={m.content} />
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-                <div ref={messagesEndRef} />
-              </div>
-
-              {/* Reply Box */}
-              <form onSubmit={handleSendReply} className={styles.replyForm}>
-                <div className={styles.replyRow}>
-                  <textarea
-                    rows={2}
-                    value={replyText}
-                    onChange={(e) => setReplyText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSendReply(e);
-                      }
-                    }}
-                    placeholder="Nhập tin nhắn phản hồi... (Enter để gửi)"
-                    className={styles.replyInput}
-                  />
-                  <button
-                    type="submit"
-                    disabled={!replyText.trim() || isSendingReply}
-                    className={styles.replySend}
-                  >
-                    <Send size={16} />
-                  </button>
-                </div>
-              </form>
-            </>
-          )}
+            <h3 className={styles.emptyChatTitle}>
+              Chọn một case bên trái để bắt đầu hỗ trợ khách hàng
+            </h3>
+            <p className={styles.emptyChatDesc}>
+              Khi AI không thể trả lời, case sẽ tự động xuất hiện ở đây.
+              Click vào một case để mở khung chat với WebSocket realtime.
+            </p>
+          </div>
         </div>
       </div>
 
@@ -810,63 +544,6 @@ export default function InboxPage() {
                   </div>
                 ))
               )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Resolve Case Modal */}
-      {showResolveModal && selectedCase && (
-        <div className={styles.modalBackdrop} onClick={() => setShowResolveModal(false)}>
-          <div className={styles.resolveModal} onClick={(e) => e.stopPropagation()}>
-            <h3 className={styles.resolveTitle}>🎯 Đóng & Giải Quyết Ca Hỗ Trợ</h3>
-
-            <label className={styles.resolveToggle}>
-              <input
-                type="checkbox"
-                checked={modalEnableLearn}
-                onChange={(e) => setModalEnableLearn(e.target.checked)}
-              />
-              <span style={{ fontSize: '0.875rem', color: 'inherit' }}>Trích xuất Q&A để dạy AI</span>
-            </label>
-
-            {modalEnableLearn && (
-              <div className={styles.pairList}>
-                {modalQAPairs.map((pair, idx) => (
-                  <div key={idx} className={styles.pairCard}>
-                    <div className={`${styles.pairLabel} ${styles.pairQ}`}>❓ Câu hỏi:</div>
-                    <div className={styles.pairText}>{pair.question}</div>
-                    <div className={`${styles.pairLabel} ${styles.pairA}`}>💡 Câu trả lời:</div>
-                    <div className={`${styles.pairText} ${styles.pairAnswer}`}>
-                      {pair.answer}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <textarea
-              rows={2}
-              value={resolveNote}
-              onChange={(e) => setResolveNote(e.target.value)}
-              placeholder="Ghi chú giải quyết (tùy chọn)..."
-              className={styles.resolveNote}
-            />
-
-            <div className={styles.resolveActions}>
-              <button
-                onClick={() => setShowResolveModal(false)}
-                className={styles.cancelBtn}
-              >
-                Hủy
-              </button>
-              <button
-                onClick={handleResolveCase}
-                disabled={resolveCaseMutation.isPending}
-                className={styles.confirmBtn}
-              >
-                {modalEnableLearn ? 'Hoàn Tất & Dạy AI' : 'Đóng Case'}
-              </button>
             </div>
           </div>
         </div>
