@@ -63,10 +63,14 @@ export default function CustomerChatPage() {
   const [isSending, setIsSending] = useState(false);
 
   const [isCallActive, setIsCallActive] = useState(false);
-  const [incomingCall, setIncomingCall] = useState<{ sender_id: string; offer: any } | null>(null);
+  const [incomingCall, setIncomingCall] = useState<{ sender_id: string; offer: any; call_id?: string } | null>(null);
   const [callStatusText, setCallStatusText] = useState('Đang kết nối...');
   const [callDuration, setCallDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
+  // Call v2: track the active call id so the customer can hangup/cancel
+  // via the new endpoints instead of the legacy `/api/voice/*` which
+  // is now deprecated (returns 410 Gone).
+  const [activeCallId, setActiveCallId] = useState<string | null>(null);
 
   const wsRef = useRef<WSClient | null>(null);
   const rtcRef = useRef<WebRTCManager | null>(null);
@@ -240,6 +244,29 @@ export default function CustomerChatPage() {
     setCallDuration(0);
     clearInterval(callTimerRef.current);
 
+    // 1. Enqueue into Call v2 — the backend will pop from the Redis
+    //    queue, reserve an AVAILABLE agent, and emit `incoming_call` to
+    //    that agent's WS channel (mirrored to admin_inbox by the hub).
+    //    Without this step no admin would ever see a ringing banner.
+    try {
+      const { api } = await import('@/lib/api');
+      const result = await api.requestCall({
+        customerId: guest.session_id,
+        idempotencyKey: guest.session_id + ':' + Date.now(),
+      });
+      // Track the call id so we can cancel/hangup via the v2 endpoints.
+      // Without this the customer would have to fall back to the legacy
+      // `/api/voice/end` endpoint which is now 410 Gone.
+      if (result?.call_id) {
+        setActiveCallId(result.call_id);
+      }
+    } catch (err) {
+      console.error('[call] RequestCall failed, falling back to peer-to-peer', err);
+    }
+
+    // 2. Legacy WebRTC peer-to-peer path so the page behaves identically
+    //    when Asterisk isn't reachable. The backend deduplicates via the
+    //    idempotency key above.
     const rtc = new WebRTCManager(
       wsRef.current,
       guest.session_id,
@@ -280,19 +307,44 @@ export default function CustomerChatPage() {
 
   const handleEndCall = async (broadcast = true) => {
     const finalDuration = callDuration;
+    const callIdToEnd = activeCallId;
     setIsCallActive(false);
     setIncomingCall(null);
     clearInterval(callTimerRef.current);
     setCallDuration(0);
+    setActiveCallId(null);
     if (rtcRef.current) {
       try { await rtcRef.current.endCall(false, finalDuration); } catch (_) {}
       rtcRef.current = null;
     }
-    // Call API to end call record
-    try {
-      const { api } = await import('@/lib/api');
-      await api.endCall(guest?.session_id || '', finalDuration);
-    } catch (_) {}
+    // Call v2: hit the cancel/hangup endpoint if we have a tracked
+    // call id. Without this the customer's "End" button would call the
+    // legacy /api/voice/end which is now 410 Gone.
+    if (callIdToEnd && guest?.session_id) {
+      try {
+        const { api } = await import('@/lib/api');
+        // Try cancel first (only valid while still in queue); the backend
+        // returns 409 INVALID_TRANSITION once we are past WAITING_AGENT,
+        // at which point we fall back to hangup.
+        try {
+          await api.cancelCall(callIdToEnd, guest.session_id);
+        } catch (_) {
+          await api.hangupCall(callIdToEnd).catch(() => {});
+        }
+      } catch (err) {
+        console.error('[call] end-call API failed', err);
+      }
+    }
+    // Broadcast legacy end event so the WS layer (still tied to the
+    // old voice pipeline for backwards compat) can notify the agent's
+    // session and the admin inbox that the call is over. broadcast
+    // = false skips this (used by the auto-end when the WS drops).
+    if (broadcast) {
+      try {
+        const { api } = await import('@/lib/api');
+        await api.endCall(guest?.session_id || '', finalDuration).catch(() => {});
+      } catch (_) {}
+    }
   };
 
   const handleAnswerCall = async () => {
@@ -326,6 +378,9 @@ export default function CustomerChatPage() {
 
   const handleDeclineCall = async () => {
     setIncomingCall(null);
+    // If we are declining an incoming call from the agent (legacy
+    // WebRTC offer path), no call was created server-side — so there's
+    // nothing to cancel. Just notify the peer via the legacy voice API.
     try {
       const { api } = await import('@/lib/api');
       await api.declineCall(guest?.session_id || '');

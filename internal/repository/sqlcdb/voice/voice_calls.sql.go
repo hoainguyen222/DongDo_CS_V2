@@ -61,19 +61,6 @@ const deleteCall = `-- name: DeleteCall :exec
 DELETE FROM voice_calls WHERE id = $1
 `
 
-const markMissedCall = `-- name: MarkMissedCall :exec
-UPDATE voice_calls
-SET status = 'MISSED'::call_status,
-    duration_seconds = 0,
-    ended_at         = NOW()
-WHERE id = $1
-`
-
-func (q *Queries) MarkMissedCall(ctx context.Context, id int64) error {
-	_, err := q.db.Exec(ctx, markMissedCall, id)
-	return err
-}
-
 func (q *Queries) DeleteCall(ctx context.Context, id int64) error {
 	_, err := q.db.Exec(ctx, deleteCall, id)
 	return err
@@ -101,7 +88,10 @@ func (q *Queries) EndCall(ctx context.Context, arg EndCallParams) error {
 
 const getCallByID = `-- name: GetCallByID :one
 SELECT id, session_id, caller_type, caller_id, callee_type, callee_id,
-       status, duration_seconds, recording_url, transcript, created_at, ended_at
+       COALESCE(status,
+                CASE WHEN ended_at IS NULL THEN 'IN_PROGRESS'::call_status
+                     ELSE 'ENDED'::call_status END) AS status,
+       duration_seconds, recording_url, transcript, created_at, ended_at
 FROM voice_calls
 WHERE id = $1
 `
@@ -128,7 +118,10 @@ func (q *Queries) GetCallByID(ctx context.Context, id int64) (VoiceCall, error) 
 
 const getCallsBySession = `-- name: GetCallsBySession :many
 SELECT id, session_id, caller_type, caller_id, callee_type, callee_id,
-       status, duration_seconds, recording_url, transcript, created_at, ended_at
+       COALESCE(status,
+                CASE WHEN ended_at IS NULL THEN 'IN_PROGRESS'::call_status
+                     ELSE 'ENDED'::call_status END) AS status,
+       duration_seconds, recording_url, transcript, created_at, ended_at
 FROM voice_calls
 WHERE session_id = $1
 ORDER BY created_at DESC
@@ -169,7 +162,10 @@ func (q *Queries) GetCallsBySession(ctx context.Context, sessionID string) ([]Vo
 
 const listAllCalls = `-- name: ListAllCalls :many
 SELECT id, session_id, caller_type, caller_id, callee_type, callee_id,
-       status, duration_seconds, recording_url, transcript, created_at, ended_at
+       COALESCE(status,
+                CASE WHEN ended_at IS NULL THEN 'IN_PROGRESS'::call_status
+                     ELSE 'ENDED'::call_status END) AS status,
+       duration_seconds, recording_url, transcript, created_at, ended_at
 FROM voice_calls
 ORDER BY created_at DESC
 LIMIT 100
@@ -206,6 +202,19 @@ func (q *Queries) ListAllCalls(ctx context.Context) ([]VoiceCall, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const markMissedCall = `-- name: MarkMissedCall :exec
+UPDATE voice_calls
+SET status = 'MISSED'::call_status,
+    duration_seconds = 0,
+    ended_at         = NOW()
+WHERE id = $1
+`
+
+func (q *Queries) MarkMissedCall(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, markMissedCall, id)
+	return err
 }
 
 const setCallTranscript = `-- name: SetCallTranscript :exec

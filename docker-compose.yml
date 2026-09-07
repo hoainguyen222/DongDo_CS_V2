@@ -76,6 +76,17 @@ services:
       LLM_MODEL: "${LLM_MODEL:-claude-haiku-4-5-20251001}"
       LLM_TEMPERATURE: "0.1"
       DOCUMENTS_DIR: "/app/tailieu"
+
+      # Call v2: Asterisk ARI
+      ASTERISK_ARI_URL: "http://asterisk:8088/ari"
+      ASTERISK_ARI_USER: "callservice"
+      ASTERISK_ARI_PASSWORD: "callsecret"
+      ASTERISK_ARI_APP: "callapp"
+      ASTERISK_RECORDING_ENABLED: "false"
+      CALL_AGENT_RING_TIMEOUT: "30s"
+      CALL_MAX_DURATION: "30m"
+      CALL_QUEUE_TTL: "10m"
+      CALL_RECONCILE_INTERVAL: "30s"
     volumes:
       - ./recordings:/app/recordings
       - ./tailieu:/app/tailieu
@@ -86,8 +97,88 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_started
+      asterisk:
+        condition: service_started
+
+  # 5. Asterisk (Call v2 — SIP/WSS + WebRTC media plane)
+  # ------------------------------------------------------------
+  # The `andrius/asterisk:18` image only publishes a linux/amd64
+  # manifest. On Apple Silicon (M1/M2/M3) Docker can't pull it under
+  # the host's native linux/arm64/v8 architecture — pulling fails with:
+  #   "no matching manifest for linux/arm64/v8 in the manifest list
+  #    entries: no match for platform in manifest: not found".
+  # Forcing linux/amd64 here makes the daemon run the image under
+  # Rosetta/ emulation, which is fine for a dev/demo stack on macOS.
+  # ------------------------------------------------------------
+  asterisk:
+    image: andrius/asterisk:18
+    platform: linux/amd64
+    container_name: dongdo_asterisk
+    restart: unless-stopped
+    ports:
+      - "5060:5060/udp"   # SIP UDP
+      - "5060:5060/tcp"   # SIP TCP
+      - "5061:5061/tcp"   # SIP WSS
+      - "8088:8088"       # ARI HTTP + WS
+    environment:
+      ASTERISK_ARI_USER: "callservice"
+      ASTERISK_ARI_PASSWORD: "callsecret"
+    volumes:
+      # Mount each file individually so the image's default /etc/asterisk
+      # config (acl.conf, manager.conf, modules.conf default, etc.) is NOT
+      # wiped. When a whole directory is bind-mounted, Docker hides every
+      # file the image had in that directory — including modules.conf,
+      # which is what was causing the container to exit with:
+      #   "loader.c:2394 loader_config_init: 'modules.conf' invalid or missing."
+      - ./internal/infrastructure/asterisk/dialplan/extensions.conf:/etc/asterisk/extensions.conf:ro
+      - ./internal/infrastructure/asterisk/dialplan/pjsip.conf:/etc/asterisk/pjsip.conf:ro
+      - ./internal/infrastructure/asterisk/dialplan/http.conf:/etc/asterisk/http.conf:ro
+      - ./internal/infrastructure/asterisk/dialplan/modules.conf:/etc/asterisk/modules.conf:ro
+      - ./internal/infrastructure/asterisk/dialplan/logger.conf:/etc/asterisk/logger.conf:ro
+      - asterisk_sounds:/var/lib/asterisk/sounds
+      - asterisk_recordings:/var/spool/asterisk/recordings
+    command: >
+      sh -c "asterisk -f -vvv -dddddd -U asterisk -G asterisk"
+
+  # 6. Next.js Web (Admin Studio + Guest Portal)
+  # ------------------------------------------------------------
+  # Built via Dockerfile.web (multi-stage, Next.js standalone output).
+  # Exposes the UI on host port 3000. Server-side rewrites in
+  # web/next.config.js proxy /api /auth /guest /history /chat /static /ws
+  # to the backend service on the compose network.
+  # ------------------------------------------------------------
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        # Build arg baked into the standalone bundle. Must be the compose
+        # service name `server` so the Next process can reach the backend
+        # over the shared docker network.
+        NEXT_PUBLIC_API_BASE: "http://server:8080"
+    image: dongdo-web:latest
+    container_name: dongdo_web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: "production"
+      # Runtime override (used by client-side fetches that bypass the
+      # Next.js rewrite). Keep in sync with the build-arg above.
+      NEXT_PUBLIC_API_BASE: "http://server:8080"
+      # Mirror the public admin path so the middleware redirect logic
+      # stays consistent between dev (NEXT_PUBLIC_ADMIN_PATH=/admin) and
+      # the bundled build.
+      NEXT_PUBLIC_ADMIN_PATH: "${NEXT_PUBLIC_ADMIN_PATH:-/admin}"
+    depends_on:
+      server:
+        condition: service_started
+    networks:
+      - default
 
 volumes:
   pgdata:
   redisdata:
   qdrantdata:
+  asterisk_sounds:
+  asterisk_recordings:

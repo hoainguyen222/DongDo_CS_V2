@@ -55,6 +55,22 @@ type CaseRepository interface {
 	Resolve(ctx context.Context, sessionID, csUsername, resolutionNote string) error
 	Delete(ctx context.Context, sessionID string) error
 	DeleteAll(ctx context.Context) error
+
+	// ListPage returns a paginated slice of cases with optional status
+	// filtering and an OR-of-LIKE search across customer_name, customer_phone,
+	// session_id, and last_message. The bool returned is true when a search
+	// query was applied (so the count query can match).
+	ListPage(ctx context.Context, params ListCasesParams) ([]*ChatCase, int64, error)
+}
+
+// ListCasesParams drives CaseRepository.ListPage. Zero Page/PageSize fall
+// back to safe defaults (page=1, pageSize=20). PageSize is clamped server
+// side to [1, 100] so a misbehaving client can't ask for the whole table.
+type ListCasesParams struct {
+	Page     int
+	PageSize int
+	Status   CaseStatus // empty = no filter
+	Search   string     // empty = no search
 }
 
 type LearningRepository interface {
@@ -93,11 +109,11 @@ type AnalyticsRepository interface {
 // ============================================================
 
 type KnowledgeDocument struct {
-	ID        string                 `json:"id"`
-	Content   string                 `json:"content"`
-	Score     float32                `json:"score"`
-	Source    string                 `json:"source"`
-	Metadata  map[string]interface{} `json:"metadata"`
+	ID       string                 `json:"id"`
+	Content  string                 `json:"content"`
+	Score    float32                `json:"score"`
+	Source   string                 `json:"source"`
+	Metadata map[string]interface{} `json:"metadata"`
 }
 
 type VectorStore interface {
@@ -158,7 +174,7 @@ type PartnerRepository interface {
 	GetDashboardKpi(ctx context.Context, startDate, endDate time.Time) (*DashboardKpiSummary, error)
 	GetDashboardAutomationTrend(ctx context.Context, startDate, endDate time.Time) ([]*DashboardAutomationTrendDaily, error)
 	GetRecentCompletedChats(ctx context.Context, limit, offset int) ([]*ChatCase, error)
-	
+
 	// Quick Templates
 	ListQuickTemplates(ctx context.Context) ([]*QuickTemplate, error)
 	CreateQuickTemplate(ctx context.Context, t *QuickTemplate) (*QuickTemplate, error)
@@ -190,4 +206,3 @@ type PartnerRepository interface {
 	ListSystemErrors(ctx context.Context) ([]*SystemErrorRecord, error)
 	MarkSystemErrorHandled(ctx context.Context, id string) error
 }
-

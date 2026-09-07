@@ -280,3 +280,316 @@
   background: rgba(s.$brand-navy, 0.8);
   border-radius: s.$radius-sm;
 }
+
+// ── Call Banners (Inbox/Detail page) ─────────────────────
+// These styles were originally in AdminLayout.module.scss but the banner
+// components (IncomingCallBanner, ActiveCallBar, TeamAgentGuestCallBanner)
+// are exported from AdminSidebar.tsx and use `styles.*` from THIS module.
+// CSS Modules are scoped per file, so we replicate the styles here to
+// avoid a silent styling regression where className={styles.callBanner}
+// resolves to undefined and the banner renders as plain unstyled markup.
+
+// Incoming call (ringing)
+.callBanner {
+  position: fixed;
+  top: s.$space-6;
+  right: s.$space-6;
+  z-index: 70;
+  background: linear-gradient(135deg, rgba(s.$brand-navy, 0.85) 0%, rgba(s.$brand-navy-light, 0.85) 100%);
+  backdrop-filter: blur(16px);
+  padding: s.$space-4;
+  border-radius: s.$radius-xl;
+  border: 2px solid s.$accent-red;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  gap: s.$space-4;
+  animation: pulseDot 2s ease-in-out infinite;
+  max-width: 90vw;
+}
+
+.callBannerIcon {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 9999px;
+  background-color: s.$accent-red;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  animation: pulseDot 1s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.callBannerText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.callBannerLabel {
+  font-size: s.$text-xs;
+  font-weight: 600;
+  color: s.$accent-red;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.callBannerCaller {
+  font-size: s.$text-sm;
+  font-weight: 700;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+}
+
+.callBannerActions {
+  display: flex;
+  align-items: center;
+  gap: s.$space-2;
+  flex-shrink: 0;
+}
+
+.callAcceptBtn {
+  padding: 6px 10px;
+  border-radius: s.$radius-md;
+  background: s.$accent-green;
+  color: #fff;
+  font-size: s.$text-xs;
+  font-weight: 600;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: s.$space-1;
+  transition: filter s.$transition-fast;
+  cursor: pointer;
+
+  &:hover {
+    filter: brightness(1.08);
+  }
+}
+
+.callDeclineBtn {
+  padding: 6px;
+  border-radius: s.$radius-md;
+  background: rgba(s.$brand-red, 0.6);
+  color: #fff;
+  font-size: s.$text-xs;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: filter s.$transition-fast;
+  cursor: pointer;
+
+  &:hover {
+    filter: brightness(1.1);
+  }
+}
+
+// Active call bar (after answer)
+.activeCallBar {
+  position: fixed;
+  bottom: s.$space-6;
+  right: s.$space-6;
+  z-index: 70;
+  background: linear-gradient(135deg, rgba(s.$brand-navy, 0.85) 0%, rgba(s.$brand-navy-light, 0.85) 100%);
+  backdrop-filter: blur(16px);
+  padding: s.$space-4;
+  border-radius: s.$radius-xl;
+  border: 1px solid rgba(s.$accent-green, 0.3);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  gap: s.$space-3;
+}
+
+.activeCallIcon {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 9999px;
+  background: rgba(s.$accent-green, 0.3);
+  border: 1px solid s.$accent-green;
+  color: s.$accent-green;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: pulseDot 1s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.activeCallText {
+  display: flex;
+  flex-direction: column;
+}
+
+.activeCallLabel {
+  font-size: s.$text-xs;
+  color: s.$text-muted;
+}
+
+.activeCallDuration {
+  font-size: s.$text-sm;
+  font-weight: 700;
+  color: s.$accent-green;
+}
+
+.activeCallBtn {
+  padding: 6px 10px;
+  border-radius: s.$radius-md;
+  background: rgba(30, 41, 59, 0.8);
+  color: s.$text-muted;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background s.$transition-fast;
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(51, 65, 85, 0.9);
+  }
+}
+
+.endCallBtn {
+  padding: 6px 10px;
+  border-radius: s.$radius-md;
+  background: s.$accent-red;
+  color: #fff;
+  font-size: s.$text-xs;
+  font-weight: 600;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: s.$space-1;
+  transition: filter s.$transition-fast;
+  cursor: pointer;
+
+  &:hover {
+    filter: brightness(1.08);
+  }
+}
+
+// Team Agent Guest Call banner
+.teamAgentBanner {
+  position: fixed;
+  bottom: s.$space-6;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 70;
+  background: linear-gradient(135deg, rgba(s.$brand-navy, 0.95) 0%, rgba(s.$brand-navy-light, 0.9) 100%);
+  backdrop-filter: blur(16px);
+  padding: s.$space-4;
+  border-radius: s.$radius-xl;
+  border: 2px solid s.$accent-cyan;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  gap: s.$space-4;
+  max-width: 90vw;
+
+  @media (min-width: s.$breakpoint-md) {
+    left: s.$space-6;
+    transform: none;
+    max-width: 420px;
+  }
+}
+
+.teamAgentIcon {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, s.$accent-cyan, s.$accent-blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.teamAgentText {
+  flex: 1;
+  min-width: 0;
+}
+
+.teamAgentLabel {
+  font-size: s.$text-xs;
+  font-weight: 600;
+  color: s.$accent-cyan;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.teamAgentGuest {
+  font-size: s.$text-sm;
+  font-weight: 700;
+  color: #fff;
+  margin-top: 2px;
+}
+
+.teamAgentSession {
+  font-size: 11px;
+  color: s.$text-muted;
+  margin-top: 2px;
+  font-family: monospace;
+}
+
+.teamAgentActions {
+  display: flex;
+  align-items: center;
+  gap: s.$space-2;
+  flex-shrink: 0;
+}
+
+.teamAgentBtn {
+  padding: 6px 10px;
+  border-radius: s.$radius-md;
+  background: s.$accent-cyan;
+  color: #fff;
+  font-size: s.$text-xs;
+  font-weight: 600;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: s.$space-1;
+  transition: filter s.$transition-fast;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:hover {
+    filter: brightness(1.1);
+  }
+}
+
+.teamAgentDismissBtn {
+  padding: 6px;
+  border-radius: s.$radius-md;
+  background: rgba(100, 116, 139, 0.5);
+  color: #fff;
+  font-size: s.$text-xs;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background s.$transition-fast;
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(100, 116, 139, 0.8);
+  }
+}
+
+// pulseDot keyframes (shared with AdminLayout) — duplicated here so the
+// banner animation works even when AdminLayout.scss is not in scope.
+@keyframes pulseDot {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.05);
+  }
+}

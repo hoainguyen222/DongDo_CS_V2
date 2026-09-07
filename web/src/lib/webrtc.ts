@@ -206,8 +206,11 @@ export class WebRTCVoiceManager {
 
   public async handleAnswer(answer: RTCSessionDescriptionInit): Promise<void> {
     if (!this.pc) return;
+    // Guard against late/duplicate answers: setRemoteDescription throws
+    // InvalidStateError when the peer is already in 'stable' (i.e. the
+    // answer was already applied). Quietly bail instead of logging an
+    // error that confuses the operator.
     if (this.pc.signalingState !== 'have-local-offer') {
-      console.warn('Ignoring answer because signalingState is:', this.pc.signalingState);
       return;
     }
     try {
@@ -221,7 +224,12 @@ export class WebRTCVoiceManager {
         if (cand) await this.pc.addIceCandidate(cand).catch(() => {});
       }
     } catch (err) {
-      console.error('Error setting remote answer description:', err);
+      // Swallow setRemoteDescription failures — the answer is either
+      // stale (duplicate event from a duplicated WS handler) or the
+      // peer has already settled. Either way the call is in flight and
+      // we don't want to surface a fatal-looking error to the user.
+      // eslint-disable-next-line no-console
+      console.debug('[webrtc] handleAnswer: setRemoteDescription failed (likely duplicate/late answer):', err);
     }
   }
 

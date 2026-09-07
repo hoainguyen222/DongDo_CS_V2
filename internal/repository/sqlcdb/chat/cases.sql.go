@@ -29,6 +29,39 @@ func (q *Queries) AssignCase(ctx context.Context, arg AssignCaseParams) error {
 	return err
 }
 
+const countCases = `-- name: CountCases :one
+SELECT COUNT(*)::bigint FROM chat_cases
+WHERE ($1::text = '' OR status::text = $1)
+`
+
+func (q *Queries) CountCases(ctx context.Context, dollar_1 string) (int64, error) {
+	row := q.db.QueryRow(ctx, countCases, dollar_1)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const countCasesSearch = `-- name: CountCasesSearch :one
+SELECT COUNT(*)::bigint FROM chat_cases
+WHERE ($1::text = '' OR status::text = $1)
+  AND (LOWER(customer_name)  LIKE '%' || LOWER($2) || '%'
+    OR LOWER(customer_phone) LIKE '%' || $2          || '%'
+    OR LOWER(session_id)     LIKE '%' || LOWER($2) || '%'
+    OR LOWER(COALESCE(last_message, '')) LIKE '%' || LOWER($2) || '%')
+`
+
+type CountCasesSearchParams struct {
+	Column1 string `json:"column_1"`
+	Lower   string `json:"lower"`
+}
+
+func (q *Queries) CountCasesSearch(ctx context.Context, arg CountCasesSearchParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countCasesSearch, arg.Column1, arg.Lower)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const deleteAllCases = `-- name: DeleteAllCases :exec
 DELETE FROM chat_cases
 `
@@ -302,6 +335,70 @@ func (q *Queries) ListCasesByStatus(ctx context.Context, dollar_1 domain.CaseSta
 	return items, nil
 }
 
+const listCasesPage = `-- name: ListCasesPage :many
+SELECT id, session_id, guest_id, customer_name, customer_phone,
+       status, assigned_cs, last_message, resolution_note, created_at, updated_at
+FROM chat_cases
+WHERE ($1::text = '' OR status::text = $1)
+ORDER BY updated_at DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListCasesPageParams struct {
+	Column1 string `json:"column_1"`
+	Limit   int32  `json:"limit"`
+	Offset  int32  `json:"offset"`
+}
+
+type ListCasesPageRow struct {
+	ID             int64             `json:"id"`
+	SessionID      string            `json:"session_id"`
+	GuestID        pgtype.UUID       `json:"guest_id"`
+	CustomerName   string            `json:"customer_name"`
+	CustomerPhone  string            `json:"customer_phone"`
+	Status         domain.CaseStatus `json:"status"`
+	AssignedCs     pgtype.Text       `json:"assigned_cs"`
+	LastMessage    pgtype.Text       `json:"last_message"`
+	ResolutionNote pgtype.Text       `json:"resolution_note"`
+	CreatedAt      time.Time         `json:"created_at"`
+	UpdatedAt      time.Time         `json:"updated_at"`
+}
+
+// Paginated variant used by HandleListCases so we never load the full table
+// into Go memory before slicing. The shape is identical to ListCases; only
+// LIMIT/OFFSET differs. statusFilter empty string means "any status".
+func (q *Queries) ListCasesPage(ctx context.Context, arg ListCasesPageParams) ([]ListCasesPageRow, error) {
+	rows, err := q.db.Query(ctx, listCasesPage, arg.Column1, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCasesPageRow{}
+	for rows.Next() {
+		var i ListCasesPageRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SessionID,
+			&i.GuestID,
+			&i.CustomerName,
+			&i.CustomerPhone,
+			&i.Status,
+			&i.AssignedCs,
+			&i.LastMessage,
+			&i.ResolutionNote,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const resolveCase = `-- name: ResolveCase :exec
 UPDATE chat_cases
 SET status = 'RESOLVED'::case_status,
@@ -320,6 +417,80 @@ type ResolveCaseParams struct {
 func (q *Queries) ResolveCase(ctx context.Context, arg ResolveCaseParams) error {
 	_, err := q.db.Exec(ctx, resolveCase, arg.AssignedCs, arg.ResolutionNote, arg.SessionID)
 	return err
+}
+
+const searchCasesPage = `-- name: SearchCasesPage :many
+SELECT id, session_id, guest_id, customer_name, customer_phone,
+       status, assigned_cs, last_message, resolution_note, created_at, updated_at
+FROM chat_cases
+WHERE ($1::text = '' OR status::text = $1)
+  AND (LOWER(customer_name)  LIKE '%' || LOWER($4) || '%'
+    OR LOWER(customer_phone) LIKE '%' || $4          || '%'
+    OR LOWER(session_id)     LIKE '%' || LOWER($4) || '%'
+    OR LOWER(COALESCE(last_message, '')) LIKE '%' || LOWER($4) || '%')
+ORDER BY updated_at DESC
+LIMIT $2 OFFSET $3
+`
+
+type SearchCasesPageParams struct {
+	Column1 string `json:"column_1"`
+	Limit   int32  `json:"limit"`
+	Offset  int32  `json:"offset"`
+	Lower   string `json:"lower"`
+}
+
+type SearchCasesPageRow struct {
+	ID             int64             `json:"id"`
+	SessionID      string            `json:"session_id"`
+	GuestID        pgtype.UUID       `json:"guest_id"`
+	CustomerName   string            `json:"customer_name"`
+	CustomerPhone  string            `json:"customer_phone"`
+	Status         domain.CaseStatus `json:"status"`
+	AssignedCs     pgtype.Text       `json:"assigned_cs"`
+	LastMessage    pgtype.Text       `json:"last_message"`
+	ResolutionNote pgtype.Text       `json:"resolution_note"`
+	CreatedAt      time.Time         `json:"created_at"`
+	UpdatedAt      time.Time         `json:"updated_at"`
+}
+
+// Search-and-paginate variant for HandleListCases. The OR-of-LIKE pattern
+// is acceptable for the small admin-inbox dataset; if it ever grows past
+// ~50k rows swap to a trigram index (pg_trgm).
+func (q *Queries) SearchCasesPage(ctx context.Context, arg SearchCasesPageParams) ([]SearchCasesPageRow, error) {
+	rows, err := q.db.Query(ctx, searchCasesPage,
+		arg.Column1,
+		arg.Limit,
+		arg.Offset,
+		arg.Lower,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SearchCasesPageRow{}
+	for rows.Next() {
+		var i SearchCasesPageRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SessionID,
+			&i.GuestID,
+			&i.CustomerName,
+			&i.CustomerPhone,
+			&i.Status,
+			&i.AssignedCs,
+			&i.LastMessage,
+			&i.ResolutionNote,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const upsertCase = `-- name: UpsertCase :one

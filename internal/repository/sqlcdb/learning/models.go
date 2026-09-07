@@ -12,6 +12,98 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AlertConfig struct {
+	ID             int64     `json:"id"`
+	IsEnabled      bool      `json:"is_enabled"`
+	TimeoutSeconds int32     `json:"timeout_seconds"`
+	AlertContent   string    `json:"alert_content"`
+	UpdatedBy      string    `json:"updated_by"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+type AlertEvent struct {
+	ID             int64              `json:"id"`
+	SessionID      string             `json:"session_id"`
+	TimeoutSeconds int32              `json:"timeout_seconds"`
+	TriggeredAt    time.Time          `json:"triggered_at"`
+	ResolvedAt     pgtype.Timestamptz `json:"resolved_at"`
+	IsResolved     bool               `json:"is_resolved"`
+}
+
+type Call struct {
+	ID              uuid.UUID          `json:"id"`
+	CustomerID      string             `json:"customer_id"`
+	AgentID         pgtype.Text        `json:"agent_id"`
+	Status          interface{}        `json:"status"`
+	Priority        int32              `json:"priority"`
+	RequestedAt     time.Time          `json:"requested_at"`
+	AssignedAt      pgtype.Timestamptz `json:"assigned_at"`
+	StartedAt       pgtype.Timestamptz `json:"started_at"`
+	EndedAt         pgtype.Timestamptz `json:"ended_at"`
+	DurationSeconds int32              `json:"duration_seconds"`
+	LastEventAt     time.Time          `json:"last_event_at"`
+	AriBridgeID     pgtype.Text        `json:"ari_bridge_id"`
+	FailureReason   pgtype.Text        `json:"failure_reason"`
+	CreatedAt       time.Time          `json:"created_at"`
+	UpdatedAt       time.Time          `json:"updated_at"`
+}
+
+type CallEvent struct {
+	ID         int64       `json:"id"`
+	CallID     uuid.UUID   `json:"call_id"`
+	EventType  string      `json:"event_type"`
+	Source     interface{} `json:"source"`
+	AgentID    pgtype.Text `json:"agent_id"`
+	Payload    []byte      `json:"payload"`
+	OccurredAt time.Time   `json:"occurred_at"`
+	CreatedAt  time.Time   `json:"created_at"`
+}
+
+type CallIdempotency struct {
+	IdempotencyKey string    `json:"idempotency_key"`
+	CallID         uuid.UUID `json:"call_id"`
+	ResponseBody   []byte    `json:"response_body"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+type CallParticipant struct {
+	ID            int64       `json:"id"`
+	CallID        uuid.UUID   `json:"call_id"`
+	ParticipantID string      `json:"participant_id"`
+	Role          interface{} `json:"role"`
+	Action        string      `json:"action"`
+	ActionAt      time.Time   `json:"action_at"`
+}
+
+type CallRecording struct {
+	ID           int64              `json:"id"`
+	CallID       uuid.UUID          `json:"call_id"`
+	AriRecording pgtype.Text        `json:"ari_recording"`
+	StorageUrl   pgtype.Text        `json:"storage_url"`
+	StartedAt    pgtype.Timestamptz `json:"started_at"`
+	EndedAt      pgtype.Timestamptz `json:"ended_at"`
+	State        interface{}        `json:"state"`
+}
+
+type CaseTag struct {
+	ID         int64     `json:"id"`
+	SessionID  string    `json:"session_id"`
+	TagID      int64     `json:"tag_id"`
+	AssignedBy string    `json:"assigned_by"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+type CaseTagHistory struct {
+	ID          int64     `json:"id"`
+	SessionID   string    `json:"session_id"`
+	TagID       int64     `json:"tag_id"`
+	TagName     string    `json:"tag_name"`
+	TagColor    string    `json:"tag_color"`
+	Action      string    `json:"action"`
+	PerformedBy string    `json:"performed_by"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
 type ChatCase struct {
 	ID             int64       `json:"id"`
 	SessionID      string      `json:"session_id"`
@@ -35,6 +127,17 @@ type ChatMessage struct {
 	ClientMsgID pgtype.UUID `json:"client_msg_id"`
 	IsLearned   bool        `json:"is_learned"`
 	CreatedAt   time.Time   `json:"created_at"`
+}
+
+type ChatTag struct {
+	ID          int64     `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Color       string    `json:"color"`
+	CreatedBy   string    `json:"created_by"`
+	IsActive    bool      `json:"is_active"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 type CsatFeedback struct {

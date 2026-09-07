@@ -5,7 +5,8 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { useRolePermissions, useVoiceCalls, usePendingLearning, useCases } from '@/lib/hooks/useApi';
-import { WSClient } from '@/lib/ws';
+import { useAgentHeartbeat } from '@/lib/hooks/useAgentHeartbeat';
+import { WSClient, acquireWSClient, releaseWSClient } from '@/lib/ws';
 import {
   AdminSidebar,
   useAdminWebRTC,
@@ -82,9 +83,10 @@ export default function AdminLayout({
     if (publicPath) return;
     if (!token || !user) return;
 
-    const ws = new WSClient('admin_inbox', user.username, user.role);
+    const ws = acquireWSClient('admin_inbox', user.username, user.role);
     wsRef.current = ws;
-    ws.connect();
+    // eslint-disable-next-line no-console
+    console.info('[call][ws-layout] WS client acquired', { sessionId: 'admin_inbox', user: user.username });
 
     // Invalidate relevant TanStack Query caches when the backend pushes
     // real-time events. This replaces the prior polling approach (was:
@@ -105,7 +107,9 @@ export default function AdminLayout({
     });
 
     return () => {
-      ws.disconnect();
+      // Decrement the shared WS ref-count so the underlying socket is
+      // only closed after the LAST consumer (layout or inbox/page) unmounts.
+      releaseWSClient('admin_inbox', user.username, user.role);
       wsRef.current = null;
     };
   }, [hasHydrated, publicPath, token, user?.username, user?.role, queryClient]);
@@ -122,6 +126,36 @@ export default function AdminLayout({
     handleEndCall,
     toggleMute,
   } = useAdminWebRTC(wsRef, 'admin', handleCallEnd);
+
+  // Expose the answer-by-session helper into a global window object so
+  // deep pages (/admin/inbox, /admin/calls ...) can trigger accept when
+  // the float banner has disappeared but the call is still ringing on
+  // the agent side. This avoids prop-drilling or React context wiring
+  // for a single deep-link action.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    (window as any).__adminCall = {
+      answerBySession: (sessionId: string) => {
+        const pending = useUIStore.getState().pendingCalls.find((c) => c.session_id === sessionId);
+        if (!pending) return false;
+        handleAnswerCall({
+          session_id: pending.session_id,
+          caller_id: pending.caller_id,
+          call_id: pending.call_id,
+          offer: pending.offer,
+        });
+        return true;
+      },
+    };
+    return () => {
+      if (typeof window !== 'undefined') delete (window as any).__adminCall;
+    };
+  }, [handleAnswerCall]);
+
+  // Keep this authenticated agent's AVAILABLE state fresh in Redis so the
+  // Call v2 router keeps them in the pool. Auto-AVAILABLE happens on
+  // /auth/login (server-side); this hook just refreshes the heartbeat.
+  useAgentHeartbeat({ enabled: hasHydrated && isAuthenticated && !publicPath });
 
   // Initialize team agent guest call notifications hook
   // MUST be declared before any early `return` to satisfy Rules of Hooks.

@@ -14,8 +14,10 @@ import {
   X,
   Headphones,
 } from 'lucide-react';
-import { WSClient } from '@/lib/ws';
+import { WSClient, acquireWSClient, releaseWSClient, getSharedWSClient } from '@/lib/ws';
 import { WebRTCManager } from '@/lib/webrtc';
+import { useUIStore } from '@/lib/stores/uiStore';
+import { useAuthStore } from '@/lib/stores/authStore';
 import styles from './AdminSidebar.module.scss';
 
 // ── RBAC Helpers ───────────────────────────────────────────
@@ -120,6 +122,10 @@ function NavButton({
 }
 
 // ── Call Components (kept inside this file for cohesion) ─────
+// Reads the latest pending call from the UI store. This makes the
+// banner robust against React state races: the missed-call timer clears
+// `incomingCall` (hook state) after 60s while the call is still valid,
+// but the store still has the latest entry and the banner appears.
 export function IncomingCallBanner({
   incomingCall,
   onAnswer,
@@ -129,7 +135,13 @@ export function IncomingCallBanner({
   onAnswer: () => void;
   onDecline: () => void;
 }) {
-  if (!incomingCall) return null;
+  // Subscribe to the store — when a pending call arrives, this re-renders
+  // and the banner appears. The store (pendingCalls) is the source of truth;
+  // incomingCall (hook state) can be cleared by the 60s missed-call timeout
+  // while the call is still valid, so we always prefer the store entry.
+  const pendingCalls = useUIStore((s) => s.pendingCalls);
+  const display = pendingCalls[0] || null;
+  if (!display) return null;
 
   return (
     <div className={styles.callBanner}>
@@ -138,10 +150,25 @@ export function IncomingCallBanner({
       </div>
       <div className={styles.callBannerText}>
         <div className={styles.callBannerLabel}>Cuộc gọi thoại đến!</div>
-        <div className={styles.callBannerCaller}>{incomingCall.caller_id}</div>
+        <div className={styles.callBannerCaller}>{display.caller_id}</div>
       </div>
       <div className={styles.callBannerActions}>
-        <button onClick={onAnswer} className={styles.callAcceptBtn}>
+        <button
+          onClick={() => {
+            // Re-derive the latest pending call at click-time so we never
+            // call onAnswer with a stale closure.
+            const fresh = useUIStore.getState().pendingCalls[0] || incomingCall;
+            if (!fresh) return;
+            // Populate the hook state so handleAnswerCall (which reads
+            // `incomingCall`) and the WebRTC manager both see the right
+            // session_id. The hook also accepts an override argument so
+            // we pass the fresh record through.
+            (window as any).__adminCall?.answerBySession?.(fresh.session_id) ||
+              // Fallback to legacy click handler if window bridge not set.
+              onAnswer();
+          }}
+          className={styles.callAcceptBtn}
+        >
           <Phone style={{ width: 16, height: 16 }} />
           <span>Nghe máy</span>
         </button>
@@ -452,16 +479,34 @@ export function AdminSidebar({
 // ── WebRTC Hook for Admin ───────────────────────────────────
 const MISSED_CALL_TIMEOUT = 60; // seconds before marking as missed
 
-export function useAdminWebRTC(wsRef: React.RefObject<WSClient | null>, sessionId: string, onCallEnd: () => void) {
+export function useAdminWebRTC(_wsRef: React.RefObject<WSClient | null> | null, sessionId: string, onCallEnd: () => void) {
   const rtcRef = useRef<WebRTCManager | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const callTimerRef = useRef<any>(null);
   const missedCallTimerRef = useRef<any>(null);
+  // Cleanup table for WS subscribers registered in the effect below.
+  // Without storing the unsub functions, re-renders would stack duplicate
+  // handlers (since WSClient.on keeps growing the handler Set, and the
+  // previous useEffect did not unregister). Symptom: every incoming call
+  // triggered N copies of `setIncomingCall` and `pushPendingCall` with
+  // Date.now()-based call_ids, so the float banner fought itself and the
+  // "answer" button sometimes hooked the wrong call.
+  const unsubsRef = useRef<Array<() => void>>([]);
   const [isCallActive, setIsCallActive] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
-  const [incomingCall, setIncomingCall] = useState<{ session_id: string; caller_id: string; call_id?: number; offer?: any } | null>(null);
+  const [incomingCall, setIncomingCall] = useState<{ session_id: string; caller_id: string; call_id?: string | number; offer?: any } | null>(null);
   const [isMissedCall, setIsMissedCall] = useState(false);
+
+  // The hook owns its own WS client so it does not depend on an external
+  // wsRef being populated by another useEffect — which would otherwise be
+  // a race: hook effect runs before layout's WS-setup effect, sees
+  // wsRef.current === null, early-returns and never registers handlers.
+  // We re-use the layout's wsRef if it's already there (so we don't open
+  // two sockets), otherwise we create our own.
+  const user = useAuthStore((s) => s.user);
+  const internalWsRef = useRef<WSClient | null>(null);
+  const wsClient = _wsRef?.current || internalWsRef.current;
 
   const clearMissedCallTimer = useCallback(() => {
     if (missedCallTimerRef.current) {
@@ -470,7 +515,7 @@ export function useAdminWebRTC(wsRef: React.RefObject<WSClient | null>, sessionI
     }
   }, []);
 
-  const startMissedCallTimer = useCallback((callSessionId: string, _callerId: string, callId?: number) => {
+  const startMissedCallTimer = useCallback((callSessionId: string, _callerId: string, callId?: any) => {
     clearMissedCallTimer();
     setIsMissedCall(false);
     missedCallTimerRef.current = setTimeout(async () => {
@@ -485,6 +530,11 @@ export function useAdminWebRTC(wsRef: React.RefObject<WSClient | null>, sessionI
           await api.endCall(callSessionId, 0); // Fallback: 0 duration = missed
         }
       } catch (_) {}
+      // Also clean the UI store so pendingCalls is cleared — the 60s
+      // auto-expire in pushPendingCall only removes entries older than 60s
+      // from received_at, but without explicit remove the store would hold
+      // a stale entry for this call_id indefinitely.
+      useUIStore.getState().removePendingCall(String(callId || `legacy-${callSessionId}`));
       // Auto-clear after showing
       setTimeout(() => {
         setIncomingCall(null);
@@ -501,56 +551,135 @@ export function useAdminWebRTC(wsRef: React.RefObject<WSClient | null>, sessionI
     }, 1000);
   }, []);
 
-  const handleAnswerCall = useCallback(async () => {
-    if (!incomingCall || !wsRef.current) return;
+  // Accept an incoming call. If `overrideCall` is supplied (e.g. clicked
+  // from a session-detail page where the float banner has already
+  // disappeared), use that instead of the local `incomingCall` state.
+  //
+  // Call v2 (Asterisk ARI): no SDP offer — the agent acknowledges via
+  // POST /api/calls/:id/accept and ARI bridges the media. In this case
+  // we skip WebRTC entirely and rely on the backend's `call_connecting`
+  // event (fired by AcceptCall → gateway.OriginateChannel) to set
+  // isCallActive=true and start the timer.
+  // Legacy (WebRTC): offer is present — set up WebRTC normally.
+  const handleAnswerCall = useCallback(async (overrideCall?: { session_id: string; caller_id: string; call_id?: any; offer?: any }) => {
+    const target = overrideCall || incomingCall;
+    const client = _wsRef?.current || internalWsRef.current;
+    if (!target || !client) return;
     clearMissedCallTimer();
-    const callData = { ...incomingCall };
-    setIsCallActive(true);
-    setIncomingCall(null);
+    const callData = { ...target };
+    // Replace the local state with the override so subsequent state
+    // changes (e.g. handleEndCall) read the same data.
+    setIncomingCall(callData);
     setIsMissedCall(false);
-    startCallTimer();
-    const rtc = new WebRTCManager(wsRef.current, callData.session_id, (state: any) => {
-      if (state === 'connected') startCallTimer();
-      else if (state === 'ended') {
-        setIsCallActive(false);
-        setIncomingCall(null);
-        clearInterval(callTimerRef.current);
-        setCallDuration(0);
-        onCallEnd();
-      }
-    }, (stream: any) => {
-      if (remoteAudioRef.current) {
-        remoteAudioRef.current.srcObject = stream;
-        remoteAudioRef.current.play().catch(() => {});
-      }
-    });
-    rtcRef.current = rtc;
-    if (callData.offer) await rtc.handleOffer(callData.offer);
-  }, [incomingCall, wsRef, startCallTimer, onCallEnd, clearMissedCallTimer]);
 
-  const handleDeclineCall = useCallback(() => {
+    if (callData.offer) {
+      // Legacy WebRTC call — set up peer connection.
+      setIsCallActive(true);
+      startCallTimer();
+      const rtc = new WebRTCManager(client, callData.session_id, (state: any) => {
+        if (state === 'connected') startCallTimer();
+        else if (state === 'ended') {
+          setIsCallActive(false);
+          setIncomingCall(null);
+          clearInterval(callTimerRef.current);
+          setCallDuration(0);
+          if (callData.call_id) useUIStore.getState().removePendingCall(String(callData.call_id));
+          onCallEnd();
+        }
+      }, (stream: any) => {
+        if (remoteAudioRef.current) {
+          remoteAudioRef.current.srcObject = stream;
+          remoteAudioRef.current.play().catch(() => {});
+        }
+      });
+      rtcRef.current = rtc;
+      await rtc.handleOffer(callData.offer);
+    } else {
+      // Call v2 — no WebRTC needed. POST accept to backend and wait for
+      // `call_connecting` event (emitted by AcceptCall → ARI originate).
+      // Mark active immediately so the UI reflects the user's intent.
+      setIsCallActive(true);
+      startCallTimer();
+      try {
+        const { api } = await import('@/lib/api');
+        if (callData.call_id) {
+          await api.acceptCall(callData.call_id);
+        }
+      } catch (_) {
+        // Non-fatal: the backend may have already moved on. The call
+        // state is reflected in the UI; if accept failed the admin can
+        // still see the active bar and end the call if needed.
+      }
+    }
+  }, [incomingCall, _wsRef, internalWsRef, startCallTimer, onCallEnd, clearMissedCallTimer]);
+
+  const handleDeclineCall = useCallback(async () => {
     clearMissedCallTimer();
-    const { voiceApi } = require('@/lib/api');
-    voiceApi.declineCall(incomingCall?.session_id || '').catch(() => {});
+    const callId = incomingCall?.call_id;
+    // Try Call v2 reject first; fall back to legacy decline.
+    if (callId) {
+      try {
+        const { api: apiLib } = await import('@/lib/api');
+        await apiLib.rejectCall(String(callId));
+      } catch (_) {
+        // Fall through to legacy
+      }
+    }
+    // Legacy fallback
+    try {
+      const { voiceApi } = await import('@/lib/api');
+      await voiceApi.declineCall(incomingCall?.session_id || '');
+    } catch (_) { /* ignore */ }
     setIncomingCall(null);
     setIsMissedCall(false);
+    useUIStore.getState().removePendingCall(String(callId || `legacy-${incomingCall?.session_id}`));
   }, [incomingCall, clearMissedCallTimer]);
 
   const handleEndCall = useCallback(async () => {
+    // Capture callId BEFORE clearing state — incomingCall may be nulled
+    // synchronously and if a re-render fires before the async fetch runs,
+    // we must still have the id to hit the backend.
+    const callId = incomingCall?.call_id;
+    const targetSessionId = incomingCall?.session_id || sessionId;
+
     clearMissedCallTimer();
     setIsCallActive(false);
     setIncomingCall(null);
     clearInterval(callTimerRef.current);
     setCallDuration(0);
     setIsMissedCall(false);
+    useUIStore.getState().clearPendingCalls();
+
+    // Call v2: POST /api/calls/:id/hangup. This is the primary path
+    // for Call v2 (Asterisk ARI). It tells the backend to transition
+    // the call to ENDED and broadcast call_ended_v2 to all sessions.
+    //
+    // Must use the api client (api.hangupCall) instead of raw fetch —
+    // the raw fetch below was the source of the 401 "Vui lòng đăng
+    // nhập" error because it didn't send the Authorization header.
+    if (callId) {
+      try {
+        const { api: apiLib } = await import('@/lib/api');
+        await apiLib.hangupCall(String(callId));
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('[call][handleEndCall] hangup API failed', err);
+      }
+    }
+
+    // Legacy WebRTC cleanup (only if rtcRef.current is set — Call v2
+    // uses Asterisk ARI and has no WebRTC peer connection).
     if (rtcRef.current) {
-      await rtcRef.current.endCall(false, callDuration).catch(() => {}); // local cleanup only
+      await rtcRef.current.endCall(false, callDuration).catch(() => {});
       rtcRef.current = null;
     }
-    const { voiceApi } = require('@/lib/api');
-    // Use incomingCall.session_id if available, otherwise fall back to the provided sessionId
-    const targetSessionId = incomingCall?.session_id || sessionId;
-    await voiceApi.endCall(targetSessionId, callDuration).catch(() => {});
+
+    // Legacy voice API (idempotent — no-op if session doesn't exist).
+    try {
+      const { voiceApi } = await import('@/lib/api');
+      await voiceApi.endCall(targetSessionId, callDuration);
+    } catch (_) { /* ignore */ }
+
     onCallEnd();
   }, [callDuration, sessionId, incomingCall, onCallEnd, clearMissedCallTimer]);
 
@@ -563,40 +692,239 @@ export function useAdminWebRTC(wsRef: React.RefObject<WSClient | null>, sessionI
     return false;
   }, []);
 
+  // Cleanup internal WS on unmount so we don't leak a connection when the
+  // layout re-mounts (HMR / route navigation). External WS is owned by
+  // the layout and is left alone here.
   useEffect(() => {
-    if (!wsRef.current) return;
+    return () => {
+      if (internalWsRef.current && user?.username) {
+        // Decrement ref-count on the singleton. If we are the only
+        // consumer (no layout / inbox page holding a reference), this
+        // is what actually closes the underlying socket.
+        releaseWSClient('admin_inbox', user.username, user.role || 'admin');
+        internalWsRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.username]);
 
-    wsRef.current.on('call_ring', (event: any) => {
+  // Recover ringing banner after page reload. WS broadcasts are
+  // fire-and-forget; if the admin reloads while a call is in flight, the
+  // original `incoming_call` event was already missed. We poll the
+  // /api/agents/:id/active-calls endpoint on mount and on every WS
+  // reconnect so the banner comes back without the agent needing to wait
+  // for a fresh call. The recovered call only stays in the UI for
+  // MISSED_CALL_TIMEOUT — same timeout as a live ring — so it auto-cleans.
+  const recoverActiveCalls = useCallback(async () => {
+    const username = user?.username;
+    if (!username) return;
+    try {
+      const { api: apiLib } = await import('@/lib/api');
+      const { calls } = await apiLib.getAgentActiveCalls(username);
+      if (!calls || calls.length === 0) return;
+      // Take the first non-terminal call (most recently updated).
+      const active = calls[0];
+      if (!active?.id || !active?.customer_id) return;
+      // eslint-disable-next-line no-console
+      console.info('[call][recover] rehydrating ringing banner from /active-calls', active);
+      const callId = String(active.id);
+      const sessionId = active.customer_id;
+      const callerId = active.customer_id;
+      setIncomingCall({ session_id: sessionId, caller_id: callerId, call_id: callId });
+      useUIStore.getState().pushPendingCall({
+        call_id: callId,
+        session_id: sessionId,
+        caller_id: callerId,
+        received_at: Date.now(),
+      });
+      startMissedCallTimer(sessionId, callerId, callId);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[call][recover] failed', err);
+    }
+  }, [user?.username, startMissedCallTimer]);
+
+  // Run on mount after the user is available.
+  useEffect(() => {
+    if (!user?.username) return;
+    // eslint-disable-next-line no-console
+    console.info('[call][recover] running on mount');
+    void recoverActiveCalls();
+  }, [user?.username, recoverActiveCalls]);
+
+  // Re-fetch active calls whenever the WS reconnects. The /active-calls
+  // endpoint is the source of truth; WS events are best-effort.
+  useEffect(() => {
+    if (!wsClient) return;
+    const handleOpen = () => {
+      // eslint-disable-next-line no-console
+      console.info('[call][recover] WS open, re-fetching active calls');
+      void recoverActiveCalls();
+    };
+    // WSClient doesn't expose onopen; emulate by polling shortly after
+    // each reconnect (schedule a probe — cheap and idempotent).
+    const id = window.setInterval(() => {
+      const c: any = wsClient;
+      if (c?.ws && c.ws.readyState === 1 /* OPEN */) {
+        handleOpen();
+      }
+    }, 2000);
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wsClient, recoverActiveCalls]);
+
+  useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.info('[call][ws-hook] effect running, external wsRef =', _wsRef?.current ? 'WSClient' : 'null', 'internal wsRef =', internalWsRef.current ? 'WSClient' : 'null');
+
+    // Use the SHARED singleton so we never open a second WebSocket for
+    // the same (session, user, role). The layout and inbox/page both
+    // already hold ref-counted references to this singleton; we add
+    // our own via acquireWSClient and release it on cleanup.
+    let created = false;
+    if (user?.username) {
+      const existing = _wsRef?.current || getSharedWSClient('admin_inbox', user.username, user.role || 'admin');
+      if (!existing) {
+        internalWsRef.current = acquireWSClient('admin_inbox', user.username, user.role || 'admin');
+        created = true;
+        // eslint-disable-next-line no-console
+        console.info('[call][ws-hook] acquired own singleton WS client');
+      } else {
+        // eslint-disable-next-line no-console
+        console.info('[call][ws-hook] reusing existing singleton WS client');
+      }
+    }
+
+    // If still no client (no auth yet), bail until auth lands.
+    const client = _wsRef?.current || internalWsRef.current;
+    if (!client) {
+      // eslint-disable-next-line no-console
+      console.info('[call][ws-hook] no WS client yet (no auth?), will retry on next render');
+      return;
+    }
+
+    // The created client needs a moment to fire its 'open' before we
+    // register handlers (handlers fire from `onmessage` → `emit`). The
+    // handlers register regardless, but if open fails we unsubscribe
+    // below via `created` flag in cleanup.
+    void created;
+
+    // Detach anything from a previous effect run before registering again
+    // — keeps the WS handler Set bounded to one set per logical session.
+    // Symptom of NOT doing this: every incoming call triggered N copies
+    // of `setIncomingCall` and `pushPendingCall` (Date.now()-based ids,
+    // so each one spawned a fresh pending entry), causing the float
+    // banner to flicker / never settle on the right call.
+    const previousUnsubs = unsubsRef.current;
+    previousUnsubs.forEach((u) => {
+      try { u(); } catch (_) { /* noop */ }
+    });
+    unsubsRef.current = [];
+
+    const register = (event: any, handler: (e: any) => void) => {
+      const off = client.on(event, handler);
+      unsubsRef.current.push(off);
+    };
+
+    const { pushPendingCall } = useUIStore.getState();
+
+    // Wildcard listener for diagnostic logs. Helps confirm that the WS
+    // subscription is alive even if a specific handler early-returns.
+    register('*', (event: any) => {
+      // eslint-disable-next-line no-console
+      console.info('[call][ws-hook] * event received:', event?.type, 'session:', event?.session_id, 'payload.session_id:', event?.payload?.session_id);
+    });
+
+    register('call_ring', (event: any) => {
       const sID = event.payload?.session_id || event.session_id;
       const cID = event.payload?.caller_id || event.sender_id || 'Khách hàng';
       const offerData = event.payload?.offer || event.payload;
-      if (sID) {
-        // If already in a call, send busy notification
-        if (isCallActive) {
-          // Admin is busy, caller will get no answer
-          return;
-        }
-        const callId = event.payload?.call_id || event.call_id;
-        setIncomingCall({ session_id: sID, caller_id: cID, call_id: callId, offer: offerData });
-        // Start missed call timer with call_id for proper missed call marking
-        startMissedCallTimer(sID, cID, callId);
-      }
+      if (!sID) return;
+      // Use session_id as a stable per-call id — legacy flow never
+      // sends a real call_id, and `Date.now()` would create a brand
+      // new id for every duplicated handler.
+      const callId = event.payload?.call_id || event.call_id || `legacy-${sID}`;
+      // eslint-disable-next-line no-console
+      console.info('[call] call_ring event', { sID, callId, cID });
+      setIncomingCall({ session_id: sID, caller_id: cID, call_id: callId, offer: offerData });
+      pushPendingCall({ call_id: String(callId), session_id: sID, caller_id: cID, offer: offerData, received_at: Date.now() });
+      // Start missed call timer with call_id for proper missed call marking.
+      // Guarded against already-active to avoid resetting a real call mid-stream.
+      startMissedCallTimer(sID, cID, callId);
     });
 
-    wsRef.current.on('call_offer', (event: any) => {
+    register('call_offer', (event: any) => {
       const sID = event.payload?.session_id || event.session_id;
       const cID = event.payload?.caller_id || event.sender_id || 'Khách hàng';
-      if (sID) {
-        // If already in a call, ignore (already handled by call_ring)
-        if (!isCallActive && !incomingCall) {
-          const callId = event.payload?.call_id || event.call_id;
-          setIncomingCall({ session_id: sID, caller_id: cID, call_id: callId, offer: event.payload });
-          startMissedCallTimer(sID, cID, callId);
-        }
-      }
+      if (!sID) return;
+      const callId = event.payload?.call_id || event.call_id || `legacy-${sID}`;
+      setIncomingCall({ session_id: sID, caller_id: cID, call_id: callId, offer: event.payload });
+      pushPendingCall({ call_id: String(callId), session_id: sID, caller_id: cID, offer: event.payload, received_at: Date.now() });
+      startMissedCallTimer(sID, cID, callId);
     });
 
-    wsRef.current.on('call_end', async () => {
+    // Call v2 — backend (call.UseCase.publishAgentEvent) emits
+    // `incoming_call` to session `agent:<username>` AND, after the hub
+    // whitelist fix, also mirrors to `admin_inbox`. Show the banner.
+    // Note: Call v2 uses Asterisk ARI for media, so there is no SDP
+    // `offer` here — the agent just needs to acknowledge via
+    // POST /api/calls/:id/accept and the ARI bridge carries the audio.
+    register('incoming_call', (event: any) => {
+      const payload = event.payload || {};
+      const sID = payload.customer_id || payload.session_id || event.session_id;
+      const callId = payload.call_id || event.call_id;
+      const cID = payload.customer_id || event.sender_id || 'Khách hàng';
+      // eslint-disable-next-line no-console
+      console.info('[call] incoming_call event', { sID, callId, cID, payload });
+      if (!sID) return;
+      setIncomingCall({ session_id: sID, caller_id: cID, call_id: callId });
+      pushPendingCall({ call_id: String(callId || `v2-${sID}`), session_id: sID, caller_id: cID, received_at: Date.now() });
+      startMissedCallTimer(sID, cID, callId);
+    });
+
+    // Call v2 — backend also emits `call_waiting` to the customer's
+    // session and to admin_inbox. Used for "queue updated" toast/state.
+    register('call_waiting', (event: any) => {
+      const payload = event.payload || {};
+      const sID = payload.customer_id || payload.session_id || event.session_id;
+      if (!sID) return;
+      const callId = payload.call_id || event.call_id || `waiting-${sID}`;
+      setIncomingCall({
+        session_id: sID,
+        caller_id: payload.customer_id || 'Khách hàng',
+        call_id: callId,
+      });
+      pushPendingCall({ call_id: String(callId), session_id: sID, caller_id: payload.customer_id || 'Khách hàng', received_at: Date.now() });
+      startMissedCallTimer(sID, payload.customer_id || 'Khách hàng', callId);
+    });
+
+    // Call v2: backend fires `call_connecting` when AcceptCall transitions
+    // WAITING_AGENT → CONNECTING (ARI bridge created, channels originating).
+    // This confirms the backend accepted the call — clear the ringing banner
+    // and make sure isCallActive is true (it was set optimistically in
+    // handleAnswerCall; this is the server-confirmed signal).
+    register('call_connecting', (event: any) => {
+      // eslint-disable-next-line no-console
+      console.info('[call] call_connecting received, backend accepted call', event?.payload);
+      setIsCallActive(true);
+      // Clear the ringing banner now that the call is confirmed connecting.
+      useUIStore.getState().clearPendingCalls();
+    });
+
+    // Call v2: both channels answered → IN_PROGRESS. The ARI bridge is
+    // now active; the timer was already started in handleAnswerCall.
+    register('call_started', (event: any) => {
+      // eslint-disable-next-line no-console
+      console.info('[call] call_started — media bridge active', event?.payload);
+      setIsCallActive(true);
+      useUIStore.getState().clearPendingCalls();
+    });
+
+    // Call v2: call failed (Asterisk error, channel not answered, etc.).
+    // Revert the optimistic isCallActive=true set in handleAnswerCall.
+    register('call_failed', (event: any) => {
+      // eslint-disable-next-line no-console
+      console.warn('[call] call_failed received', event?.payload);
       setIsCallActive(false);
       setIncomingCall(null);
       setIsMissedCall(false);
@@ -604,14 +932,55 @@ export function useAdminWebRTC(wsRef: React.RefObject<WSClient | null>, sessionI
       clearInterval(callTimerRef.current);
       setCallDuration(0);
       rtcRef.current = null;
+      useUIStore.getState().clearPendingCalls();
+      onCallEnd();
+    });
+
+    register('call_end', async () => {
+      setIsCallActive(false);
+      setIncomingCall(null);
+      setIsMissedCall(false);
+      clearMissedCallTimer();
+      clearInterval(callTimerRef.current);
+      setCallDuration(0);
+      rtcRef.current = null;
+      // Also clear any pending entries (call ended).
+      useUIStore.getState().clearPendingCalls();
+      onCallEnd();
+    });
+
+    // Backend also pushes `call_ended_v2` from the use case (Call v2). Make
+    // sure both legacy (`call_end`) and v2 (`call_ended_v2`) clear pending state.
+    register('call_ended_v2', () => {
+      setIsCallActive(false);
+      setIncomingCall(null);
+      setIsMissedCall(false);
+      clearMissedCallTimer();
+      clearInterval(callTimerRef.current);
+      setCallDuration(0);
+      rtcRef.current = null;
+      useUIStore.getState().clearPendingCalls();
       onCallEnd();
     });
 
     return () => {
       clearInterval(callTimerRef.current);
       clearMissedCallTimer();
+      // Unbind the WS handlers we registered so re-runs of this effect
+      // don't keep stacking duplicates (each `on()` call appends to a
+      // Set inside WSClient and has no idempotency guard).
+      const unsubs = unsubsRef.current;
+      unsubsRef.current = [];
+      unsubs.forEach((u) => {
+        try { u(); } catch (_) { /* noop */ }
+      });
     };
-  }, [wsRef, onCallEnd, isCallActive, incomingCall, startMissedCallTimer, clearMissedCallTimer]);
+    // NOTE: isCallActive / incomingCall intentionally NOT in deps — they
+    // change on every event, which would tear down and rebuild handlers.
+    // Reading from setters inside the handlers uses functional updates so
+    // the latest state always wins without re-binding.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.username, _wsRef, onCallEnd, startMissedCallTimer, clearMissedCallTimer]);
 
   return {
     rtcRef,

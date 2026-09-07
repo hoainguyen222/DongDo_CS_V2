@@ -43,6 +43,44 @@ FROM chat_cases
 WHERE status = $1::case_status
 ORDER BY updated_at DESC;
 
+-- name: ListCasesPage :many
+-- Paginated variant used by HandleListCases so we never load the full table
+-- into Go memory before slicing. The shape is identical to ListCases; only
+-- LIMIT/OFFSET differs. statusFilter empty string means "any status".
+SELECT id, session_id, guest_id, customer_name, customer_phone,
+       status, assigned_cs, last_message, resolution_note, created_at, updated_at
+FROM chat_cases
+WHERE ($1::text = '' OR status::text = $1)
+ORDER BY updated_at DESC
+LIMIT $2 OFFSET $3;
+
+-- name: CountCases :one
+SELECT COUNT(*)::bigint FROM chat_cases
+WHERE ($1::text = '' OR status::text = $1);
+
+-- name: SearchCasesPage :many
+-- Search-and-paginate variant for HandleListCases. The OR-of-LIKE pattern
+-- is acceptable for the small admin-inbox dataset; if it ever grows past
+-- ~50k rows swap to a trigram index (pg_trgm).
+SELECT id, session_id, guest_id, customer_name, customer_phone,
+       status, assigned_cs, last_message, resolution_note, created_at, updated_at
+FROM chat_cases
+WHERE ($1::text = '' OR status::text = $1)
+  AND (LOWER(customer_name)  LIKE '%' || LOWER($4) || '%'
+    OR LOWER(customer_phone) LIKE '%' || $4          || '%'
+    OR LOWER(session_id)     LIKE '%' || LOWER($4) || '%'
+    OR LOWER(COALESCE(last_message, '')) LIKE '%' || LOWER($4) || '%')
+ORDER BY updated_at DESC
+LIMIT $2 OFFSET $3;
+
+-- name: CountCasesSearch :one
+SELECT COUNT(*)::bigint FROM chat_cases
+WHERE ($1::text = '' OR status::text = $1)
+  AND (LOWER(customer_name)  LIKE '%' || LOWER($2) || '%'
+    OR LOWER(customer_phone) LIKE '%' || $2          || '%'
+    OR LOWER(session_id)     LIKE '%' || LOWER($2) || '%'
+    OR LOWER(COALESCE(last_message, '')) LIKE '%' || LOWER($2) || '%');
+
 -- name: GetCase :one
 SELECT id, session_id, guest_id, customer_name, customer_phone,
        status, assigned_cs, last_message, resolution_note, created_at, updated_at

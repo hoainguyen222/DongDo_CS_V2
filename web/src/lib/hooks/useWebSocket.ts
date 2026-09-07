@@ -5,7 +5,7 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { WSClient } from '@/lib/ws';
+import { WSClient, acquireWSClient, releaseWSClient } from '@/lib/ws';
 import { queryKeys } from '@/lib/hooks/useApi';
 
 interface UseWebSocketOptions {
@@ -39,9 +39,13 @@ export function useWebSocket({
   const connect = useCallback(() => {
     if (!enabled) return;
 
-    const ws = new WSClient(sessionId, username, role);
+    // Use the shared singleton so multiple components mounting
+    // `useWebSocket({ sessionId: 'admin_inbox', ... })` share ONE
+    // underlying WebSocket instead of each opening their own. The
+    // ref-counted releaseWSClient() in the cleanup below closes the
+    // socket only after the last consumer unmounts.
+    const ws = acquireWSClient(sessionId, username, role);
     wsRef.current = ws;
-    ws.connect();
 
     ws.on('message', (event: any) => {
       onMessage?.(event);
@@ -87,10 +91,12 @@ export function useWebSocket({
   useEffect(() => {
     const ws = connect();
     return () => {
-      ws?.disconnect();
+      // Decrement ref-count; only the last consumer actually closes
+      // the underlying socket.
+      releaseWSClient(sessionId, username, role);
       wsRef.current = null;
     };
-  }, [connect]);
+  }, [connect, sessionId, username, role]);
 
   const send = useCallback(
     (

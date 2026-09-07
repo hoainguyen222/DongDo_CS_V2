@@ -170,7 +170,7 @@ func (c *Client) ReadPump() {
 				calls, _ := c.voiceUC.GetCallsBySession(ctx, targetSession)
 				if len(calls) > 0 {
 					lastCall := calls[0]
-					if lastCall.Status != domain.CallEnded {
+					if lastCall.Status != domain.CallStatusEnded {
 						dur := int(time.Since(lastCall.CreatedAt).Seconds())
 						if dur < 1 {
 							dur = 1

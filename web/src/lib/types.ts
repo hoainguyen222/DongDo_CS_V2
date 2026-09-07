@@ -146,7 +146,17 @@ export type WSEventType =
   | 'call_end'
   | 'call_ring'
   | 'ai_status'
-  | 'team_agent_call';
+  | 'team_agent_call'
+  // Call v2 events (mirrored to admin_inbox by ws.Hub)
+  | 'call_waiting'
+  | 'incoming_call'
+  | 'call_connecting'
+  | 'call_ringing_v2'
+  | 'call_started'
+  | 'call_ended_v2'
+  | 'call_failed'
+  | 'agent_status_changed'
+  | 'queue_position_changed';
 
 export interface WSEvent<T = any> {
   type: WSEventType;

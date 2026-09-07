@@ -161,17 +161,16 @@ type LearningItem struct {
 }
 
 // ============================================================
-// Voice Call
+// Voice Call — LEGACY aliases (kept for backward compatibility).
+// VoiceCall.Status now uses the new CallStatus enum from call.go.
 // ============================================================
 
-type CallStatus string
-
+// Legacy call-status aliases (RINGING, ACTIVE, ENDED, MISSED, REJECTED) still
+// exist in call.go as the v2 enum values. Re-export them with the v1 names so
+// legacy code paths (voice_and_analytics_usecase.go, etc.) keep compiling.
 const (
-	CallRinging  CallStatus = "RINGING"
-	CallActive   CallStatus = "ACTIVE"
-	CallEnded    CallStatus = "ENDED"
-	CallMissed   CallStatus = "MISSED"
-	CallRejected CallStatus = "REJECTED"
+	// CallRinging / CallActive / etc. are defined as constants of type CallStatus in
+	// call.go; we don't redefine them here to avoid duplicate-declaration errors.
 )
 
 type CallerType string

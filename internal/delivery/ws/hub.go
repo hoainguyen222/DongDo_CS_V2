@@ -12,15 +12,42 @@ import (
 type Hub struct {
 	sessions map[string]map[*Client]bool
 
-	broadcast chan *domain.WSEvent
-
-	register chan *Client
-
+	// `register` is unbuffered so a server with Hub.Run() not started will
+	// fail fast instead of silently dropping clients. `unregister` is
+	// buffered so a client whose conn dies while the Hub loop is busy with
+	// a slow broadcast still gets cleaned up — otherwise we'd leak the
+	// goroutine holding `client.send` indefinitely.
+	register   chan *Client
 	unregister chan *Client
 
 	mu sync.RWMutex
 
 	logger zerolog.Logger
+
+	// disconnectHook is invoked once when the last client of a session leaves
+	// the hub. It receives the sessionID and the disconnected client's userID
+	// and role (best-effort: only the leaving client is known; for a multi-
+	// client session this is the most-recent client to disconnect).
+	//
+	// The hook is intentionally synchronous so that consumers can rely on
+	// it having finished by the time the unregister returns. Consumers MUST
+	// NOT block for long; spawn a goroutine if heavy work is needed.
+	disconnectHook func(sessionID, userID, role string)
+}
+
+// DisconnectHandler is implemented by anything that wants to react to a
+// session becoming empty (e.g. the call subsystem wants to cancel calls
+// whose owner just disconnected).
+type DisconnectHandler interface {
+	OnDisconnect(sessionID, userID, role string)
+}
+
+// SetDisconnectHandler registers a callback invoked once when the last
+// client of a session unregisters. Pass nil to clear.
+func (h *Hub) SetDisconnectHandler(fn func(sessionID, userID, role string)) {
+	h.mu.Lock()
+	h.disconnectHook = fn
+	h.mu.Unlock()
 }
 
 func NewHub() *Hub {
@@ -30,10 +57,14 @@ func NewHub() *Hub {
 	logger.Info().Msg("WebSocket Hub initialized")
 
 	return &Hub{
-		sessions:   make(map[string]map[*Client]bool),
-		broadcast:  make(chan *domain.WSEvent, 256),
+		sessions: make(map[string]map[*Client]bool),
+		// `unregister` is buffered so a client whose conn dies while the Hub loop is
+		// busy with a slow broadcast still gets cleaned up — otherwise we'd leak
+		// the goroutine holding `client.send` indefinitely. `register` stays
+		// unbuffered so a server with Hub.Run() not started will fail fast
+		// instead of silently dropping clients.
 		register:   make(chan *Client),
-		unregister: make(chan *Client),
+		unregister: make(chan *Client, 64),
 		logger:     logger,
 	}
 }
@@ -54,28 +85,31 @@ func (h *Hub) Run() {
 
 		case client := <-h.unregister:
 			h.mu.Lock()
+			hook := h.disconnectHook
+			lastClient := false
+			leavingSession := client.sessionID
+			leavingUser := client.userID
+			leavingRole := client.userRole
 			if clients, ok := h.sessions[client.sessionID]; ok {
 				if _, ok := clients[client]; ok {
 					delete(clients, client)
 
-					func() {
-						defer func() {
-							if r := recover(); r != nil {
-								h.logger.Warn().Interface("recover", r).Msg("Recovered from close of closed client channel")
-							}
-						}()
-						close(client.send)
-					}()
+					closeClientSend(client, h.logger)
 
 					if len(clients) == 0 {
 						delete(h.sessions, client.sessionID)
+						lastClient = true
 					}
 				}
 			}
 			h.mu.Unlock()
 
-		case event := <-h.broadcast:
-			h.BroadcastToSession(event.SessionID, event)
+			// Fire the hook outside the lock so a slow handler cannot
+			// block the hub loop. Skip admin_inbox because admin panels
+			// coming and going must not affect call state.
+			if lastClient && hook != nil && leavingSession != "" && leavingSession != "admin_inbox" && leavingRole == "guest" {
+				h.fireDisconnectHook(hook, leavingSession, leavingUser, leavingRole)
+			}
 		}
 	}
 }
@@ -83,6 +117,13 @@ func (h *Hub) Run() {
 // BroadcastToSession sends an event to all clients connected to a given session ID or channel.
 func (h *Hub) BroadcastToSession(sessionID string, event *domain.WSEvent) {
 	h.BroadcastToSessionExcept(sessionID, event, "")
+}
+
+// BroadcastToChannel is an alias kept for symmetry with the
+// call.UseCase.WebsocketBroadcaster contract. Implementation is identical
+// because sessions and channels share the same keyspace in the hub.
+func (h *Hub) BroadcastToChannel(channel string, event *domain.WSEvent) {
+	h.BroadcastToSession(channel, event)
 }
 
 // BroadcastToSessionExcept sends an event to session clients while excluding the sender to avoid reflection.
@@ -117,7 +158,24 @@ func (h *Hub) BroadcastToSessionExcept(sessionID string, event *domain.WSEvent, 
 			event.Type == domain.WSEventCallOffer ||
 			event.Type == domain.WSEventCallAnswer ||
 			event.Type == domain.WSEventCallICE ||
-			event.Type == domain.WSEventCallEnd
+			event.Type == domain.WSEventCallEnd ||
+			// Legacy call_ring: sent by client.go via eventBus.PublishWS("admin_inbox", ...).
+			// Add to whitelist so the hub mirrors it to admin_inbox in all configurations
+			// (direct hub broadcast + eventBus path both end up here).
+			event.Type == domain.WSEventCallRing ||
+			// Call v2 lifecycle events. Without these the admin's WebRTC
+			// hook (useAdminWebRTC) never sees an "incoming_call" so the
+			// ringing banner never appears even though the backend did its
+			// job (CallUseCase.AssignAgentForCall → publishAgentEvent).
+			event.Type == domain.WSEventCallWaiting ||
+			event.Type == domain.WSEventIncomingCall ||
+			event.Type == domain.WSEventCallConnecting ||
+			event.Type == domain.WSEventCallRingingV2 ||
+			event.Type == domain.WSEventCallStarted ||
+			event.Type == domain.WSEventCallEndedV2 ||
+			event.Type == domain.WSEventCallFailed ||
+			event.Type == domain.WSEventAgentStatusChange ||
+			event.Type == domain.WSEventQueuePosition
 
 		if isBroadcastToAdmin {
 			if adminClients, ok := h.sessions["admin_inbox"]; ok {
@@ -137,4 +195,32 @@ func (h *Hub) BroadcastToSessionExcept(sessionID string, event *domain.WSEvent, 
 			}
 		}
 	}
+}
+
+// closeClientSend closes a client's outbound channel safely. The hub may
+// process two `unregister` events for the same client in a race (e.g. the
+// client times out twice); the second close panics on a closed channel
+// which we recover and log here so the hub loop never dies because of
+// double unregistration.
+func closeClientSend(c *Client, logger zerolog.Logger) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Warn().
+				Interface("recover", r).
+				Str("session_id", c.sessionID).
+				Msg("Recovered from close of closed client channel")
+		}
+	}()
+	close(c.send)
+}
+
+// fireDisconnectHook invokes the registered disconnect hook with panic
+// isolation so a misbehaving callback cannot take down the hub loop.
+func (h *Hub) fireDisconnectHook(fn func(string, string, string), sessionID, userID, role string) {
+	defer func() {
+		if r := recover(); r != nil {
+			h.logger.Warn().Interface("recover", r).Msg("disconnect hook panicked")
+		}
+	}()
+	fn(sessionID, userID, role)
 }

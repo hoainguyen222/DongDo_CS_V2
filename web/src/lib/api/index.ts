@@ -16,6 +16,88 @@ export { configApi, systemApi } from './system';
 export { usersApi, permissionsApi } from './users';
 export { tagsApi } from './tags';
 
+// Call v2 — agent availability helpers. Mounted by useAgentHeartbeat so
+// authenticated staff keep their Redis AVAILABLE state fresh without any
+// user action.
+import { apiClient, API_BASE } from './client';
+export const callApi = {
+  /** POST /api/calls — enqueue a call into the Redis-backed routing pool. */
+  async requestCall(params: { customerId: string; priority?: number; idempotencyKey?: string }): Promise<{ call_id: string; status: string; queue_position?: number; replay?: boolean }> {
+    const headers: Record<string, string> = {};
+    if (params.idempotencyKey) headers['Idempotency-Key'] = params.idempotencyKey;
+    const res = await fetch(`${API_BASE}/api/calls`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify({
+        customer_id: params.customerId,
+        priority: params.priority ?? 0,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Không thể tạo cuộc gọi' }));
+      throw new Error(err.detail || 'Không thể tạo cuộc gọi');
+    }
+    return res.json();
+  },
+
+  async heartbeat(username: string): Promise<void> {
+    await apiClient.post(`/api/agents/${encodeURIComponent(username)}/heartbeat`);
+  },
+
+  /**
+   * GET /api/agents/:id/active-calls — recover the ringing banner after
+   * a page reload. The WS broadcast for `incoming_call` is fire-and-forget;
+   * if the admin was offline when it fired, the banner never appears. This
+   * endpoint returns the calls still assigned to the agent in any
+   * non-terminal state so the layout can re-create the banner.
+   */
+  async getActiveCalls(username: string): Promise<{ calls: Array<{ id: string; customer_id: string; agent_id?: string; status: string; priority?: number }> }> {
+    const res = await fetch(`${API_BASE}/api/agents/${encodeURIComponent(username)}/active-calls`);
+    if (!res.ok) {
+      return { calls: [] };
+    }
+    return res.json();
+  },
+
+  /** POST /api/calls/:id/accept — agent accepts a queued call (Call v2). */
+  async acceptCall(callId: string): Promise<void> {
+    // Use apiClient (which injects the Authorization header) instead of
+    // raw fetch — the raw fetch variant was returning 401 "Vui lòng đăng
+    // nhập" because the Authorization header was missing.
+    await apiClient.post(`/api/calls/${encodeURIComponent(callId)}/accept`, {});
+  },
+
+  /** POST /api/calls/:id/reject — agent rejects a queued call (Call v2). */
+  async rejectCall(callId: string): Promise<void> {
+    await apiClient.post(`/api/calls/${encodeURIComponent(callId)}/reject`, {});
+  },
+
+  /** POST /api/calls/:id/hangup — agent or customer ends the call. */
+  async hangupCall(callId: string): Promise<void> {
+    await apiClient.post(`/api/calls/${encodeURIComponent(callId)}/hangup`, {});
+  },
+
+  /**
+   * POST /api/calls/:id/cancel — customer cancels while still in queue
+   * (Call v2). The customer_id is sent via the X-Customer-ID header so
+   * the backend can authorize the request without requiring a Bearer
+   * token (guests do not have one).
+   */
+  async cancelCall(callId: string, customerId: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/api/calls/${encodeURIComponent(callId)}/cancel`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Customer-ID': customerId,
+      },
+    });
+    if (!res.ok && res.status !== 404) {
+      const err = await res.json().catch(() => ({ detail: 'Không thể hủy cuộc gọi' }));
+      throw new Error(err.detail || 'Không thể hủy cuộc gọi');
+    }
+  },
+};
+
 import { authApi } from './auth';
 import { guestApi } from './guest';
 import { casesApi } from './cases';
@@ -166,4 +248,21 @@ export const api = {
   listSystemErrors: systemApi.listErrors,
   createSystemError: systemApi.createError,
   markSystemErrorHandled: systemApi.markErrorHandled,
+
+  // Call v2 — agent heartbeat (keeps AVAILABLE pool state fresh).
+  agentHeartbeat: callApi.heartbeat,
+  // Call v2 — guest-facing queue entry point.
+  requestCall: callApi.requestCall,
+  // Call v2 — agent accepts / rejects a queued call.
+  acceptCall: callApi.acceptCall,
+  rejectCall: callApi.rejectCall,
+  hangupCall: callApi.hangupCall,
+  cancelCall: callApi.cancelCall,
+  // Call v2 — recover active calls on WS reconnect.
+  getAgentActiveCalls: callApi.getActiveCalls,
+  // Call v2 — paginated call history for the admin history view.
+  // Uses /api/admin/calls (Call v2 calls table) which captures all
+  // post-v2 traffic; the legacy /api/admin/voice/calls is kept separate.
+  listCalls: async (page: number = 1, limit: number = 20) =>
+    apiClient.get<{ calls: any[]; page: number; limit: number }>(`/api/admin/calls?page=${page}&limit=${limit}`),
 };

@@ -151,6 +151,23 @@ func (uc *CaseUseCase) ListCases(ctx context.Context, status domain.CaseStatus) 
 	return cases, nil
 }
 
+// ListCasesPage delegates to CaseRepository.ListPage and surfaces the same
+// page/total contract to the HTTP layer. Pagination is pushed into SQL so
+// the Go process never has to materialize the whole cases table.
+func (uc *CaseUseCase) ListCasesPage(ctx context.Context, params domain.ListCasesParams) ([]*domain.ChatCase, int64, error) {
+	cases, total, err := uc.caseRepo.ListPage(ctx, params)
+	if err != nil {
+		uc.logger.Error().Err(err).
+			Int("page", params.Page).
+			Int("page_size", params.PageSize).
+			Str("status", string(params.Status)).
+			Str("search", params.Search).
+			Msg("failed to list cases (page)")
+		return nil, 0, err
+	}
+	return cases, total, nil
+}
+
 func (uc *CaseUseCase) GetCase(ctx context.Context, sessionID string) (*domain.ChatCase, error) {
 	chatCase, err := uc.caseRepo.Get(ctx, sessionID)
 	if err != nil {

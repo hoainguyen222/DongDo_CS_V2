@@ -13,6 +13,8 @@ import (
 
 type Querier interface {
 	AssignCase(ctx context.Context, arg AssignCaseParams) error
+	CountCases(ctx context.Context, dollar_1 string) (int64, error)
+	CountCasesSearch(ctx context.Context, arg CountCasesSearchParams) (int64, error)
 	// ============================================================
 	// Guests (customer pre-chat)
 	// ============================================================
@@ -34,10 +36,18 @@ type Querier interface {
 	InsertMessage(ctx context.Context, arg InsertMessageParams) (ChatMessage, error)
 	ListCases(ctx context.Context) ([]ListCasesRow, error)
 	ListCasesByStatus(ctx context.Context, dollar_1 domain.CaseStatus) ([]ListCasesByStatusRow, error)
+	// Paginated variant used by HandleListCases so we never load the full table
+	// into Go memory before slicing. The shape is identical to ListCases; only
+	// LIMIT/OFFSET differs. statusFilter empty string means "any status".
+	ListCasesPage(ctx context.Context, arg ListCasesPageParams) ([]ListCasesPageRow, error)
 	ListGuestsWithLastCase(ctx context.Context) ([]ListGuestsWithLastCaseRow, error)
 	MarkMessagesLearned(ctx context.Context, dollar_1 []int64) error
 	ResetLearnedFlags(ctx context.Context) error
 	ResolveCase(ctx context.Context, arg ResolveCaseParams) error
+	// Search-and-paginate variant for HandleListCases. The OR-of-LIKE pattern
+	// is acceptable for the small admin-inbox dataset; if it ever grows past
+	// ~50k rows swap to a trigram index (pg_trgm).
+	SearchCasesPage(ctx context.Context, arg SearchCasesPageParams) ([]SearchCasesPageRow, error)
 	SyncActiveCasesForGuest(ctx context.Context, arg SyncActiveCasesForGuestParams) error
 	UpdateGuest(ctx context.Context, arg UpdateGuestParams) error
 	// ============================================================

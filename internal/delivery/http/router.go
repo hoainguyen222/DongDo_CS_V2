@@ -2,8 +2,6 @@ package http
 
 import (
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -69,6 +67,7 @@ func SetupRouter(
 	stateMgr domain.StateManager,
 	eventBus domain.EventBus,
 	authUC *usecase.AuthUseCase,
+	callHandler *CallHandler,
 ) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
@@ -98,33 +97,44 @@ func SetupRouter(
 	r.POST("/api/chat/typing", handler.HandleSendTyping)
 	r.GET("/history/:session_id", handler.HandleGetHistory)
 
+	// ------------------------------------------------------------
+	// Deprecated legacy voice endpoints (Call v1 — WebRTC).
+	// They return 410 Gone so older clients get a clear migration
+	// signal instead of a generic 404. New clients must use the
+	// Call v2 endpoints under /api/calls/*.
+	// ------------------------------------------------------------
+	r.POST("/api/voice/initiate", handler.HandleInitiateCall)
+	r.POST("/api/voice/end", handler.HandleEndCall)
+	r.POST("/api/voice/decline", handler.HandleEndCall) // legacy alias — same handler
+	r.POST("/api/voice/missed", handler.HandleMarkMissedCall)
+	r.POST("/api/voice/upload-recording", handler.HandleUploadRecording)
+
+	// ============================================================
+	// Call v2 — authoritative call subsystem
+	// Public routes (customer + agent) — no auth required
+	//   /api/calls            POST : create + enqueue
+	//   /api/calls/:id        GET  : authoritative state (post-reconnect)
+	//   /api/calls/:id/cancel POST : customer cancel while waiting
+	//   /api/calls/:id/hangup POST : either party ends the call
+	//   /api/agents/:id/heartbeat POST : agent liveness ping
+	//   /api/agents/:id/status     POST : agent toggles AVAILABLE/AWAY/OFFLINE
+	//   /ws                   GET  : realtime event stream (call status)
+	// ============================================================
+	r.POST("/api/calls", callHandler.CreateCall)
+	r.GET("/api/calls/:id", callHandler.GetCall)
+	r.POST("/api/calls/:id/cancel", callHandler.CancelCall)
+	r.POST("/api/calls/:id/hangup", callHandler.HangupCall)
+	r.POST("/api/agents/:id/heartbeat", callHandler.AgentHeartbeat)
+	r.POST("/api/agents/:id/status", callHandler.SetAgentStatus)
+	// Recover active calls on WS reconnect — restores the ringing banner
+	// after the admin reloads the inbox page while a call is in flight.
+	r.GET("/api/agents/:id/active-calls", callHandler.GetAgentActiveCalls)
+
 	// Auth Endpoints
 	r.POST("/auth/login", handler.HandleLogin)
 
 	// WebSocket Endpoint
 	r.GET("/ws", ws.ServeWS(hub, chatUC, voiceUC, stateMgr, eventBus))
-
-	// Voice Call Endpoints
-	r.POST("/api/voice/initiate", handler.HandleInitiateCall)
-	r.POST("/api/voice/end", handler.HandleEndCall)
-	r.POST("/api/voice/decline", handler.HandleDeclineCall)
-	r.POST("/api/voice/upload-recording", handler.HandleUploadRecording)
-	r.GET("/static/recordings/:filename", func(c *gin.Context) {
-		filename := filepath.Base(c.Param("filename"))
-		recordingsDir := filepath.Join(handler.docsDir, "..", "recordings")
-		filePath := filepath.Join(recordingsDir, filename)
-
-		if _, err := os.Stat(filePath); os.IsNotExist(err) {
-			Logger.Warn().Str("filename", filename).Msg("Recording file not found")
-			c.JSON(http.StatusNotFound, gin.H{"error": "File ghi âm không tồn tại"})
-			return
-		}
-
-		c.Header("Content-Type", "audio/webm")
-		c.Header("Accept-Ranges", "bytes")
-		c.Header("Cache-Control", "public, max-age=31536000")
-		c.File(filePath)
-	})
 
 	// Protected CSKH & Admin API Group
 	admin := r.Group("/")
@@ -153,10 +163,15 @@ func SetupRouter(
 		admin.PUT("/api/admin/customers/:guest_id", handler.HandleUpdateCaseCustomer)
 		admin.DELETE("/api/admin/customers/:guest_id", RequireRoles(RoleAdmin, RoleOwner), handler.HandleDeleteCustomer)
 
-		// Voice Call History - Staff+ can access
+		// Voice Call History - Staff+ can access (read-only legacy audit)
 		admin.GET("/api/admin/voice/calls", handler.HandleGetCalls)
 		admin.DELETE("/api/admin/voice/calls/:call_id", RequireRoles(RoleAdmin, RoleOwner), handler.HandleDeleteCall)
-		admin.POST("/api/voice/missed", handler.HandleMarkMissedCall)
+
+		// Call v2 admin endpoints
+		admin.POST("/api/calls/:id/accept", callHandler.AcceptCall)
+		admin.POST("/api/calls/:id/reject", callHandler.RejectCall)
+		admin.GET("/api/admin/calls/:id", callHandler.GetCall)
+		admin.GET("/api/admin/calls", callHandler.ListCalls)
 
 		// Continuous Learning Queue - Staff+ can access
 		admin.GET("/api/admin/learning/pending", handler.HandleListPendingLearning)
@@ -230,12 +245,20 @@ func SetupRouter(
 	return r
 }
 
-
 func CORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-Auth-Token")
+		// Header list must include `Idempotency-Key` because the guest
+		// /api/calls POST sends it (see web/src/lib/api/index.ts:
+		// callApi.requestCall). Without this the browser blocks the
+		// preflight OPTIONS request and the user sees:
+		//   "Request header field idempotency-key is not allowed by
+		//    Access-Control-Allow-Headers in preflight response."
+		// X-Customer-ID is forwarded by the same handler (see call_handler.go:
+		// HangupCall / CancelCall) so we whitelist it here as well.
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-Auth-Token, Idempotency-Key, X-Customer-Id, Idempotent-Replayed")
+		c.Writer.Header().Set("Access-Control-Expose-Headers", "Idempotent-Replayed, Content-Length")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
 
 		if c.Request.Method == "OPTIONS" {

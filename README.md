@@ -217,10 +217,24 @@ cp .env.example .env
 
 # 2. Build & Up toàn bộ hạ tầng
 make up
-# Docker Compose khởi: Postgres (port 5433) + Redis + Qdrant + Server
+# Docker Compose khởi: Postgres (5433) + Redis + Qdrant +
+# Server (8080) + Next.js Web (3000) + Asterisk (5060/8088)
 
-# 3. Nạp tài liệu vào Qdrant (sau khi server đã chạy)
+# 3. Truy cập
+#    - Khách hàng (guest portal): http://localhost:3000
+#    - Admin (CS Studio):         http://localhost:3000/admin
+#    - Backend API:               http://localhost:8080
+#    - WebSocket / WS endpoint:   ws://localhost:8080/ws
+
+# 4. Nạp tài liệu vào Qdrant (sau khi server đã chạy)
 docker compose exec server /app/ingest
+```
+
+**Web tier (Next.js):** được build standalone qua `Dockerfile.web` (multi-stage, base `node:20-alpine`), chạy với user non-root, có healthcheck. Server-side rewrites trong `web/next.config.js` proxy `/api /auth /guest /history /chat /static /ws` đến backend service trên cùng docker network (`http://server:8080`). Build arg `NEXT_PUBLIC_API_BASE` được bake vào bundle. Rebuild riêng frontend:
+
+```bash
+make web-rebuild    # chỉ rebuild image web
+make web-logs       # tail logs của web container
 ```
 
 ### Cách 2: Chạy trực tiếp trên máy (Local Dev)

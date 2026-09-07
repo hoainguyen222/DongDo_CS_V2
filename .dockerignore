@@ -1,4 +1,36 @@
+# ============================================================
+# Backend (Go) build context — excludes frontend assets
+# ============================================================
+# When the backend Dockerfile builds with context = ., we don't want it
+# to drag the (huge) web/node_modules or stale .next output. The
+# standalone build happens in Dockerfile.web from the same context, but
+# each Dockerfile only `COPY`s what it needs so these exclusions are
+# belt-and-suspenders.
 web/node_modules
 web/.next
+web/tsconfig.tsbuildinfo
+web/tsconfig.check.tsbuildinfo
+
+# VCS / CI
 .git
+.github
+.gitignore
+.gitattributes
+
+# Docker / compose
+Dockerfile.web
+docker-compose.yml
+.dockerignore
+
+# Local artifacts that would otherwise pollute the build context
 chat_history.db
+recordings
+recordings/*
+logs
+logs/*
+*.log
+
+# Editor / OS noise
+.DS_Store
+.vscode
+.idea

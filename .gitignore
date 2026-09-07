@@ -46,4 +46,10 @@ yarn-error.log*
 *.swp
 *.swo
 *~
+
+# Go build caches (sandbox-only)
+/.gocache/
+/.gomod/
+/.gobuild/
 .system_generated/
+.gomodcache/

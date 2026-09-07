@@ -18,6 +18,7 @@ type Querier interface {
 	GetCallByID(ctx context.Context, id int64) (VoiceCall, error)
 	GetCallsBySession(ctx context.Context, sessionID string) ([]VoiceCall, error)
 	ListAllCalls(ctx context.Context) ([]VoiceCall, error)
+	MarkMissedCall(ctx context.Context, id int64) error
 	SetCallTranscript(ctx context.Context, arg SetCallTranscriptParams) error
 	UpdateCallStatus(ctx context.Context, arg UpdateCallStatusParams) error
 }

@@ -71,6 +71,22 @@ rebuild:
 	docker compose build server
 	docker compose up -d server
 
+# Rebuild only the Next.js web image after frontend changes. Uses
+# Dockerfile.web (multi-stage, standalone output). Useful when iterating
+# on UI without touching backend code.
+web-rebuild:
+	docker compose build web
+	docker compose up -d web
+
+# Rebuild both the backend and the frontend, then bring the stack up.
+rebuild-all:
+	docker compose build server web
+	docker compose up -d
+
+# Tail just the web container logs.
+web-logs:
+	docker compose logs -f web
+
 # =============================================================================
 # Dev shortcuts
 # =============================================================================

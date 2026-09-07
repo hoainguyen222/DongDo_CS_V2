@@ -37,7 +37,7 @@ func (uc *VoiceUseCase) InitiateCall(ctx context.Context, sessionID string, call
 		CallerID:   callerID,
 		CalleeType: calleeType,
 		CalleeID:   calleeID,
-		Status:     domain.CallRinging,
+		Status:     domain.CallStatusRinging,
 	}
 
 	createdCall, err := uc.voiceRepo.Create(ctx, call)

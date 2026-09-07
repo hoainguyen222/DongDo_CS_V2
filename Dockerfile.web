@@ -1,0 +1,78 @@
+# ============================================================
+# DongDo CS V2 — Next.js web (admin + guest portal)
+# ============================================================
+# Build with Next.js standalone output (see web/next.config.js). The result
+# is a self-contained `server.js` plus only the static files actually
+# referenced, giving us a small production image.
+#
+# Build context is the project root so we can copy the existing
+# web/package.json, web/package-lock.json, and web/.env.example without
+# pulling in node_modules or .next.
+#
+# Build:    docker build -f Dockerfile.web -t dongdo-web .
+# Run:      docker run -p 3000:3000 --env-file .env dongdo-web
+
+# ----------------------------------------------------------------
+# Stage 1: install deps with full toolchain
+# ----------------------------------------------------------------
+FROM node:20-alpine AS deps
+WORKDIR /app/web
+
+# libc6-compat is required by sharp / some optional deps on alpine
+RUN apk add --no-cache libc6-compat
+
+COPY web/package.json web/package-lock.json* ./
+# `npm ci` is faster and stricter than `npm install` for CI/CD; it
+# honors the lockfile and fails if it's out of sync with package.json.
+RUN npm ci --no-audit --no-fund
+
+# ----------------------------------------------------------------
+# Stage 2: build the Next.js standalone bundle
+# ----------------------------------------------------------------
+FROM node:20-alpine AS builder
+WORKDIR /app/web
+
+ENV NEXT_TELEMETRY_DISABLED=1
+# Build-time API base URL. The value is baked into the standalone bundle
+# (see web/next.config.js). Override with --build-arg when building.
+ARG NEXT_PUBLIC_API_BASE=http://server:8080
+ENV NEXT_PUBLIC_API_BASE=${NEXT_PUBLIC_API_BASE}
+
+COPY --from=deps /app/web/node_modules ./node_modules
+COPY web/ ./
+
+RUN npm run build
+
+# ----------------------------------------------------------------
+# Stage 3: minimal runtime image
+# ----------------------------------------------------------------
+FROM node:20-alpine AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+
+# Non-root user for the runtime container. Next.js standalone bundles
+# write to .next/standalone at runtime for the trace/cache dirs.
+RUN addgroup --system --gid 1001 nodejs \
+ && adduser  --system --uid 1001 nextjs
+
+# Standalone bundle already excludes node_modules for the parts Next.js
+# doesn't need; copy the public assets and static export alongside.
+COPY --from=builder --chown=nextjs:nodejs /app/web/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/web/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/web/.next/standalone ./
+
+USER nextjs
+
+EXPOSE 3000
+
+# Healthcheck against the Next.js root. We use the home page rather than
+# /api/health because the Next process is the one we actually want to
+# confirm is alive; backend health is verified by the server service.
+HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=5 \
+  CMD wget -qO- http://localhost:3000/ >/dev/null 2>&1 || exit 1
+
+CMD ["node", "server.js"]

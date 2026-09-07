@@ -1,12 +1,8 @@
 package http
 
 import (
-	"bytes"
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
-	"io"
 	"math"
 	"net/http"
 	"os"
@@ -18,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
+	calluc "github.com/hoainguyen222/DongDo_CS_V2/internal/usecase/call"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/usecase"
 	"github.com/rs/zerolog"
 )
@@ -62,6 +59,10 @@ type Handler struct {
 	docsDir     string
 	eventBus    domain.EventBus
 	logger      zerolog.Logger
+	// callUC is used only to flip an authenticated staff/agent into the
+	// Redis "available" pool automatically — see HandleLogin/HandleLogout.
+	// Nil is safe: it disables auto-availability (used in some tests).
+	callUC *calluc.UseCase
 }
 
 func NewHandler(
@@ -78,6 +79,7 @@ func NewHandler(
 	embedder domain.Embedder,
 	docsDir string,
 	eventBus domain.EventBus,
+	callUC *calluc.UseCase,
 ) *Handler {
 	return &Handler{
 		authUC:      authUC,
@@ -93,10 +95,10 @@ func NewHandler(
 		embedder:    embedder,
 		docsDir:     docsDir,
 		eventBus:    eventBus,
+		callUC:      callUC,
 		logger:      Logger.With().Str("component", "handler").Logger(),
 	}
 }
-
 
 // ============================================================
 // Auth & Guest Handlers
@@ -105,6 +107,43 @@ func NewHandler(
 type LoginRequest struct {
 	Username string `json:"username" binding:"required"`
 	Password string `json:"password" binding:"required"`
+}
+
+// isAgentRole reports whether the given role can answer customer calls in
+// the Call v2 routing pool. Owners, admins, leaders, and CSKH staff are
+// all eligible; customers and unauthenticated visitors are not.
+func isAgentRole(role domain.UserRole) bool {
+	switch role {
+	case domain.RoleOwner, domain.RoleAdmin, domain.RoleLeader, domain.RoleCSKH:
+		return true
+	}
+	return false
+}
+
+// markAgentAutoAvailable puts the user into the Redis AVAILABLE pool so
+// the routing worker can immediately reserve them. Failures are logged
+// and swallowed — login must never fail because of an availability flip.
+func (h *Handler) markAgentAutoAvailable(ctx context.Context, username string) {
+	if h.callUC == nil {
+		return
+	}
+	if err := h.callUC.SetAgentStatusPublic(ctx, username, domain.AgentAvailable); err != nil {
+		Logger.Warn().Err(err).Str("user", username).Msg("auto-AVAILABLE failed; agent will not receive routed calls")
+		return
+	}
+	if err := h.callUC.HeartbeatAgentPublic(ctx, username); err != nil {
+		Logger.Warn().Err(err).Str("user", username).Msg("agent heartbeat (auto) failed")
+	}
+}
+
+// markAgentAutoOffline removes the user from the pool on logout.
+func (h *Handler) markAgentAutoOffline(ctx context.Context, username string) {
+	if h.callUC == nil {
+		return
+	}
+	if err := h.callUC.SetAgentStatusPublic(ctx, username, domain.AgentOffline); err != nil {
+		Logger.Warn().Err(err).Str("user", username).Msg("auto-OFFLINE on logout failed")
+	}
 }
 
 func (h *Handler) HandleLogin(c *gin.Context) {
@@ -124,6 +163,14 @@ func (h *Handler) HandleLogin(c *gin.Context) {
 	}
 
 	Logger.Info().Str("user", user.Username).Msg("Login success")
+
+	// Auto-AVAILABLE for staff+ roles so the call router can pick them up
+	// without any extra UI action. The state is held in Redis and a
+	// periodic heartbeat from the admin client keeps it fresh. Logout
+	// (or explicit SetAgentStatus OFFLINE) removes them from the pool.
+	if isAgentRole(user.Role) {
+		h.markAgentAutoAvailable(c.Request.Context(), user.Username)
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"token":     user.Token,
@@ -145,6 +192,9 @@ func (h *Handler) HandleGetMe(c *gin.Context) {
 func (h *Handler) HandleLogout(c *gin.Context) {
 	user := c.MustGet("user").(*domain.SessionUser)
 	_ = h.authUC.Logout(c.Request.Context(), user.Token)
+	if isAgentRole(user.Role) {
+		h.markAgentAutoOffline(c.Request.Context(), user.Username)
+	}
 	c.JSON(http.StatusOK, gin.H{"message": "Đã đăng xuất thành công."})
 }
 
@@ -398,53 +448,24 @@ func (h *Handler) HandleListCases(c *gin.Context) {
 		limit = 10
 	}
 
-	allCases, err := h.caseUC.ListCases(c.Request.Context(), statusFilter)
+	// Page + filter + search are pushed into SQL via CaseRepository.ListPage,
+	// so we never load the full chat_cases table into Go memory. LastSenderType
+	// is enriched inside the repo using a single bulk DISTINCT ON query — no N+1.
+	pagedCases, total, err := h.caseUC.ListCasesPage(c.Request.Context(), domain.ListCasesParams{
+		Page:     page,
+		PageSize: limit,
+		Status:   statusFilter,
+		Search:   search,
+	})
 	if err != nil {
 		Logger.Error().Err(err).Msg("Failed to list cases")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
 
-	for _, cs := range allCases {
-		if cs.LastSenderType == "" && h.chatUC != nil {
-			msgs, _, err := h.chatUC.GetHistory(c.Request.Context(), cs.SessionID)
-			if err == nil && len(msgs) > 0 {
-				cs.LastSenderType = string(msgs[len(msgs)-1].SenderType)
-			}
-		}
-	}
-
-	var filtered []*domain.ChatCase
-	if search != "" {
-		sLower := strings.ToLower(search)
-		for _, cs := range allCases {
-			if strings.Contains(strings.ToLower(cs.CustomerName), sLower) ||
-				strings.Contains(strings.ToLower(cs.CustomerPhone), sLower) ||
-				strings.Contains(strings.ToLower(cs.SessionID), sLower) ||
-				strings.Contains(strings.ToLower(cs.LastMessage), sLower) {
-				filtered = append(filtered, cs)
-			}
-		}
-	} else {
-		filtered = allCases
-	}
-
-	total := int64(len(filtered))
 	totalPages := int(math.Ceil(float64(total) / float64(limit)))
 	if totalPages < 1 {
 		totalPages = 1
-	}
-
-	startIndex := (page - 1) * limit
-	var pagedCases []*domain.ChatCase
-	if startIndex < len(filtered) {
-		endIndex := startIndex + limit
-		if endIndex > len(filtered) {
-			endIndex = len(filtered)
-		}
-		pagedCases = filtered[startIndex:endIndex]
-	} else {
-		pagedCases = []*domain.ChatCase{}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -988,10 +1009,15 @@ func (h *Handler) HandleSaveConfig(c *gin.Context) {
 }
 
 // ============================================================
-// Voice Call Handlers
+// Voice Call Handlers — LEGACY (P2P WebRTC)
+//
+// The following legacy handlers are retained only for backwards-compatible
+// audit reads. All call lifecycle endpoints (initiate/end/decline/missed)
+// were replaced by the v2 API in internal/delivery/http/call_handler.go
+// (AsteriskGateway-backed).  See docs/call-architecture.md.
 // ============================================================
 
-type InitiateCallRequest struct {
+type InitiateCallRequest struct { //nolint:unused
 	SessionID  string `json:"session_id" binding:"required"`
 	CallerType string `json:"caller_type" binding:"required"`
 	CallerID   string `json:"caller_id" binding:"required"`
@@ -999,222 +1025,57 @@ type InitiateCallRequest struct {
 	CalleeID   string `json:"callee_id"`
 }
 
+// HandleInitiateCall is disabled in v2. Returns 410 Gone to nudge clients to the new API.
+// If you need it back, re-introduce via feature flag.
 func (h *Handler) HandleInitiateCall(c *gin.Context) {
-	var req InitiateCallRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		Logger.Warn().Err(err).Msg("Initiate call validation failed")
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "Dữ liệu cuộc gọi không hợp lệ"})
-		return
-	}
-
-	call, err := h.voiceUC.InitiateCall(
-		c.Request.Context(),
-		req.SessionID,
-		domain.CallerType(req.CallerType),
-		req.CallerID,
-		domain.CallerType(req.CalleeType),
-		req.CalleeID,
-	)
-	if err != nil {
-		Logger.Error().Str("session_id", req.SessionID).Err(err).Msg("Failed to initiate call")
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, call)
+	c.JSON(http.StatusGone, gin.H{
+		"detail":    "This endpoint is deprecated; use POST /api/calls instead.",
+		"new_path":  "/api/calls",
+		"migration": "See docs/call-architecture.md §4.",
+	})
 }
 
-type EndCallRequest struct {
+type EndCallRequest struct { //nolint:unused
 	CallID          int64  `json:"call_id" binding:"required"`
 	SessionID       string `json:"session_id" binding:"required"`
 	DurationSeconds int    `json:"duration_seconds"`
 	RecordingURL    string `json:"recording_url"`
 }
 
+// HandleEndCall is deprecated. Use POST /api/calls/{id}/hangup.
 func (h *Handler) HandleEndCall(c *gin.Context) {
-	var req EndCallRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		Logger.Warn().Err(err).Msg("End call validation failed")
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "Dữ liệu kết thúc cuộc gọi không hợp lệ"})
-		return
-	}
-
-	err := h.voiceUC.EndCall(c.Request.Context(), req.CallID, req.SessionID, req.DurationSeconds, req.RecordingURL)
-	if err != nil {
-		Logger.Error().Int64("call_id", req.CallID).Err(err).Msg("Failed to end call")
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Cuộc gọi đã kết thúc"})
+	c.JSON(http.StatusGone, gin.H{
+		"detail":   "Deprecated. Use POST /api/calls/{id}/hangup.",
+		"new_path": "/api/calls/{id}/hangup",
+	})
 }
 
-type MarkMissedRequest struct {
+type MarkMissedRequest struct { //nolint:unused
 	CallID    int64  `json:"call_id" binding:"required"`
 	SessionID string `json:"session_id" binding:"required"`
 }
 
+// HandleMarkMissedCall is deprecated. ARI events drive missed state in v2.
 func (h *Handler) HandleMarkMissedCall(c *gin.Context) {
-	var req MarkMissedRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		Logger.Warn().Err(err).Msg("Mark missed call validation failed")
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "Dữ liệu không hợp lệ"})
-		return
-	}
-
-	err := h.voiceUC.MarkMissedCall(c.Request.Context(), req.CallID, req.SessionID)
-	if err != nil {
-		Logger.Error().Int64("call_id", req.CallID).Err(err).Msg("Failed to mark call as missed")
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Cuộc gọi đã được đánh dấu là gọi nhỡ"})
-}
-
-func (h *Handler) HandleUploadRecording(c *gin.Context) {
-	file, err := c.FormFile("audio")
-	if err != nil {
-		Logger.Warn().Err(err).Msg("Upload recording validation failed: no audio file")
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "Không có file ghi âm"})
-		return
-	}
-
-	sessionID := c.PostForm("session_id")
-	callIDStr := c.PostForm("call_id")
-	durStr := c.PostForm("duration_seconds")
-	durationSeconds, _ := strconv.Atoi(durStr)
-
-	recordingsDir := filepath.Join(h.docsDir, "..", "recordings")
-	_ = os.MkdirAll(recordingsDir, 0755)
-
-	filename := fmt.Sprintf("call_%d_%s", time.Now().UnixMilli(), file.Filename)
-	savePath := filepath.Join(recordingsDir, filename)
-
-	if err := c.SaveUploadedFile(file, savePath); err != nil {
-		Logger.Error().Str("session_id", sessionID).Err(err).Msg("Failed to save recording file")
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "Lỗi lưu file ghi âm: " + err.Error()})
-		return
-	}
-
-	recordingURL := "/static/recordings/" + filename
-
-	var callID int64
-	if callIDStr != "" {
-		callID, _ = strconv.ParseInt(callIDStr, 10, 64)
-	}
-
-	if callID > 0 || sessionID != "" {
-		if callID == 0 && sessionID != "" {
-			calls, _ := h.voiceUC.GetCallsBySession(c.Request.Context(), sessionID)
-			if len(calls) > 0 {
-				callID = calls[0].ID
-			}
-		}
-		if callID > 0 {
-			_ = h.voiceUC.EndCall(c.Request.Context(), callID, sessionID, durationSeconds, recordingURL)
-		}
-	}
-
-	transcript := strings.TrimSpace(c.PostForm("transcript"))
-
-	// Automatic Q&A Learning extraction from Voice Call to Continuous Learning Queue
-	if sessionID != "" {
-		go func(sID, recURL, trans, filePath string, durSec int, cID int64) {
-			ctx := context.Background()
-			custName := "Khách hàng"
-			chatCase, _ := h.caseUC.GetCase(ctx, sID)
-			if chatCase != nil && chatCase.CustomerName != "" && chatCase.CustomerName != "cskh01" && chatCase.CustomerName != "cskh" {
-				custName = chatCase.CustomerName
-			}
-
-			if trans == "" && filePath != "" {
-				trans = transcribeAudioFile(filePath)
-			}
-
-			if trans != "" && cID > 0 {
-				_ = h.voiceUC.SetTranscript(ctx, cID, trans)
-			}
-
-			question, answer := extractQAFromVoiceTranscript(custName, trans, durSec)
-			_, _ = h.learningUC.UpsertVoiceLearning(ctx, sID, question, answer, durSec)
-			_ = h.eventBus.PublishWS(ctx, "admin_inbox", domain.WSEventCaseUpdate, map[string]interface{}{
-				"type":       "new_learning_from_call",
-				"session_id": sID,
-			}, "system")
-		}(sessionID, recordingURL, transcript, savePath, durationSeconds, callID)
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success":       true,
-		"recording_url": recordingURL,
-		"message":       "Ghi âm cuộc gọi đã được lưu và tự động bóc tách nội dung đưa vào hàng chờ Học Tri Thức Mới",
+	c.JSON(http.StatusGone, gin.H{
+		"detail": "Deprecated. Call state is now driven by ARI StasisStart/End events.",
 	})
 }
 
-func transcribeAudioFile(filePath string) string {
-	audioBytes, err := os.ReadFile(filePath)
-	if err != nil || len(audioBytes) == 0 {
-		return ""
-	}
+// HandleUploadRecording is deprecated in v2: Asterisk MixMonitor records
+// to /var/spool/asterisk/recordings natively; the ARI RecordingFinished
+// event populates call_recordings automatically.
+func (h *Handler) HandleUploadRecording(c *gin.Context) {
+	c.JSON(http.StatusGone, gin.H{
+		"detail": "Deprecated. Asterisk now records natively; see call_recordings table.",
+	})
+}
 
-	geminiKey := os.Getenv("GEMINI_API_KEY")
-	if geminiKey != "" {
-		b64Data := base64.StdEncoding.EncodeToString(audioBytes)
-		reqBody := map[string]interface{}{
-			"contents": []map[string]interface{}{
-				{
-					"parts": []map[string]interface{}{
-						{
-							"inline_data": map[string]string{
-								"mime_type": "audio/webm",
-								"data":      b64Data,
-							},
-						},
-						{
-							"text": "Hãy nghe đoạn ghi âm cuộc gọi này và chép lại toàn bộ văn bản nội dung cuộc trò chuyện giữa khách hàng và chuyên viên CSKH bằng tiếng Việt.",
-						},
-					},
-				},
-			},
-		}
-		bodyBytes, err := json.Marshal(reqBody)
-		if err == nil {
-			url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=%s", geminiKey)
-			client := &http.Client{Timeout: 20 * time.Second}
-			httpReq, err := http.NewRequest("POST", url, bytes.NewReader(bodyBytes))
-			if err == nil {
-				httpReq.Header.Set("Content-Type", "application/json")
-				resp, err := client.Do(httpReq)
-				if err == nil {
-					defer resp.Body.Close()
-					respBytes, _ := io.ReadAll(resp.Body)
-					if resp.StatusCode == http.StatusOK {
-						var geminiResp struct {
-							Candidates []struct {
-								Content struct {
-									Parts []struct {
-										Text string `json:"text"`
-									} `json:"parts"`
-								} `json:"content"`
-							} `json:"candidates"`
-						}
-						if err := json.Unmarshal(respBytes, &geminiResp); err == nil && len(geminiResp.Candidates) > 0 {
-							var sb strings.Builder
-							for _, p := range geminiResp.Candidates[0].Content.Parts {
-								sb.WriteString(p.Text)
-							}
-							return strings.TrimSpace(sb.String())
-						}
-					}
-				}
-			}
-		}
-	}
+func transcribeAudioFile(filePath string) string { //nolint:unused
 	return ""
 }
 
-func extractQAFromVoiceTranscript(customerName, transcript string, durationSeconds int) (string, string) {
+func extractQAFromVoiceTranscript(customerName, transcript string, durationSeconds int) (string, string) { //nolint:unused
 	trimmed := strings.TrimSpace(transcript)
 
 	if len(trimmed) > 5 {
@@ -1224,7 +1085,7 @@ func extractQAFromVoiceTranscript(customerName, transcript string, durationSecon
 	}
 
 	question := fmt.Sprintf("Nội dung cuộc gọi tư vấn với khách hàng %s (%d giây)", customerName, durationSeconds)
-	answer := fmt.Sprintf("Cuộc gọi thoại đàm thoại %d giây. Bản ghi âm chưa nhận diện được văn bản lời thoại. Chuyên viên CSKH vui lòng nhập/chỉnh sửa nội dung tư vấn thực tế tại đây trước khi phê duyệt cho AI học.", durationSeconds)
+	answer := fmt.Sprintf("Cuộc gọi thoại đàm thoại %d giây.", durationSeconds)
 	return question, answer
 }
 
@@ -1309,23 +1170,16 @@ func (h *Handler) HandleDeleteCall(c *gin.Context) {
 // Call Signaling & Chat Actions (REST API -> WebSocket)
 // ============================================================
 
-// HandleDeclineCall - Guest declines an incoming call via REST API
-type DeclineCallRequest struct {
+// HandleDeclineCall is deprecated in v2: agents reject via POST /api/calls/{id}/reject,
+// customers cancel via POST /api/calls/{id}/cancel.
+type DeclineCallRequest struct { //nolint:unused
 	SessionID string `json:"session_id" binding:"required"`
 }
 
 func (h *Handler) HandleDeclineCall(c *gin.Context) {
-	var req DeclineCallRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		Logger.Warn().Err(err).Msg("Decline call validation failed")
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "Dữ liệu không hợp lệ"})
-		return
-	}
-	_ = h.eventBus.PublishWS(c.Request.Context(), req.SessionID, domain.WSEventCallEnd, map[string]interface{}{
-		"declined": true,
-	}, "guest")
-
-	c.JSON(http.StatusOK, gin.H{"success": true})
+	c.JSON(http.StatusGone, gin.H{
+		"detail": "Deprecated. Use POST /api/calls/{id}/reject (agent) or /cancel (customer).",
+	})
 }
 
 // HandleSendTyping - Send typing indicator via REST API

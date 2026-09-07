@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Inbox, Trash2, CheckCircle2, UserCheck, Send, Headphones, Tag as TagIcon, X } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Inbox, Trash2, CheckCircle2, UserCheck, Send, Headphones, Tag as TagIcon, X, Phone } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useCases,
@@ -41,7 +42,19 @@ const STATUS_CLASS: Record<string, string> = {
 type InboxTab = 'all' | 'NEEDS_HUMAN_CS' | 'HUMAN_CS_ACTIVE' | 'RESOLVED';
 
 export default function InboxPage() {
-  const { addToast, openConfirm } = useUIStore();
+  // useSearchParams / useRouter require a Suspense boundary in Next 14+.
+  // Wrap the real implementation in <InboxPageInner/> below.
+  return (
+    <React.Suspense fallback={null}>
+      <InboxPageInner />
+    </React.Suspense>
+  );
+}
+
+function InboxPageInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { addToast, openConfirm, pendingCalls, removePendingCall } = useUIStore();
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
 
@@ -54,6 +67,9 @@ export default function InboxPage() {
   // Case selection
   const [selectedCase, setSelectedCase] = useState<ChatCase | null>(null);
   const [lastSenderMap, setLastSenderMap] = useState<Record<string, string>>({});
+  // Reflect clicks and incoming `?session=…` deep links into the URL so
+  // reload keeps the same case open and notifications can deep-link.
+  const sessionFromUrl = searchParams?.get('session') || '';
 
   // UI state
   const [replyText, setReplyText] = useState('');
@@ -68,8 +84,12 @@ export default function InboxPage() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Data fetching: fetch up to 100 cases to allow real-time tab counting & filtering
-  const { data: casesData, isLoading: isLoadingCases } = useCases('', 1, 100);
+  // Data fetching: fetch up to 500 cases to allow real-time tab counting & filtering.
+  // Session deep-links (e.g. ?session=session-xxx from a call banner click) are
+  // reliably found here because 500 covers the vast majority of real workloads.
+  // A case that somehow lands beyond 500 will still open via the fallback in
+  // the URL-sync useEffect below.
+  const { data: casesData, isLoading: isLoadingCases } = useCases('', 1, 500);
   const { data: caseDetailData, refetch: refetchCaseDetail } = useCaseDetail(selectedCase?.session_id ?? '');
   const { data: voiceCallsData } = useVoiceCalls();
 
@@ -127,6 +147,19 @@ export default function InboxPage() {
   const allCases = casesData?.cases ?? [];
   const caseMessages = caseDetailData?.messages ?? [];
   const voiceCalls = voiceCallsData?.calls ?? [];
+
+  // Sync URL ?session=… → selectedCase. Runs after allCases exists so
+  // the lookup works on first load. Skips when already in sync to avoid
+  // resetting the user mid-edit. Also runs when isLoadingCases transitions
+  // false→true (data just arrived) so we catch the case even if the URL
+  // changed while data was still fetching.
+  useEffect(() => {
+    if (!sessionFromUrl) return;
+    if (isLoadingCases) return;
+    if (selectedCase?.session_id === sessionFromUrl) return;
+    const hit = allCases.find((c) => c.session_id === sessionFromUrl);
+    if (hit) setSelectedCase(hit);
+  }, [sessionFromUrl, allCases, selectedCase?.session_id, isLoadingCases]);
 
   // Populate lastSenderMap whenever allCases changes
   useEffect(() => {
@@ -224,18 +257,29 @@ export default function InboxPage() {
   const caseTotal = sortedCases.length;
   const pagedCases = sortedCases.slice((casePage - 1) * casePageSize, casePage * casePageSize);
 
+  // Click on a case row → select + reflect into URL so reload/refresh
+  // keeps the same panel open. router.replace avoids polluting history.
+  const handleSelectCase = useCallback(
+    (c: ChatCase) => {
+      setSelectedCase(c);
+      setReplyText('');
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('session', c.session_id);
+        router.replace(url.pathname + '?' + url.searchParams.toString());
+      } catch (_) {
+        /* SSR safe */
+      }
+    },
+    [router]
+  );
+
   // Scroll to bottom when messages change
   useEffect(() => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
   }, [caseMessages]);
-
-  // Select case handler
-  const handleSelectCase = useCallback((c: ChatCase) => {
-    setSelectedCase(c);
-    setReplyText('');
-  }, []);
 
   // Take case handler
   const handleTakeCase = async () => {
@@ -583,6 +627,80 @@ export default function InboxPage() {
                 <div className={styles.detailSession}>
                   Mã phiên: <code>{selectedCase.session_id}</code>
                 </div>
+
+                {/* Inline "Nghe máy" button for this session when there is a
+                    pending incoming call. The float banner in admin layout
+                    disappears after the missed-call timeout, but the call
+                    may still be ringing on the agent side — give the admin
+                    a way to accept it from the chat panel. */}
+                {(() => {
+                  const pending = pendingCalls.find((c) => c.session_id === selectedCase.session_id);
+                  if (!pending) return null;
+                  return (
+                    <div
+                      style={{
+                        marginTop: '10px',
+                        display: 'flex',
+                        gap: '8px',
+                        alignItems: 'center',
+                        padding: '8px 12px',
+                        background: 'rgba(52, 211, 153, 0.12)',
+                        border: '1px solid rgba(52, 211, 153, 0.4)',
+                        borderRadius: '10px',
+                      }}
+                    >
+                      <Headphones size={16} color="#34d399" />
+                      <span style={{ color: '#a7f3d0', fontSize: 13 }}>
+                        Có cuộc gọi đến từ <b>{pending.caller_id}</b>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // Drive the float banner's answer handler. The
+                          // layout exposes `__adminCall.answerBySession`
+                          // (see admin/layout.tsx) because the answer
+                          // pipeline needs the WebRTC state that lives in
+                          // useAdminWebRTC, which is created at the layout
+                          // level.
+                          const fn = (typeof window !== 'undefined' && (window as any).__adminCall?.answerBySession) as
+                            | ((s: string) => boolean)
+                            | undefined;
+                          if (fn) fn(pending.session_id);
+                        }}
+                        style={{
+                          marginLeft: 'auto',
+                          background: '#34d399',
+                          color: '#022c1f',
+                          border: 'none',
+                          borderRadius: '8px',
+                          padding: '6px 12px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }}
+                      >
+                        <Phone size={14} /> Nghe máy
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removePendingCall(pending.call_id)}
+                        style={{
+                          background: 'transparent',
+                          color: '#a7f3d0',
+                          border: '1px solid rgba(52, 211, 153, 0.4)',
+                          borderRadius: '8px',
+                          padding: '6px 10px',
+                          cursor: 'pointer',
+                        }}
+                        aria-label="Bỏ qua"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  );
+                })()}
 
                 <div className={styles.actionBtnGroup}>
                   {/* Tag Button & Popover */}

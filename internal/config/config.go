@@ -4,6 +4,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Config holds all application configuration loaded from environment variables.
@@ -57,11 +58,36 @@ type Config struct {
 	RetryMaxCount   int
 	RetryClaimAfter int // seconds
 
-	// Voice Call
+	// Voice Call (legacy STUN)
 	STUNServers []string
 
 	// System Prompt
 	SystemPrompt string
+
+	// Asterisk ARI
+	ARI AsteriskConfig
+
+	// Call Subsystem
+	Call CallConfig
+}
+
+// AsteriskConfig bundles ARI connection settings.
+type AsteriskConfig struct {
+	URL                string
+	User               string
+	Password           string
+	App                string
+	RecordingEnabled   bool
+	WSReconnectBackoff time.Duration
+	HTTPTimeout        time.Duration
+}
+
+// CallConfig bundles call subsystem tunables.
+type CallConfig struct {
+	AgentRingTimeout time.Duration
+	MaxDuration      time.Duration
+	QueueTTL         time.Duration
+	ReconcileEvery   time.Duration
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -76,7 +102,7 @@ func Load() *Config {
 		AdminPath:       getEnv("ADMIN_PATH", "/admin"),
 
 		// Database
-		DatabaseURL: getEnv("DATABASE_URL", "postgres://localhost:5432/dongdo_cs?sslmode=disable"),
+		DatabaseURL: getEnv("DATABASE_URL", "postgres://dongdo:dongdo@postgres:5432/dongdo_cs?sslmode=disable"),
 
 		// Redis
 		RedisURL: getEnv("REDIS_URL", ""),
@@ -121,7 +147,35 @@ func Load() *Config {
 
 		// System Prompt
 		SystemPrompt: getEnv("SYSTEM_PROMPT", defaultSystemPrompt),
+
+		// Asterisk ARI
+		ARI: AsteriskConfig{
+			URL:                getEnv("ASTERISK_ARI_URL", "http://asterisk:8088/ari"),
+			User:               getEnv("ASTERISK_ARI_USER", "callservice"),
+			Password:           getEnv("ASTERISK_ARI_PASSWORD", "callsecret"),
+			App:                getEnv("ASTERISK_ARI_APP", "callapp"),
+			RecordingEnabled:   getEnv("ASTERISK_RECORDING_ENABLED", "false") == "true",
+			WSReconnectBackoff: getEnvDuration("ASTERISK_WS_BACKOFF", 2*time.Second),
+			HTTPTimeout:        getEnvDuration("ASTERISK_HTTP_TIMEOUT", 5*time.Second),
+		},
+
+		// Call subsystem
+		Call: CallConfig{
+			AgentRingTimeout: getEnvDuration("CALL_AGENT_RING_TIMEOUT", 30*time.Second),
+			MaxDuration:      getEnvDuration("CALL_MAX_DURATION", 30*time.Minute),
+			QueueTTL:         getEnvDuration("CALL_QUEUE_TTL", 10*time.Minute),
+			ReconcileEvery:   getEnvDuration("CALL_RECONCILE_INTERVAL", 30*time.Second),
+		},
 	}
+}
+
+func getEnvDuration(k string, fb time.Duration) time.Duration {
+	if v := os.Getenv(k); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
+		}
+	}
+	return fb
 }
 
 func getEnv(key, fallback string) string {
@@ -157,27 +211,4 @@ func getEnvBool(key string, fallback bool) bool {
 	return strings.ToLower(v) == "true" || v == "1"
 }
 
-const defaultSystemPrompt = `Bạn là chuyên viên Chăm sóc khách hàng của Đông Đô Partners. Nhiệm vụ của bạn là tư vấn, giải đáp thắc mắc cho khách hàng về Hàng hóa phái sinh, hướng dẫn nền tảng DDP Invest, quy trình nạp/rút tiền và quản trị rủi ro.
-
-PHONG CÁCH GIAO TIẾP VÀ XƯNG HÔ:
-- Hãy trả lời tự nhiên, lịch sự, chu đáo và thân thiện như một con người thật (xưng "em" hoặc "tôi", gọi khách hàng là "anh/chị" hoặc "bạn").
-- TUYỆT ĐỐI KHÔNG tự khai báo hoặc đề cập mình là "trợ lý ảo", "bot", "AI", "hệ thống tự động" hay "được huấn luyện".
-- Trả lời trôi chảy, ấm áp, chuẩn mực chuyên viên CSKH chuyên nghiệp.
-
-QUY TẮC CỐT LÕI:
-
-Bạn PHẢI LUÔN tìm kiếm và TRÍCH XUẤT CHÍNH XÁC câu trả lời từ Cơ sở dữ liệu (Knowledge).
-
-TUYỆT ĐỐI KHÔNG SỬ DỤNG KIẾN THỨC BÊN NGOÀI ĐỂ TRẢ LỜI. Không được tự ý thêm thắt các mặt hàng, tên gọi, hoặc dữ liệu không có trong tài liệu (Ví dụ: Không được tự thêm 'Vàng' hay 'Dầu thô' nếu tài liệu không ghi).
-
-Nếu dữ liệu liệt kê thành nhiều nhóm, phải giữ nguyên cách phân loại gốc.
-
-CHỈ KHI chắc chắn 100% tài liệu không có thông tin, BẠN BẮT BUỘC PHẢI THỰC HIỆN ĐỦ 2 BƯỚC SAU:
-
-Bước 1 (Giải thích lịch sự): Lịch sự xin lỗi và thông báo (Ví dụ: 'Dạ xin lỗi anh/chị, hiện tại em chưa có thông tin chi tiết về nội dung này trong hệ thống dữ liệu của Đông Đô Partners.').
-
-Bước 2 (Chuyển giao người thật): BẮT BUỘC chốt lại bằng đúng nguyên văn câu nói sau: 'Vui lòng đợi trong giây lát, chuyên viên CSKH của Đông Đô sẽ trực tiếp tham gia cuộc trò chuyện để hỗ trợ bạn ngay.' (Tuyệt đối không hướng dẫn gọi Hotline nữa).
-
-KHI TRẢ LỜI VỀ CÁC QUY TRÌNH HOẶC CON SỐ (THỜI GIAN, TỶ LỆ, CHI PHÍ...), PHẢI TRÍCH XUẤT CHÍNH XÁC 100% CÁC CON SỐ TRONG TÀI LIỆU. TUYỆT ĐỐI KHÔNG DÙNG TỪ NGỮ CHUNG CHUNG (VÍ DỤ: 'NHANH CHÓNG', 'TÙY THUỘC') ĐỂ LẤP LIẾM NẾU TÀI LIỆU CÓ GHI RÕ SỐ GIỜ/NGÀY.
-
-KHI CÂU TRẢ LỜI LÀ MỘT DANH SÁCH (CÁC ĐIỀU KIỆN, CÁC BƯỚC, CÁC MẶT HÀNG...), BẠN PHẢI ĐỌC THẬT KỸ VÀ LIỆT KÊ ĐẦY ĐỦ TẤT CẢ CÁC Ý/GẠCH ĐẦU DÒNG CÓ TRONG TÀI LIỆU, KHÔNG ĐƯỢC TÓM TẮT HAY BỎ SÓT.`
+const defaultSystemPrompt = `Bạn là chuyên viên Chăm sóc khách hàng của Đông Đô Partners.`

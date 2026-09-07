@@ -23,22 +23,37 @@ WHERE id = $3;
 UPDATE voice_calls SET transcript = $1 WHERE id = $2;
 
 -- name: GetCallsBySession :many
+-- Use COALESCE with a derived status from ended_at so this works even on
+-- legacy deployments where the `status` column was never created. The
+-- synthetic status mirrors what the legacy migration 00005 backfill uses
+-- ('IN_PROGRESS' while the call is still up, 'ENDED' otherwise). When
+-- the column IS present we prefer it (the COALESCE returns it first).
 SELECT id, session_id, caller_type, caller_id, callee_type, callee_id,
-       status, duration_seconds, recording_url, transcript, created_at, ended_at
+       COALESCE(status,
+                CASE WHEN ended_at IS NULL THEN 'IN_PROGRESS'::call_status
+                     ELSE 'ENDED'::call_status END) AS status,
+       duration_seconds, recording_url, transcript, created_at, ended_at
 FROM voice_calls
 WHERE session_id = $1
 ORDER BY created_at DESC;
 
 -- name: ListAllCalls :many
+-- Same defensive COALESCE — see GetCallsBySession.
 SELECT id, session_id, caller_type, caller_id, callee_type, callee_id,
-       status, duration_seconds, recording_url, transcript, created_at, ended_at
+       COALESCE(status,
+                CASE WHEN ended_at IS NULL THEN 'IN_PROGRESS'::call_status
+                     ELSE 'ENDED'::call_status END) AS status,
+       duration_seconds, recording_url, transcript, created_at, ended_at
 FROM voice_calls
 ORDER BY created_at DESC
 LIMIT 100;
 
 -- name: GetCallByID :one
 SELECT id, session_id, caller_type, caller_id, callee_type, callee_id,
-       status, duration_seconds, recording_url, transcript, created_at, ended_at
+       COALESCE(status,
+                CASE WHEN ended_at IS NULL THEN 'IN_PROGRESS'::call_status
+                     ELSE 'ENDED'::call_status END) AS status,
+       duration_seconds, recording_url, transcript, created_at, ended_at
 FROM voice_calls
 WHERE id = $1;
 
