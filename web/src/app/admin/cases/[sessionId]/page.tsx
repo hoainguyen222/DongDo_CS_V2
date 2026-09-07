@@ -21,6 +21,7 @@ import { useAuthStore } from '@/lib/stores/authStore';
 import { MarkdownRenderer } from '@/components/MarkdownRenderer';
 import { useUIStore } from '@/lib/stores/uiStore';
 import { Pagination } from '@/components/admin/AdminSidebar';
+import { useListUrlParams } from '@/lib/hooks/useListUrlParams';
 import type { Message, QAPair, ChatCase } from '@/lib/types';
 import styles from './page.module.scss';
 
@@ -66,11 +67,24 @@ export default function CaseDetailPage() {
   const [currentCase, setCurrentCase] = useState<CaseDetailPayload | null>(null);
   const [lastSenderMap, setLastSenderMap] = useState<Record<string, string>>({});
 
-  // ── listPanel state (same as inbox)
-  const [activeTab, setActiveTab] = useState<CaseTab>('all');
-  const [casePage, setCasePage] = useState(1);
-  const [casePageSize, setCasePageSize] = useState(10);
-  const [caseFilter, setCaseFilter] = useState('');
+  // ── listPanel state (URL-synced)
+  const {
+    page: casePage,
+    limit: casePageSize,
+    search: caseFilter,
+    status: activeTab,
+    setPage: setCasePage,
+    setLimit: setCasePageSize,
+    setSearch: setCaseFilter,
+    setStatus: setActiveTab,
+    buildUrl,
+  } = useListUrlParams<CaseTab>({
+    defaultPage: 1,
+    defaultLimit: 10,
+    defaultSearch: '',
+    defaultStatus: 'all',
+    paramNames: { search: 'q', status: 'status', page: 'page', limit: 'limit' },
+  });
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -252,9 +266,9 @@ export default function CaseDetailPage() {
   const handleSelectCase = useCallback(
     (c: ChatCase) => {
       if (c.session_id === sessionId) return;
-      router.push(`/admin/cases/${encodeURIComponent(c.session_id)}`);
+      router.push(buildUrl(`/admin/cases/${encodeURIComponent(c.session_id)}`));
     },
-    [router, sessionId]
+    [router, sessionId, buildUrl]
   );
 
   const handleTakeCase = async () => {
@@ -326,7 +340,7 @@ export default function CaseDetailPage() {
       });
       setShowResolveModal(false);
       addToast({ title: 'Đã đóng case thành công!', variant: 'success' });
-      router.push('/admin/inbox');
+      router.push(buildUrl('/admin/inbox'));
     } catch (err: any) {
       addToast({ title: err.message || 'Lỗi đóng case', variant: 'error' });
     }
@@ -343,7 +357,7 @@ export default function CaseDetailPage() {
         try {
           await deleteCaseMutation.mutateAsync(currentCase.session_id);
           addToast({ title: 'Đã xóa case', variant: 'success' });
-          router.push('/admin/inbox');
+          router.push(buildUrl('/admin/inbox'));
         } catch (err: any) {
           addToast({ title: err.message || 'Lỗi xóa case', variant: 'error' });
         }
@@ -365,7 +379,7 @@ export default function CaseDetailPage() {
               <p>Quản lý hội thoại & tiếp nhận hỗ trợ</p>
             </div>
           </div>
-          <Link href="/admin/inbox" className={styles.voiceHistoryBtn}>
+          <Link href={buildUrl('/admin/inbox')} className={styles.voiceHistoryBtn}>
             <ArrowLeft size={14} />
             <span>Về danh sách</span>
           </Link>
@@ -375,10 +389,7 @@ export default function CaseDetailPage() {
           type="text"
           placeholder="Tìm kiếm case..."
           value={caseFilter}
-          onChange={(e) => {
-            setCaseFilter(e.target.value);
-            setCasePage(1);
-          }}
+          onChange={(e) => setCaseFilter(e.target.value)}
           className={styles.searchInput}
         />
       </div>
@@ -390,10 +401,7 @@ export default function CaseDetailPage() {
             <button
               type="button"
               className={`${styles.tabBtn} ${activeTab === 'all' ? styles.tabBtnActive : ''}`}
-              onClick={() => {
-                setActiveTab('all');
-                setCasePage(1);
-              }}
+              onClick={() => setActiveTab('all')}
             >
               <span>Tất cả</span>
               {unrepliedAllCount > 0 && (
@@ -405,10 +413,7 @@ export default function CaseDetailPage() {
             <button
               type="button"
               className={`${styles.tabBtn} ${activeTab === 'NEEDS_HUMAN_CS' ? styles.tabBtnActive : ''}`}
-              onClick={() => {
-                setActiveTab('NEEDS_HUMAN_CS');
-                setCasePage(1);
-              }}
+              onClick={() => setActiveTab('NEEDS_HUMAN_CS')}
             >
               <span>Chờ CSKH</span>
               {waitingCount > 0 && (
@@ -420,10 +425,7 @@ export default function CaseDetailPage() {
             <button
               type="button"
               className={`${styles.tabBtn} ${activeTab === 'HUMAN_CS_ACTIVE' ? styles.tabBtnActive : ''}`}
-              onClick={() => {
-                setActiveTab('HUMAN_CS_ACTIVE');
-                setCasePage(1);
-              }}
+              onClick={() => setActiveTab('HUMAN_CS_ACTIVE')}
             >
               <span>Đang CSKH</span>
               {unrepliedActiveCount > 0 && (
@@ -435,10 +437,7 @@ export default function CaseDetailPage() {
             <button
               type="button"
               className={`${styles.tabBtn} ${activeTab === 'RESOLVED' ? styles.tabBtnActive : ''}`}
-              onClick={() => {
-                setActiveTab('RESOLVED');
-                setCasePage(1);
-              }}
+              onClick={() => setActiveTab('RESOLVED')}
             >
               <span>Đã đóng</span>
               {resolvedCount > 0 && (

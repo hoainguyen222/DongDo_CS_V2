@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { api } from '@/lib/api';
 import { ChatCase, CustomerProfile, AnalyticsStats } from '@/lib/types';
 import './PartnerStyles.css';
@@ -23,12 +24,42 @@ interface PartnerDashboardViewProps {
 }
 
 export const PartnerDashboardView: React.FC<PartnerDashboardViewProps> = ({ onSelectTab }) => {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const urlStartDate = searchParams.get('startDate') || '';
+  const urlEndDate = searchParams.get('endDate') || '';
+
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [appliedFilter, setAppliedFilter] = useState<{ start?: string; end?: string } | null>(null);
+  const [startDate, setStartDate] = useState(urlStartDate);
+  const [endDate, setEndDate] = useState(urlEndDate);
+  const [appliedFilter, setAppliedFilter] = useState<{ start?: string; end?: string } | null>(() => {
+    if (urlStartDate || urlEndDate) return { start: urlStartDate, end: urlEndDate };
+    return null;
+  });
+
+  useEffect(() => {
+    setStartDate(urlStartDate);
+    setEndDate(urlEndDate);
+    if (urlStartDate || urlEndDate) {
+      setAppliedFilter({ start: urlStartDate, end: urlEndDate });
+    } else {
+      setAppliedFilter(null);
+    }
+  }, [urlStartDate, urlEndDate]);
+
+  const updateUrlFilter = (s: string, e: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (s) params.set('startDate', s);
+    else params.delete('startDate');
+    if (e) params.set('endDate', e);
+    else params.delete('endDate');
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
 
   // Real DB Data state
   const [cases, setCases] = useState<ChatCase[]>([]);
@@ -260,6 +291,7 @@ export const PartnerDashboardView: React.FC<PartnerDashboardViewProps> = ({ onSe
               className="btn-filter-apply"
               onClick={() => {
                 setAppliedFilter({ start: startDate, end: endDate });
+                updateUrlFilter(startDate, endDate);
               }}
             >
               Lọc Thời Gian
@@ -270,6 +302,7 @@ export const PartnerDashboardView: React.FC<PartnerDashboardViewProps> = ({ onSe
                 setStartDate('');
                 setEndDate('');
                 setAppliedFilter(null);
+                updateUrlFilter('', '');
               }}
             >
               Xem Tất Cả

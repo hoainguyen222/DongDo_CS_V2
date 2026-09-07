@@ -13,6 +13,7 @@ import {
 import { useAuthStore } from '@/lib/stores/authStore';
 import { Pagination } from '@/components/admin/AdminSidebar';
 import { useUIStore } from '@/lib/stores/uiStore';
+import { useListUrlParams } from '@/lib/hooks/useListUrlParams';
 import type { ChatCase } from '@/lib/types';
 import styles from './page.module.scss';
 
@@ -32,154 +33,29 @@ const STATUS_CLASS: Record<string, string> = {
 
 type InboxTab = 'all' | 'NEEDS_HUMAN_CS' | 'HUMAN_CS_ACTIVE' | 'RESOLVED';
 
-const FILTER_STORAGE_KEY = 'inbox_filter_state';
-
-interface InboxFilterState {
-  status: InboxTab;
-  page: number;
-  limit: number;
-  q: string;
-}
-
-function readStoredFilter(): InboxFilterState | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = sessionStorage.getItem(FILTER_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<InboxFilterState>;
-    if (typeof parsed !== 'object' || parsed === null) return null;
-    return {
-      status: (parsed.status as InboxTab) || 'all',
-      page: typeof parsed.page === 'number' && parsed.page > 0 ? parsed.page : 1,
-      limit: typeof parsed.limit === 'number' && parsed.limit > 0 ? parsed.limit : 10,
-      q: typeof parsed.q === 'string' ? parsed.q : '',
-    };
-  } catch {
-    return null;
-  }
-}
-
-function writeStoredFilter(state: InboxFilterState): void {
-  if (typeof window === 'undefined') return;
-  try {
-    sessionStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    /* sessionStorage may be unavailable (private mode, quota) — silently ignore */
-  }
-}
-
 export default function InboxPage() {
   const { addToast, openConfirm } = useUIStore();
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
   const router = useRouter();
-  const searchParams = useSearchParams();
 
-  // ── URL-synced state: tab status, pagination, search keyword ────────────
-  // Priority: URL query params (shareable) > sessionStorage (back-navigation) > defaults.
-  const hasUrlQuery =
-    searchParams.has('status') ||
-    searchParams.has('page') ||
-    searchParams.has('limit') ||
-    searchParams.has('q');
-
-  const statusFromUrl = (searchParams.get('status') || 'all') as InboxTab;
-  const pageFromUrl = parseInt(searchParams.get('page') || '1', 10);
-  const limitFromUrl = parseInt(searchParams.get('limit') || '10', 10);
-  const qFromUrl = searchParams.get('q') || '';
-
-  // If the URL has no query string but sessionStorage does (e.g. user clicked
-  // into a case detail and hit the browser Back button), restore filter from
-  // sessionStorage and immediately rewrite the URL so it stays shareable.
-  const [bootstrapped] = useState(() => {
-    if (hasUrlQuery) return false;
-    const stored = readStoredFilter();
-    if (!stored) return false;
-    const params = new URLSearchParams();
-    if (stored.status !== 'all') params.set('status', stored.status);
-    if (stored.page > 1) params.set('page', String(stored.page));
-    if (stored.limit !== 10) params.set('limit', String(stored.limit));
-    if (stored.q) params.set('q', stored.q);
-    const qs = params.toString();
-    if (qs) {
-      // Use replace so the back-stack isn't polluted with a transient entry.
-      router.replace(`/admin/inbox?${qs}`, { scroll: false });
-    }
-    return true;
+  const {
+    page: casePage,
+    limit: casePageSize,
+    search: caseFilter,
+    status: activeTab,
+    setPage: setCasePage,
+    setLimit: setCasePageSize,
+    setSearch: setCaseFilter,
+    setStatus: setActiveTab,
+    buildUrl,
+  } = useListUrlParams<InboxTab>({
+    defaultPage: 1,
+    defaultLimit: 10,
+    defaultSearch: '',
+    defaultStatus: 'all',
+    paramNames: { search: 'q', status: 'status', page: 'page', limit: 'limit' },
   });
-
-  // Tab & Pagination state
-  const [activeTab, setActiveTab] = useState<InboxTab>(statusFromUrl);
-  const [casePage, setCasePage] = useState(
-    Number.isFinite(pageFromUrl) && pageFromUrl > 0 ? pageFromUrl : 1
-  );
-  const [casePageSize, setCasePageSize] = useState(
-    Number.isFinite(limitFromUrl) && limitFromUrl > 0 ? limitFromUrl : 10
-  );
-  const [caseFilter, setCaseFilter] = useState(qFromUrl);
-
-  // Hydrate from sessionStorage on first mount when URL had no query string
-  useEffect(() => {
-    if (bootstrapped) {
-      const stored = readStoredFilter();
-      if (stored) {
-        setActiveTab(stored.status);
-        setCasePage(stored.page);
-        setCasePageSize(stored.limit);
-        setCaseFilter(stored.q);
-      }
-    }
-    // Run once on mount only
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Persist current filter to sessionStorage so navigating to a case detail
-  // and returning preserves the filter even when the URL query is dropped.
-  useEffect(() => {
-    writeStoredFilter({
-      status: activeTab,
-      page: casePage,
-      limit: casePageSize,
-      q: caseFilter,
-    });
-  }, [activeTab, casePage, casePageSize, caseFilter]);
-
-  // Sync URL -> state when user navigates back/forward
-  useEffect(() => {
-    setActiveTab(statusFromUrl);
-    setCasePage(Number.isFinite(pageFromUrl) && pageFromUrl > 0 ? pageFromUrl : 1);
-    setCasePageSize(
-      Number.isFinite(limitFromUrl) && limitFromUrl > 0 ? limitFromUrl : 10
-    );
-    setCaseFilter(qFromUrl);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
-
-  // Sync state -> URL whenever any filter changes
-  const updateUrl = useCallback(
-    (next: { status?: InboxTab; page?: number; limit?: number; q?: string }) => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (next.status !== undefined) {
-        if (next.status === 'all') params.delete('status');
-        else params.set('status', next.status);
-      }
-      if (next.page !== undefined) {
-        if (next.page <= 1) params.delete('page');
-        else params.set('page', String(next.page));
-      }
-      if (next.limit !== undefined) {
-        if (next.limit === 10) params.delete('limit');
-        else params.set('limit', String(next.limit));
-      }
-      if (next.q !== undefined) {
-        if (!next.q) params.delete('q');
-        else params.set('q', next.q);
-      }
-      const qs = params.toString();
-      router.replace(qs ? `/admin/inbox?${qs}` : '/admin/inbox', { scroll: false });
-    },
-    [router, searchParams]
-  );
 
   // Track last sender from realtime WS so we can flag unread cases
   const [lastSenderMap, setLastSenderMap] = useState<Record<string, string>>({});
@@ -317,12 +193,7 @@ export default function InboxPage() {
             type="text"
             placeholder="Tìm kiếm..."
             value={caseFilter}
-            onChange={(e) => {
-              const v = e.target.value;
-              setCaseFilter(v);
-              setCasePage(1);
-              updateUrl({ q: v, page: 1 });
-            }}
+            onChange={(e) => setCaseFilter(e.target.value)}
             className={styles.searchInput}
           />
           <button onClick={handleClearAllCases} className={styles.clearAllBtn}>
@@ -340,11 +211,7 @@ export default function InboxPage() {
             <button
               type="button"
               className={`${styles.tabBtn} ${activeTab === 'all' ? styles.tabBtnActive : ''}`}
-              onClick={() => {
-                setActiveTab('all');
-                setCasePage(1);
-                updateUrl({ status: 'all', page: 1 });
-              }}
+              onClick={() => setActiveTab('all')}
             >
               <span>Tất cả</span>
               {unrepliedAllCount > 0 && (
@@ -357,11 +224,7 @@ export default function InboxPage() {
             <button
               type="button"
               className={`${styles.tabBtn} ${activeTab === 'NEEDS_HUMAN_CS' ? styles.tabBtnActive : ''}`}
-              onClick={() => {
-                setActiveTab('NEEDS_HUMAN_CS');
-                setCasePage(1);
-                updateUrl({ status: 'NEEDS_HUMAN_CS', page: 1 });
-              }}
+              onClick={() => setActiveTab('NEEDS_HUMAN_CS')}
             >
               <span>Chờ CSKH</span>
               {waitingCount > 0 && (
@@ -374,11 +237,7 @@ export default function InboxPage() {
             <button
               type="button"
               className={`${styles.tabBtn} ${activeTab === 'HUMAN_CS_ACTIVE' ? styles.tabBtnActive : ''}`}
-              onClick={() => {
-                setActiveTab('HUMAN_CS_ACTIVE');
-                setCasePage(1);
-                updateUrl({ status: 'HUMAN_CS_ACTIVE', page: 1 });
-              }}
+              onClick={() => setActiveTab('HUMAN_CS_ACTIVE')}
             >
               <span>Đang CSKH</span>
               {unrepliedActiveCount > 0 && (
@@ -391,11 +250,7 @@ export default function InboxPage() {
             <button
               type="button"
               className={`${styles.tabBtn} ${activeTab === 'RESOLVED' ? styles.tabBtnActive : ''}`}
-              onClick={() => {
-                setActiveTab('RESOLVED');
-                setCasePage(1);
-                updateUrl({ status: 'RESOLVED', page: 1 });
-              }}
+              onClick={() => setActiveTab('RESOLVED')}
             >
               <span>Đã đóng</span>
               {resolvedCount > 0 && (
@@ -421,7 +276,7 @@ export default function InboxPage() {
                 return (
                   <Link
                     key={c.id || c.session_id}
-                    href={`/admin/cases/${encodeURIComponent(c.session_id)}`}
+                    href={buildUrl(`/admin/cases/${encodeURIComponent(c.session_id)}`)}
                     onClick={() => handleSelectCase(c)}
                     className={`${styles.caseItem} ${isUnreplied ? styles.caseItemUnreplied : ''}`}
                     style={{ textDecoration: 'none', color: 'inherit' }}
@@ -450,15 +305,8 @@ export default function InboxPage() {
               currentPage={casePage}
               pageSize={casePageSize}
               totalItems={caseTotal}
-              onPageChange={(p) => {
-                setCasePage(p);
-                updateUrl({ page: p });
-              }}
-              onPageSizeChange={(s) => {
-                setCasePageSize(s);
-                setCasePage(1);
-                updateUrl({ limit: s, page: 1 });
-              }}
+              onPageChange={setCasePage}
+              onPageSizeChange={setCasePageSize}
             />
           </div>
         </div>

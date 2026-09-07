@@ -6,6 +6,9 @@ export const metadata: Metadata = {
   title: 'Đông Đô Partners - Hệ Thống Chăm Sóc Khách Hàng Thông Minh',
   description:
     'Tư vấn Hàng hóa phái sinh, DDP Invest, nạp rút tiền và quản trị rủi ro trực tuyến 24/7',
+  icons: {
+    icon: '/logo/Logo Dọc_Trắng.png',
+  },
 };
 
 export default function RootLayout({

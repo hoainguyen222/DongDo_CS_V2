@@ -5,13 +5,24 @@ import { Headphones, Phone, RefreshCw, XCircle, Search, Play, UserCheck } from '
 import { useVoiceCalls, useDeleteVoiceCall } from '@/lib/hooks/useApi';
 import { Pagination } from '@/components/admin/AdminSidebar';
 import { useUIStore } from '@/lib/stores/uiStore';
+import { useListUrlParams } from '@/lib/hooks/useListUrlParams';
 import styles from '@/components/admin/AdminPage.module.scss';
 
 export default function CallsPage() {
   const { addToast } = useUIStore();
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [searchTerm, setSearchTerm] = useState('');
+  const {
+    page,
+    limit: pageSize,
+    search: searchTerm,
+    setPage,
+    setLimit: setPageSize,
+    setSearch: setSearchTerm,
+  } = useListUrlParams({
+    defaultPage: 1,
+    defaultLimit: 10,
+    defaultSearch: '',
+    paramNames: { search: 'search', page: 'page', limit: 'limit' },
+  });
   const [playingAudio, setPlayingAudio] = useState<string | null>(null);
 
   const { data, isLoading, refetch } = useVoiceCalls();
@@ -202,7 +213,7 @@ export default function CallsPage() {
               pageSize={pageSize}
               totalItems={total}
               onPageChange={setPage}
-              onPageSizeChange={(s) => { setPageSize(s); setPage(1); }}
+              onPageSizeChange={setPageSize}
             />
           </div>
         )}
