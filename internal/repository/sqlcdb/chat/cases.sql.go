@@ -29,31 +29,6 @@ func (q *Queries) AssignCase(ctx context.Context, arg AssignCaseParams) error {
 	return err
 }
 
-const countCases = `-- name: CountCases :one
-SELECT COUNT(*)
-FROM chat_cases c
-WHERE ($1::text = '' OR c.status::text = $1::text)
-  AND (
-      $2::text = '' OR
-      c.customer_name ILIKE '%' || $2::text || '%' OR
-      c.customer_phone ILIKE '%' || $2::text || '%' OR
-      c.session_id ILIKE '%' || $2::text || '%' OR
-      c.last_message ILIKE '%' || $2::text || '%'
-  )
-`
-
-type CountCasesParams struct {
-	Column1 string `json:"column_1"`
-	Column2 string `json:"column_2"`
-}
-
-func (q *Queries) CountCases(ctx context.Context, arg CountCasesParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countCases, arg.Column1, arg.Column2)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const deleteAllCases = `-- name: DeleteAllCases :exec
 DELETE FROM chat_cases
 `
@@ -156,37 +131,6 @@ func (q *Queries) GetCaseDetailWithGuest(ctx context.Context, sessionID string) 
 		&i.UpdatedAt,
 		&i.GuestDisplayName,
 		&i.GuestPhone,
-	)
-	return i, err
-}
-
-const getCaseStatusCounts = `-- name: GetCaseStatusCounts :one
-SELECT
-    COUNT(*) AS total_count,
-    COUNT(*) FILTER (WHERE status = 'NEEDS_HUMAN_CS'::case_status) AS needs_human_count,
-    COUNT(*) FILTER (WHERE status = 'HUMAN_CS_ACTIVE'::case_status) AS human_active_count,
-    COUNT(*) FILTER (WHERE status = 'RESOLVED'::case_status) AS resolved_count,
-    COUNT(*) FILTER (WHERE status = 'AI_ACTIVE'::case_status) AS ai_active_count
-FROM chat_cases
-`
-
-type GetCaseStatusCountsRow struct {
-	TotalCount       int64 `json:"total_count"`
-	NeedsHumanCount  int64 `json:"needs_human_count"`
-	HumanActiveCount int64 `json:"human_active_count"`
-	ResolvedCount    int64 `json:"resolved_count"`
-	AiActiveCount    int64 `json:"ai_active_count"`
-}
-
-func (q *Queries) GetCaseStatusCounts(ctx context.Context) (GetCaseStatusCountsRow, error) {
-	row := q.db.QueryRow(ctx, getCaseStatusCounts)
-	var i GetCaseStatusCountsRow
-	err := row.Scan(
-		&i.TotalCount,
-		&i.NeedsHumanCount,
-		&i.HumanActiveCount,
-		&i.ResolvedCount,
-		&i.AiActiveCount,
 	)
 	return i, err
 }
@@ -347,90 +291,6 @@ func (q *Queries) ListCasesByStatus(ctx context.Context, dollar_1 domain.CaseSta
 			&i.ResolutionNote,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listCasesPaginated = `-- name: ListCasesPaginated :many
-SELECT
-    c.id, c.session_id, c.guest_id, c.customer_name, c.customer_phone,
-    c.status, c.assigned_cs, c.last_message, c.resolution_note, c.created_at, c.updated_at,
-    COALESCE((
-        SELECT sender_type::text
-        FROM chat_messages m
-        WHERE m.session_id = c.session_id
-        ORDER BY m.created_at DESC, m.id DESC
-        LIMIT 1
-    ), '') AS last_sender_type
-FROM chat_cases c
-WHERE ($1::text = '' OR c.status::text = $1::text)
-  AND (
-      $2::text = '' OR
-      c.customer_name ILIKE '%' || $2::text || '%' OR
-      c.customer_phone ILIKE '%' || $2::text || '%' OR
-      c.session_id ILIKE '%' || $2::text || '%' OR
-      c.last_message ILIKE '%' || $2::text || '%'
-  )
-ORDER BY c.updated_at DESC
-LIMIT $3 OFFSET $4
-`
-
-type ListCasesPaginatedParams struct {
-	Column1 string `json:"column_1"`
-	Column2 string `json:"column_2"`
-	Limit   int32  `json:"limit"`
-	Offset  int32  `json:"offset"`
-}
-
-type ListCasesPaginatedRow struct {
-	ID             int64             `json:"id"`
-	SessionID      string            `json:"session_id"`
-	GuestID        pgtype.UUID       `json:"guest_id"`
-	CustomerName   string            `json:"customer_name"`
-	CustomerPhone  string            `json:"customer_phone"`
-	Status         domain.CaseStatus `json:"status"`
-	AssignedCs     pgtype.Text       `json:"assigned_cs"`
-	LastMessage    pgtype.Text       `json:"last_message"`
-	ResolutionNote pgtype.Text       `json:"resolution_note"`
-	CreatedAt      time.Time         `json:"created_at"`
-	UpdatedAt      time.Time         `json:"updated_at"`
-	LastSenderType interface{}       `json:"last_sender_type"`
-}
-
-func (q *Queries) ListCasesPaginated(ctx context.Context, arg ListCasesPaginatedParams) ([]ListCasesPaginatedRow, error) {
-	rows, err := q.db.Query(ctx, listCasesPaginated,
-		arg.Column1,
-		arg.Column2,
-		arg.Limit,
-		arg.Offset,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListCasesPaginatedRow{}
-	for rows.Next() {
-		var i ListCasesPaginatedRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.SessionID,
-			&i.GuestID,
-			&i.CustomerName,
-			&i.CustomerPhone,
-			&i.Status,
-			&i.AssignedCs,
-			&i.LastMessage,
-			&i.ResolutionNote,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.LastSenderType,
 		); err != nil {
 			return nil, err
 		}

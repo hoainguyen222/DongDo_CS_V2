@@ -156,7 +156,6 @@ func SetupRouter(
 		// Voice Call History - Staff+ can access
 		admin.GET("/api/admin/voice/calls", handler.HandleGetCalls)
 		admin.DELETE("/api/admin/voice/calls/:call_id", RequireRoles(RoleAdmin, RoleOwner), handler.HandleDeleteCall)
-		admin.POST("/api/voice/missed", handler.HandleMarkMissedCall)
 
 		// Continuous Learning Queue - Staff+ can access
 		admin.GET("/api/admin/learning/pending", handler.HandleListPendingLearning)
@@ -167,10 +166,9 @@ func SetupRouter(
 		admin.POST("/api/admin/learning/settings", RequireRoles(RoleAdmin, RoleOwner), handler.HandleSetLearningSettings)
 		admin.POST("/api/admin/learning/reset", RequireRoles(RoleAdmin, RoleOwner), handler.HandleResetLearnedKnowledge)
 
-		// Knowledge Base - Staff+ can view, Admin+ can upload/delete
+		// Knowledge Base - Staff+ can view, Admin+ can upload
 		admin.GET("/api/admin/knowledge", handler.HandleGetKnowledgeOverview)
 		admin.POST("/api/admin/knowledge/upload", RequireRoles(RoleAdmin, RoleOwner), handler.HandleUploadDocument)
-		admin.DELETE("/api/admin/knowledge/document", RequireRoles(RoleAdmin, RoleOwner), handler.HandleDeleteKnowledgeDocument)
 
 		// Analytics - Staff+ can view
 		admin.GET("/api/admin/analytics", handler.HandleGetAnalytics)
@@ -206,30 +204,10 @@ func SetupRouter(
 		admin.GET("/api/admin/system-errors", RequireRoles(RoleAdmin, RoleOwner), handler.HandleListSystemErrors)
 		admin.POST("/api/admin/system-errors", RequireRoles(RoleAdmin, RoleOwner), handler.HandleCreateSystemError)
 		admin.PUT("/api/admin/system-errors/:id/handled", RequireRoles(RoleAdmin, RoleOwner), handler.HandleMarkSystemErrorHandled)
-
-		// Chat Tag CRUD - Admin+ manage tags, Staff can read
-		admin.GET("/api/admin/chat/tags", handler.HandleListChatTags)
-		admin.POST("/api/admin/chat/tags", RequireRoles(RoleAdmin, RoleOwner), handler.HandleCreateChatTag)
-		admin.PUT("/api/admin/chat/tags/:id", RequireRoles(RoleAdmin, RoleOwner), handler.HandleUpdateChatTag)
-		admin.DELETE("/api/admin/chat/tags/:id", RequireRoles(RoleAdmin, RoleOwner), handler.HandleDeleteChatTag)
-
-		// Case Tag operations - Staff+ can attach/detach tags
-		admin.GET("/api/admin/cases/:session_id/tags", handler.HandleGetCaseTags)
-		admin.POST("/api/admin/cases/:session_id/tags", handler.HandleAttachCaseTag)
-		admin.DELETE("/api/admin/cases/:session_id/tags/:tag_id", handler.HandleDetachCaseTag)
-
-		// Alert Config - Admin+ only
-		admin.GET("/api/admin/chat/alert-config", handler.HandleGetAlertConfig)
-		admin.POST("/api/admin/chat/alert-config", RequireRoles(RoleAdmin, RoleOwner), handler.HandleSaveAlertConfig)
-
-		// Alert Events - Staff+ can trigger/resolve
-		admin.POST("/api/admin/chat/alert-events", handler.HandleCreateAlertEvent)
-		admin.POST("/api/admin/chat/alert-events/:session_id/resolve", handler.HandleResolveAlertEvent)
 	}
 
 	return r
 }
-
 
 func CORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {

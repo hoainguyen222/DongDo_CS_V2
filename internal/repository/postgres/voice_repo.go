@@ -87,14 +87,6 @@ func (r *VoiceCallRepo) End(ctx context.Context, id int64, durationSeconds int, 
 	return nil
 }
 
-func (r *VoiceCallRepo) MarkMissed(ctx context.Context, id int64) error {
-	if err := r.db.Voice.MarkMissedCall(ctx, id); err != nil {
-		r.logger.Error().Err(err).Int64("call_id", id).Msg("MarkMissedCall failed")
-		return err
-	}
-	return nil
-}
-
 func (r *VoiceCallRepo) SetTranscript(ctx context.Context, id int64, transcript string) error {
 	if err := r.db.Voice.SetCallTranscript(ctx, voicedb.SetCallTranscriptParams{
 		Transcript: pgtype.Text{String: transcript, Valid: transcript != ""},
@@ -118,48 +110,6 @@ func (r *VoiceCallRepo) ListAll(ctx context.Context) ([]*domain.VoiceCall, error
 	}
 	return list, nil
 }
-
-func (r *VoiceCallRepo) ListPaginated(ctx context.Context, filter domain.VoiceCallFilter) ([]*domain.VoiceCall, int64, error) {
-	page := filter.Page
-	if page < 1 {
-		page = 1
-	}
-	limit := filter.Limit
-	if limit < 1 || limit > 100 {
-		limit = 10
-	}
-	offset := (page - 1) * limit
-
-	rows, err := r.db.Voice.ListVoiceCallsPaginated(ctx, voicedb.ListVoiceCallsPaginatedParams{
-		Column1: filter.SessionID,
-		Column2: filter.Status,
-		Column3: filter.Search,
-		Limit:   int32(limit),
-		Offset:  int32(offset),
-	})
-	if err != nil {
-		r.logger.Error().Err(err).Msg("ListVoiceCallsPaginated failed")
-		return nil, 0, err
-	}
-
-	total, err := r.db.Voice.CountVoiceCalls(ctx, voicedb.CountVoiceCallsParams{
-		Column1: filter.SessionID,
-		Column2: filter.Status,
-		Column3: filter.Search,
-	})
-
-	if err != nil {
-		r.logger.Error().Err(err).Msg("CountVoiceCalls failed")
-		return nil, 0, err
-	}
-
-	list := make([]*domain.VoiceCall, 0, len(rows))
-	for _, row := range rows {
-		list = append(list, voiceCallFromRow(row))
-	}
-	return list, total, nil
-}
-
 
 func (r *VoiceCallRepo) GetBySession(ctx context.Context, sessionID string) ([]*domain.VoiceCall, error) {
 	rows, err := r.db.Voice.GetCallsBySession(ctx, sessionID)

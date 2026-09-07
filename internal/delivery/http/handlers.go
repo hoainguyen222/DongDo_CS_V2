@@ -56,7 +56,6 @@ type Handler struct {
 	analyticsUC *usecase.AnalyticsUseCase
 	partnerUC   *usecase.PartnerUseCase
 	ragUC       *usecase.RAGUseCase
-	tagUC       *usecase.ChatTagUseCase
 	vectorStore domain.VectorStore
 	embedder    domain.Embedder
 	docsDir     string
@@ -73,7 +72,6 @@ func NewHandler(
 	analyticsUC *usecase.AnalyticsUseCase,
 	partnerUC *usecase.PartnerUseCase,
 	ragUC *usecase.RAGUseCase,
-	tagUC *usecase.ChatTagUseCase,
 	vectorStore domain.VectorStore,
 	embedder domain.Embedder,
 	docsDir string,
@@ -88,7 +86,6 @@ func NewHandler(
 		analyticsUC: analyticsUC,
 		partnerUC:   partnerUC,
 		ragUC:       ragUC,
-		tagUC:       tagUC,
 		vectorStore: vectorStore,
 		embedder:    embedder,
 		docsDir:     docsDir,
@@ -96,7 +93,6 @@ func NewHandler(
 		logger:      Logger.With().Str("component", "handler").Logger(),
 	}
 }
-
 
 // ============================================================
 // Auth & Guest Handlers
@@ -398,35 +394,54 @@ func (h *Handler) HandleListCases(c *gin.Context) {
 		limit = 10
 	}
 
-	filter := domain.CaseListFilter{
-		Status: statusFilter,
-		Search: search,
-		Page:   page,
-		Limit:  limit,
-	}
-
-	cases, total, counts, err := h.caseUC.ListCasesPaginated(c.Request.Context(), filter)
+	allCases, err := h.caseUC.ListCases(c.Request.Context(), statusFilter)
 	if err != nil {
 		Logger.Error().Err(err).Msg("Failed to list cases")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
 
+	var filtered []*domain.ChatCase
+	if search != "" {
+		sLower := strings.ToLower(search)
+		for _, cs := range allCases {
+			if strings.Contains(strings.ToLower(cs.CustomerName), sLower) ||
+				strings.Contains(strings.ToLower(cs.CustomerPhone), sLower) ||
+				strings.Contains(strings.ToLower(cs.SessionID), sLower) ||
+				strings.Contains(strings.ToLower(cs.LastMessage), sLower) {
+				filtered = append(filtered, cs)
+			}
+		}
+	} else {
+		filtered = allCases
+	}
+
+	total := int64(len(filtered))
 	totalPages := int(math.Ceil(float64(total) / float64(limit)))
 	if totalPages < 1 {
 		totalPages = 1
 	}
 
+	startIndex := (page - 1) * limit
+	var pagedCases []*domain.ChatCase
+	if startIndex < len(filtered) {
+		endIndex := startIndex + limit
+		if endIndex > len(filtered) {
+			endIndex = len(filtered)
+		}
+		pagedCases = filtered[startIndex:endIndex]
+	} else {
+		pagedCases = []*domain.ChatCase{}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"cases":         cases,
-		"total":         total,
-		"page":          page,
-		"limit":         limit,
-		"total_pages":   totalPages,
-		"status_counts": counts,
+		"cases":       pagedCases,
+		"total":       total,
+		"page":        page,
+		"limit":       limit,
+		"total_pages": totalPages,
 	})
 }
-
 
 func (h *Handler) HandleTakeCase(c *gin.Context) {
 	sessionID := c.Param("session_id")
@@ -560,33 +575,54 @@ func (h *Handler) HandleListCustomers(c *gin.Context) {
 		limit = 10
 	}
 
-	filter := domain.GuestFilter{
-		Search: search,
-		Page:   page,
-		Limit:  limit,
-	}
-
-	customers, total, err := h.caseUC.ListCustomersPaginated(c.Request.Context(), filter)
+	allCustomers, err := h.caseUC.ListCustomers(c.Request.Context())
 	if err != nil {
 		Logger.Error().Err(err).Msg("Failed to list customers")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
 
+	var filtered []*domain.CustomerProfile
+	if search != "" {
+		sLower := strings.ToLower(search)
+		for _, cust := range allCustomers {
+			if strings.Contains(strings.ToLower(cust.DisplayName), sLower) ||
+				strings.Contains(strings.ToLower(cust.Phone), sLower) ||
+				strings.Contains(strings.ToLower(cust.GuestID), sLower) ||
+				strings.Contains(strings.ToLower(cust.LastMessage), sLower) {
+				filtered = append(filtered, cust)
+			}
+		}
+	} else {
+		filtered = allCustomers
+	}
+
+	total := int64(len(filtered))
 	totalPages := int(math.Ceil(float64(total) / float64(limit)))
 	if totalPages < 1 {
 		totalPages = 1
 	}
 
+	startIndex := (page - 1) * limit
+	var pagedCustomers []*domain.CustomerProfile
+	if startIndex < len(filtered) {
+		endIndex := startIndex + limit
+		if endIndex > len(filtered) {
+			endIndex = len(filtered)
+		}
+		pagedCustomers = filtered[startIndex:endIndex]
+	} else {
+		pagedCustomers = []*domain.CustomerProfile{}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"customers":   customers,
+		"customers":   pagedCustomers,
 		"total":       total,
 		"page":        page,
 		"limit":       limit,
 		"total_pages": totalPages,
 	})
 }
-
 
 func (h *Handler) HandleUpdateCustomer(c *gin.Context) {
 	guestID := c.Param("guest_id")
@@ -846,51 +882,6 @@ func (h *Handler) HandleUploadDocument(c *gin.Context) {
 	})
 }
 
-func (h *Handler) HandleDeleteKnowledgeDocument(c *gin.Context) {
-	filename := c.Query("filename")
-	if filename == "" {
-		// Try to get from path param
-		filename = c.Param("filename")
-	}
-
-	if filename == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "Tên file không được để trống"})
-		return
-	}
-
-	// Delete chunks from vector store by source
-	deletedChunks := 0
-	if h.vectorStore != nil {
-		var err error
-		deletedChunks, err = h.vectorStore.DeleteBySource(c.Request.Context(), filename)
-		if err != nil {
-			Logger.Error().Str("filename", filename).Err(err).Msg("Failed to delete chunks from vector store")
-			c.JSON(http.StatusInternalServerError, gin.H{"detail": "Lỗi xóa chunks: " + err.Error()})
-			return
-		}
-	}
-
-	// Delete the file from disk
-	filePath := filepath.Join(h.docsDir, filename)
-	if _, err := os.Stat(filePath); err == nil {
-		if err := os.Remove(filePath); err != nil {
-			Logger.Error().Str("filename", filename).Err(err).Msg("Failed to delete document file")
-			c.JSON(http.StatusInternalServerError, gin.H{"detail": "Lỗi xóa file: " + err.Error()})
-			return
-		}
-	}
-
-	Logger.Info().Str("filename", filename).Int("deleted_chunks", deletedChunks).
-		Msg("Knowledge document and its chunks deleted")
-
-	c.JSON(http.StatusOK, gin.H{
-		"success":        true,
-		"filename":       filename,
-		"deleted_chunks": deletedChunks,
-		"message":        fmt.Sprintf("Đã xóa tài liệu '%s' và %d chunks khỏi vector store.", filename, deletedChunks),
-	})
-}
-
 // ============================================================
 // Analytics & Config Handlers
 // ============================================================
@@ -998,29 +989,6 @@ func (h *Handler) HandleEndCall(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Cuộc gọi đã kết thúc"})
-}
-
-type MarkMissedRequest struct {
-	CallID    int64  `json:"call_id" binding:"required"`
-	SessionID string `json:"session_id" binding:"required"`
-}
-
-func (h *Handler) HandleMarkMissedCall(c *gin.Context) {
-	var req MarkMissedRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		Logger.Warn().Err(err).Msg("Mark missed call validation failed")
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "Dữ liệu không hợp lệ"})
-		return
-	}
-
-	err := h.voiceUC.MarkMissedCall(c.Request.Context(), req.CallID, req.SessionID)
-	if err != nil {
-		Logger.Error().Int64("call_id", req.CallID).Err(err).Msg("Failed to mark call as missed")
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Cuộc gọi đã được đánh dấu là gọi nhỡ"})
 }
 
 func (h *Handler) HandleUploadRecording(c *gin.Context) {
@@ -1181,8 +1149,6 @@ func extractQAFromVoiceTranscript(customerName, transcript string, durationSecon
 
 func (h *Handler) HandleGetCalls(c *gin.Context) {
 	sessionID := c.Query("session_id")
-	status := c.Query("status")
-	search := strings.TrimSpace(c.Query("search"))
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 	if page < 1 {
@@ -1192,38 +1158,50 @@ func (h *Handler) HandleGetCalls(c *gin.Context) {
 		limit = 10
 	}
 
-	filter := domain.VoiceCallFilter{
-		SessionID: sessionID,
-		Status:    status,
-		Search:    search,
-		Page:      page,
-		Limit:     limit,
+	var allCalls []*domain.VoiceCall
+	var err error
+
+	if sessionID != "" {
+		allCalls, err = h.voiceUC.GetCallsBySession(c.Request.Context(), sessionID)
+	} else {
+		allCalls, err = h.voiceUC.ListAllCalls(c.Request.Context())
 	}
 
-	calls, total, err := h.voiceUC.ListVoiceCallsPaginated(c.Request.Context(), filter)
 	if err != nil {
 		Logger.Error().Err(err).Msg("Failed to get calls")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
-	if calls == nil {
-		calls = []*domain.VoiceCall{}
+	if allCalls == nil {
+		allCalls = []*domain.VoiceCall{}
 	}
 
+	total := int64(len(allCalls))
 	totalPages := int(math.Ceil(float64(total) / float64(limit)))
 	if totalPages < 1 {
 		totalPages = 1
 	}
 
+	startIndex := (page - 1) * limit
+	var pagedCalls []*domain.VoiceCall
+	if startIndex < len(allCalls) {
+		endIndex := startIndex + limit
+		if endIndex > len(allCalls) {
+			endIndex = len(allCalls)
+		}
+		pagedCalls = allCalls[startIndex:endIndex]
+	} else {
+		pagedCalls = []*domain.VoiceCall{}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"calls":       calls,
+		"calls":       pagedCalls,
 		"total":       total,
 		"page":        page,
 		"limit":       limit,
 		"total_pages": totalPages,
 	})
 }
-
 
 func (h *Handler) HandleDeleteCall(c *gin.Context) {
 	callIDStr := c.Param("call_id")

@@ -180,12 +180,12 @@ export const PartnerAnalyticsView: React.FC = () => {
         api.getCustomers(1, 100).catch(() => ({ customers: [], total: 0 })),
         api.getVoiceCalls(undefined, 1, 100).catch(() => ({ calls: [], total: 0 })),
         api.listPendingLearning(1, 100).catch(() => ({ pending_items: [], total: 0 })),
-        api.getGeneralOverviewReport(sDate, eDate, channel, staffId).catch(() => null),
-        api.getAIPerformanceReport(sDate, eDate, channel, staffId).catch(() => null),
-        api.getStaffPerformanceReport(sDate, eDate, channel, staffId).catch(() => []),
-        api.getCXReport(sDate, eDate, channel, staffId).catch(() => null),
-        api.getOperationalReport(sDate, eDate, channel, staffId).catch(() => []),
-        api.getIssueAnalysisReport(sDate, eDate, channel, staffId).catch(() => []),
+        api.getGeneralOverviewReport(sDate, eDate).catch(() => null),
+        api.getAIPerformanceReport(sDate, eDate).catch(() => null),
+        api.getStaffPerformanceReport(sDate, eDate).catch(() => []),
+        api.getCXReport(sDate, eDate).catch(() => null),
+        api.getOperationalReport(sDate, eDate).catch(() => []),
+        api.getIssueAnalysisReport(sDate, eDate).catch(() => []),
         api.getAILearningReportStats().catch(() => null),
       ]);
 
@@ -329,9 +329,8 @@ export const PartnerAnalyticsView: React.FC = () => {
         status: 'Hoạt động',
       }))
     : staffReports.filter((s) => {
-        if (!s) return false;
         const r = (s.staff_role || '').toLowerCase();
-        return r.includes('staff') || r.includes('cskh') || r.includes('admin') || r.includes('owner') || (s.total_cases_handled && s.total_cases_handled > 0);
+        return r.includes('staff') || r.includes('cskh');
       });
 
   // Draw AI Trend Canvas Chart (Ultra-crisp High-DPI DPR + Y-Axis Scale + Data Badges)
@@ -378,24 +377,12 @@ export const PartnerAnalyticsView: React.FC = () => {
       ctx.fillText(`${val}%`, paddingLeft - 8, y);
     });
 
-    let dataPoints: number[] = [];
-    let labels: string[] = [];
+    const dataPoints = isTestActive
+      ? [70, 75, 82, 88, 91, 94, 96]
+      : (hasRealData ? [85, 88, 90, 92, 94, 95, 96] : [0, 0, 0, 0, 0, 0, 0]);
 
-    if (isTestActive) {
-      dataPoints = [70, 75, 82, 88, 91, 94, 96];
-      labels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
-    } else if (aiPerfMetrics?.daily_trend && aiPerfMetrics.daily_trend.length > 0) {
-      labels = aiPerfMetrics.daily_trend.map((t: any) => t.label || '02/01');
-      dataPoints = aiPerfMetrics.daily_trend.map((t: any) => parseFloat(t.ai_resolution_rate || '0'));
-    } else if (hasRealData) {
-      dataPoints = [85, 88, 90, 92, 94, 95, 96];
-      labels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
-    } else {
-      dataPoints = [0, 0, 0, 0, 0, 0, 0];
-      labels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
-    }
-
-    const step = chartW / Math.max(labels.length - 1, 1);
+    const labels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+    const step = chartW / (labels.length - 1);
 
     // Draw Line Chart with Gradient Fill
     ctx.beginPath();
@@ -414,7 +401,7 @@ export const PartnerAnalyticsView: React.FC = () => {
     const gradient = ctx.createLinearGradient(0, paddingTop, 0, paddingTop + chartH);
     gradient.addColorStop(0, 'rgba(192, 132, 252, 0.35)');
     gradient.addColorStop(1, 'rgba(192, 132, 252, 0.0)');
-    ctx.lineTo(paddingLeft + Math.max(labels.length - 1, 1) * step, paddingTop + chartH);
+    ctx.lineTo(paddingLeft + (labels.length - 1) * step, paddingTop + chartH);
     ctx.lineTo(paddingLeft, paddingTop + chartH);
     ctx.closePath();
     ctx.fillStyle = gradient;
@@ -442,9 +429,9 @@ export const PartnerAnalyticsView: React.FC = () => {
 
       ctx.fillStyle = '#94a3b8';
       ctx.font = '11px Inter, sans-serif';
-      ctx.fillText(labels[i] || '', x, h - 10);
+      ctx.fillText(labels[i], x, h - 10);
     });
-  }, [activeSubReport, hasRealData, isTestActive, period, aiPerfMetrics]);
+  }, [activeSubReport, hasRealData, isTestActive, period]);
 
   // Draw Operational Hourly Bar Canvas Chart (Ultra-crisp DPR + Y-Axis Scale + Top Values)
   useEffect(() => {
@@ -491,8 +478,8 @@ export const PartnerAnalyticsView: React.FC = () => {
         }).length;
       }
       if (operationalLoad && operationalLoad.length > 0) {
-        const item = operationalLoad.find((op: any) => (op.hour ?? op.hour_of_day) === hour);
-        if (item) return item.case_count ?? item.total_messages ?? 0;
+        const item = operationalLoad.find((op: any) => op.hour === hour);
+        if (item) return item.case_count;
       }
       return 0;
     });
@@ -1074,8 +1061,8 @@ export const PartnerAnalyticsView: React.FC = () => {
                     <tr key={i}>
                       <td>{i + 1}</td>
                       <td><strong>{item.category_name}</strong></td>
-                      <td><span style={{ color: '#38bdf8', fontWeight: 600 }}>{item.case_count ?? item.total_requests ?? 0}</span></td>
-                      <td>{item.percentage ?? item.percentage_share ?? '0%'}</td>
+                      <td><span style={{ color: '#38bdf8', fontWeight: 600 }}>{item.case_count}</span></td>
+                      <td>{item.percentage}</td>
                       <td><span className="status-pill pill-green">{item.ai_resolution_rate}</span></td>
                     </tr>
                   ))

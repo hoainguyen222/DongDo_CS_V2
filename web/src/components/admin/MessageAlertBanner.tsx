@@ -31,7 +31,7 @@ export const MessageAlertBanner: React.FC = () => {
 
     const timeoutSec = alertConfig.timeout_seconds || 60;
 
-    return casesData.cases.filter((c) => {
+    return casesData.cases.filter((c: any) => {
       // Only consider cases that need human response (NEEDS_HUMAN_CS or unreplied by CS)
       if (c.status === 'RESOLVED') return false;
 

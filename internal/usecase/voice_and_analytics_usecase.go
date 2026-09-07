@@ -123,43 +123,6 @@ func (uc *VoiceUseCase) EndCall(ctx context.Context, callID int64, sessionID str
 	return nil
 }
 
-// MarkMissedCall marks a voice call as missed (no one answered)
-func (uc *VoiceUseCase) MarkMissedCall(ctx context.Context, callID int64, sessionID string) error {
-	if err := uc.voiceRepo.MarkMissed(ctx, callID); err != nil {
-		uc.logger.Error().Err(err).Int64("call_id", callID).
-			Msg("failed to mark voice call as missed")
-		return err
-	}
-
-	// Update case with missed call message
-	if sessionID != "" {
-		lastMsg := "📞 Cuộc gọi thoại - Không ai nghe máy (Gọi nhỡ)"
-
-		existingCase, _ := uc.caseRepo.Get(ctx, sessionID)
-		if existingCase != nil {
-			_, _ = uc.caseRepo.Upsert(ctx, sessionID, existingCase.GuestID, existingCase.CustomerName, existingCase.CustomerPhone, existingCase.Status, existingCase.AssignedCS, lastMsg)
-		}
-	}
-
-	payload := map[string]interface{}{
-		"call_id":    callID,
-		"session_id": sessionID,
-		"status":     "MISSED",
-	}
-
-	_ = uc.eventBus.PublishWS(ctx, sessionID, domain.WSEventCallEnd, payload, "system")
-	_ = uc.eventBus.PublishWS(ctx, "admin_inbox", domain.WSEventCallEnd, payload, "system")
-	_ = uc.eventBus.PublishWS(ctx, "admin_inbox", domain.WSEventCaseUpdate, map[string]interface{}{
-		"type":       "call_missed",
-		"session_id": sessionID,
-	}, "system")
-
-	uc.logger.Info().Int64("call_id", callID).Str("session_id", sessionID).
-		Msg("voice call marked as missed")
-
-	return nil
-}
-
 func (uc *VoiceUseCase) GetCallsBySession(ctx context.Context, sessionID string) ([]*domain.VoiceCall, error) {
 	calls, err := uc.voiceRepo.GetBySession(ctx, sessionID)
 	if err != nil {
@@ -178,16 +141,6 @@ func (uc *VoiceUseCase) ListAllCalls(ctx context.Context) ([]*domain.VoiceCall, 
 	}
 	return calls, nil
 }
-
-func (uc *VoiceUseCase) ListVoiceCallsPaginated(ctx context.Context, filter domain.VoiceCallFilter) ([]*domain.VoiceCall, int64, error) {
-	calls, total, err := uc.voiceRepo.ListPaginated(ctx, filter)
-	if err != nil {
-		uc.logger.Error().Err(err).Msg("failed to list voice calls paginated")
-		return nil, 0, err
-	}
-	return calls, total, nil
-}
-
 
 func (uc *VoiceUseCase) SetTranscript(ctx context.Context, id int64, transcript string) error {
 	if err := uc.voiceRepo.SetTranscript(ctx, id, transcript); err != nil {

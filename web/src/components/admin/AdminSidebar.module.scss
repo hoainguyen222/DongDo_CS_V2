@@ -211,6 +211,173 @@
   }
 }
 
+.footerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.deskPhoneBtn {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: s.$radius-md;
+  background: rgba(30, 41, 59, 0.8);
+  color: s.$text-muted;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  transition: all s.$transition-fast;
+
+  &:hover {
+    background: rgba(51, 65, 85, 0.9);
+    color: #fff;
+  }
+}
+
+.deskPhoneBlink {
+  background: rgba(239, 68, 68, 0.25) !important;
+  border-color: rgba(239, 68, 68, 0.8) !important;
+  color: #ef4444 !important;
+  animation: callAlertPulse 0.8s ease-in-out infinite alternate;
+}
+
+@keyframes callAlertPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+    background: rgba(239, 68, 68, 0.3);
+  }
+  100% {
+    transform: scale(1.1);
+    box-shadow: 0 0 16px 4px rgba(245, 158, 11, 0.8);
+    background: rgba(245, 158, 11, 0.9);
+    color: #000;
+  }
+}
+
+.phoneBadge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.8);
+}
+
+// ── Pending Calls Modal Popover ───────────────────────────
+.pendingModalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.pendingModal {
+  background: s.$brand-navy-dark;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: s.$radius-lg;
+  width: 100%;
+  max-width: 440px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+
+.pendingModalHeader {
+  padding: 16px;
+  background: rgba(30, 41, 59, 0.8);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  h3 {
+    font-size: 15px;
+    font-weight: 700;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+}
+
+.pendingModalBody {
+  padding: 16px;
+  max-height: 360px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pendingCallItem {
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  border-radius: s.$radius-md;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pendingCallInfo {
+  min-width: 0;
+}
+
+.pendingCallerName {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pendingCallMeta {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.acceptCallBtnOnly {
+  background: #10b981;
+  color: #fff;
+  border: none;
+  border-radius: s.$radius-md;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: #059669;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(16, 185, 129, 0.6);
+  }
+}
+
+
 // ── Pagination ─────────────────────────────────────────────
 .pagination {
   display: flex;

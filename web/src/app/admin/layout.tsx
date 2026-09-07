@@ -1,21 +1,14 @@
 'use client';
 
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { useRolePermissions, useVoiceCalls, usePendingLearning, useCases } from '@/lib/hooks/useApi';
 import { WSClient } from '@/lib/ws';
-import {
-  AdminSidebar,
-  useAdminWebRTC,
-  useTeamAgentNotifications,
-  IncomingCallBanner,
-  ActiveCallBar,
-  TeamAgentGuestCallBanner,
-} from '@/components/admin/AdminSidebar';
-import { VoiceHistoryModal, ToastErrorBanner, ErrorCenterWrapper } from '@/components/admin/AdminModals';
+import { AdminSidebar, useAdminWebRTC } from '@/components/admin/AdminSidebar';
 import { MessageAlertBanner } from '@/components/admin/MessageAlertBanner';
+import { VoiceHistoryModal, ToastErrorBanner, ErrorCenterWrapper } from '@/components/admin/AdminModals';
 import { useUIStore } from '@/lib/stores/uiStore';
 import { AdminLoadingScreen } from './AdminLoadingScreen';
 import styles from './AdminLayout.module.scss';
@@ -44,14 +37,10 @@ export default function AdminLayout({
   const [showVoiceHistoryModal, setShowVoiceHistoryModal] = useState(false);
   const [toastError, setToastError] = useState<{ title: string; source: string; details: string } | null>(null);
 
-  // Call state
-  const [callActiveSession, setCallActiveSession] = useState<string | null>(null);
-
-  // Handle call end - invalidate voice calls cache
-  const handleCallEnd = useCallback(() => {
+  // Call WebRTC hook unconditionally at top level to satisfy React Rules of Hooks
+  const { pendingCalls, handleAnswerCall } = useAdminWebRTC(wsRef, '', () => {
     queryClient.invalidateQueries({ queryKey: ['voiceCalls'] });
-    setCallActiveSession(null);
-  }, [queryClient]);
+  });
 
   // Redirect unauthenticated users to login (client-side only, after hydration)
   useEffect(() => {
@@ -110,32 +99,6 @@ export default function AdminLayout({
     };
   }, [hasHydrated, publicPath, token, user?.username, user?.role, queryClient]);
 
-  // Initialize WebRTC hook for handling incoming calls
-  // MUST be declared before any early `return` to satisfy Rules of Hooks.
-  const {
-    incomingCall,
-    isCallActive,
-    callDuration,
-    isMuted,
-    handleAnswerCall,
-    handleDeclineCall,
-    handleEndCall,
-    toggleMute,
-  } = useAdminWebRTC(wsRef, 'admin', handleCallEnd);
-
-  // Initialize team agent guest call notifications hook
-  // MUST be declared before any early `return` to satisfy Rules of Hooks.
-  const handleTeamAgentTakeCall = useCallback((sessionId: string, _guestName: string) => {
-    // Navigate to the session or open the case
-    router.push(`/admin/cases?session=${sessionId}`);
-  }, [router]);
-
-  const {
-    pendingGuestCalls,
-    dismissCall,
-    handleTakeCall,
-  } = useTeamAgentNotifications(wsRef, handleTeamAgentTakeCall);
-
   // Show loading screen until hydration completes
   if (!hasHydrated) {
     return <AdminLoadingScreen />;
@@ -178,6 +141,8 @@ export default function AdminLayout({
         customersCount={0}
         voiceCallsCount={voiceCalls.length}
         pendingLearningCount={pendingLearning.length}
+        pendingCalls={pendingCalls}
+        onAcceptPendingCall={handleAnswerCall}
         onLogout={handleLogout}
       />
 
@@ -201,31 +166,6 @@ export default function AdminLayout({
         onViewDetails={() => setShowErrorCenter(true)}
       />
 
-      {/* Floating call UI */}
-      <IncomingCallBanner
-        incomingCall={incomingCall}
-        onAnswer={handleAnswerCall}
-        onDecline={handleDeclineCall}
-      />
-      <ActiveCallBar
-        isCallActive={isCallActive}
-        callDuration={callDuration}
-        isMuted={isMuted}
-        onToggleMute={toggleMute}
-        onEndCall={handleEndCall}
-      />
-
-      {/* Team Agent Guest Call Notifications */}
-      {pendingGuestCalls.map((call) => (
-        <TeamAgentGuestCallBanner
-          key={call.session_id}
-          call={call}
-          onTakeCall={handleTakeCall}
-          onDismiss={dismissCall}
-        />
-      ))}
-
-      {/* Floating Message Alert Banner */}
       <MessageAlertBanner />
     </div>
   );

@@ -86,7 +86,6 @@ export interface CaseStatusCounts {
   ai_active: number;
 }
 
-
 export interface LearningItem {
   id: number;
   session_id: string;
@@ -154,8 +153,9 @@ export type WSEventType =
   | 'call_ice'
   | 'call_end'
   | 'call_ring'
-  | 'ai_status'
-  | 'team_agent_call';
+  | 'incoming_call'
+  | 'call_connected'
+  | 'ai_status';
 
 export interface WSEvent<T = any> {
   type: WSEventType;
