@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { api } from '@/lib/api';
 import { SystemConfig, PermissionLevel, ChatTag as DomainChatTag } from '@/lib/types';
 import {
@@ -15,6 +16,17 @@ import './PartnerStyles.css';
 
 type ConfigSubViewType = 'subview-prompt' | 'subview-account' | 'subview-chat-config' | 'subview-permission' | 'subview-template' | 'subview-database';
 type ChatConfigSubTab = 'tag' | 'alert' | 'library';
+
+const VALID_SUBVIEWS: ConfigSubViewType[] = [
+  'subview-prompt',
+  'subview-account',
+  'subview-chat-config',
+  'subview-permission',
+  'subview-template',
+  'subview-database',
+];
+
+const VALID_SUBTABS: ChatConfigSubTab[] = ['tag', 'alert', 'library'];
 
 interface UserAccount {
   id: string;
@@ -38,8 +50,40 @@ interface PartnerConfigViewProps {
 }
 
 export const PartnerConfigView: React.FC<PartnerConfigViewProps> = ({ permissionLevel = 'act', onReportError }) => {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const rawTab = searchParams.get('tab') as ConfigSubViewType;
+  const initialSubView = VALID_SUBVIEWS.includes(rawTab) ? rawTab : 'subview-prompt';
+
+  const rawSubTab = searchParams.get('subtab') as ChatConfigSubTab;
+  const initialChatConfigSubTab = VALID_SUBTABS.includes(rawSubTab) ? rawSubTab : 'tag';
+
   const isReadOnly = permissionLevel === 'view';
-  const [activeSubView, setActiveSubView] = useState<ConfigSubViewType>('subview-prompt');
+  const [activeSubView, setActiveSubView] = useState<ConfigSubViewType>(initialSubView);
+  const [chatConfigSubTab, setChatConfigSubTab] = useState<ChatConfigSubTab>(initialChatConfigSubTab);
+
+  useEffect(() => {
+    if (VALID_SUBVIEWS.includes(rawTab)) setActiveSubView(rawTab);
+    if (VALID_SUBTABS.includes(rawSubTab)) setChatConfigSubTab(rawSubTab);
+  }, [searchParams]);
+
+  const updateUrlSubView = (tab: ConfigSubViewType, subtab?: ChatConfigSubTab) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (tab === 'subview-prompt') params.delete('tab');
+    else params.set('tab', tab);
+
+    const targetSubTab = subtab !== undefined ? subtab : chatConfigSubTab;
+    if (tab === 'subview-chat-config' && targetSubTab !== 'tag') {
+      params.set('subtab', targetSubTab);
+    } else {
+      params.delete('subtab');
+    }
+
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
 
   // 1. Prompt & Model State
   const [systemPrompt, setSystemPrompt] = useState(
@@ -57,9 +101,6 @@ Bạn PHẢI LUÔN tìm kiếm và TRÍCH XUẤT CHÍNH XÁC câu trả lời t�
   const [temperature, setTemperature] = useState('0.1');
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
-
-  // 6. Chat Config State
-  const [chatConfigSubTab, setChatConfigSubTab] = useState<ChatConfigSubTab>('tag');
 
   // --- Real Tag API Hooks ---
   const { data: tagList = [] } = useChatTags();
@@ -524,27 +565,63 @@ Bạn PHẢI LUÔN tìm kiếm và TRÍCH XUẤT CHÍNH XÁC câu trả lời t�
     <div className="partner-wrapper">
       {/* Sub-Nav Pills */}
       <div className="config-subnav">
-        <button className={`config-tab-pill ${activeSubView === 'subview-prompt' ? 'active' : ''}`} onClick={() => setActiveSubView('subview-prompt')}>
+        <button
+          className={`config-tab-pill ${activeSubView === 'subview-prompt' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveSubView('subview-prompt');
+            updateUrlSubView('subview-prompt');
+          }}
+        >
           <span>⚙️</span>
           <span>1. Prompt & Model AI</span>
         </button>
-        <button className={`config-tab-pill ${activeSubView === 'subview-account' ? 'active' : ''}`} onClick={() => setActiveSubView('subview-account')}>
+        <button
+          className={`config-tab-pill ${activeSubView === 'subview-account' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveSubView('subview-account');
+            updateUrlSubView('subview-account');
+          }}
+        >
           <span>👥</span>
           <span>2. Cấu Hình Tài Khoản</span>
         </button>
-        <button className={`config-tab-pill ${activeSubView === 'subview-chat-config' ? 'active' : ''}`} onClick={() => setActiveSubView('subview-chat-config')}>
+        <button
+          className={`config-tab-pill ${activeSubView === 'subview-chat-config' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveSubView('subview-chat-config');
+            updateUrlSubView('subview-chat-config');
+          }}
+        >
           <span>💬</span>
           <span>3. Cấu Hình Chat</span>
         </button>
-        <button className={`config-tab-pill ${activeSubView === 'subview-permission' ? 'active' : ''}`} onClick={() => setActiveSubView('subview-permission')}>
+        <button
+          className={`config-tab-pill ${activeSubView === 'subview-permission' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveSubView('subview-permission');
+            updateUrlSubView('subview-permission');
+          }}
+        >
           <span>🛡️</span>
           <span>4. Phân Quyền Hệ Thống</span>
         </button>
-        <button className={`config-tab-pill ${activeSubView === 'subview-template' ? 'active' : ''}`} onClick={() => setActiveSubView('subview-template')}>
+        <button
+          className={`config-tab-pill ${activeSubView === 'subview-template' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveSubView('subview-template');
+            updateUrlSubView('subview-template');
+          }}
+        >
           <span>📝</span>
           <span>5. Tin Nhắn Mẫu</span>
         </button>
-        <button className={`config-tab-pill ${activeSubView === 'subview-database' ? 'active' : ''}`} onClick={() => setActiveSubView('subview-database')}>
+        <button
+          className={`config-tab-pill ${activeSubView === 'subview-database' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveSubView('subview-database');
+            updateUrlSubView('subview-database');
+          }}
+        >
           <span>🗄️</span>
           <span>6. Quản Lý Bộ Nhớ DB</span>
         </button>
@@ -824,7 +901,10 @@ Bạn PHẢI LUÔN tìm kiếm và TRÍCH XUẤT CHÍNH XÁC câu trả lời t�
               return (
                 <button
                   key={tab}
-                  onClick={() => setChatConfigSubTab(tab)}
+                  onClick={() => {
+                    setChatConfigSubTab(tab);
+                    updateUrlSubView('subview-chat-config', tab);
+                  }}
                   style={{
                     padding: '8px 18px',
                     borderRadius: '8px',

@@ -6,14 +6,25 @@ import { useCustomers, useUpdateCustomer, useDeleteCustomer } from '@/lib/hooks/
 import { Pagination } from '@/components/admin/AdminSidebar';
 import { EditCustomerModal } from '@/components/admin/AdminModals';
 import { useUIStore } from '@/lib/stores/uiStore';
+import { useListUrlParams } from '@/lib/hooks/useListUrlParams';
 import type { CustomerProfile } from '@/lib/types';
 import styles from '@/components/admin/AdminPage.module.scss';
 
 export default function CustomersPage() {
   const { openConfirm } = useUIStore();
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [search, setSearch] = useState('');
+  const {
+    page,
+    limit: pageSize,
+    search,
+    setPage,
+    setLimit: setPageSize,
+    setSearch,
+  } = useListUrlParams({
+    defaultPage: 1,
+    defaultLimit: 10,
+    defaultSearch: '',
+    paramNames: { search: 'search', page: 'page', limit: 'limit' },
+  });
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerProfile | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
 
@@ -64,10 +75,7 @@ export default function CustomersPage() {
           type="text"
           placeholder="Tìm kiếm theo tên, SĐT..."
           value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(1);
-          }}
+          onChange={(e) => setSearch(e.target.value)}
           className={styles.searchInput}
         />
       </div>
@@ -122,7 +130,7 @@ export default function CustomersPage() {
             pageSize={pageSize}
             totalItems={total}
             onPageChange={setPage}
-            onPageSizeChange={(s) => { setPageSize(s); setPage(1); }}
+            onPageSizeChange={setPageSize}
           />
         </div>
       </div>

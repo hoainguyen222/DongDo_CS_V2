@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { api } from '@/lib/api';
 import { ChatCase, CustomerProfile, LearningItem } from '@/lib/types';
 import './PartnerStyles.css';
@@ -14,20 +15,89 @@ type SubReportType =
   | 'subreport-issue'
   | 'subreport-ai-learning';
 
+const VALID_SUB_REPORTS: SubReportType[] = [
+  'subreport-general',
+  'subreport-ai-perf',
+  'subreport-staff-perf',
+  'subreport-cx',
+  'subreport-operational',
+  'subreport-issue',
+  'subreport-ai-learning',
+];
+
 export const PartnerAnalyticsView: React.FC = () => {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const rawTab = searchParams.get('tab') as SubReportType;
+  const initialTab = VALID_SUB_REPORTS.includes(rawTab) ? rawTab : 'subreport-general';
+  const initialPeriod = searchParams.get('period') || '7d';
+  const initialStart = searchParams.get('startDate') || '';
+  const initialEnd = searchParams.get('endDate') || '';
+  const initialChannel = searchParams.get('channel') || 'ALL';
+  const initialStaffId = searchParams.get('staffId') || 'ALL';
+
   // Active sub-report
-  const [activeSubReport, setActiveSubReport] = useState<SubReportType>('subreport-general');
+  const [activeSubReport, setActiveSubReport] = useState<SubReportType>(initialTab);
 
   // Test Mode state
   const [isTestActive, setIsTestActive] = useState(false);
   const [testDataRows, setTestDataRows] = useState<any[]>([]);
 
   // Filters state
-  const [period, setPeriod] = useState('7d');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [channel, setChannel] = useState('ALL');
-  const [staffId, setStaffId] = useState('ALL');
+  const [period, setPeriod] = useState(initialPeriod);
+  const [startDate, setStartDate] = useState(initialStart);
+  const [endDate, setEndDate] = useState(initialEnd);
+  const [channel, setChannel] = useState(initialChannel);
+  const [staffId, setStaffId] = useState(initialStaffId);
+
+  useEffect(() => {
+    if (VALID_SUB_REPORTS.includes(rawTab)) setActiveSubReport(rawTab);
+    if (searchParams.has('period')) setPeriod(searchParams.get('period') || '7d');
+    if (searchParams.has('startDate')) setStartDate(searchParams.get('startDate') || '');
+    if (searchParams.has('endDate')) setEndDate(searchParams.get('endDate') || '');
+    if (searchParams.has('channel')) setChannel(searchParams.get('channel') || 'ALL');
+    if (searchParams.has('staffId')) setStaffId(searchParams.get('staffId') || 'ALL');
+  }, [searchParams]);
+
+  const updateUrlParams = (updates: {
+    tab?: SubReportType;
+    period?: string;
+    startDate?: string;
+    endDate?: string;
+    channel?: string;
+    staffId?: string;
+  }) => {
+    const params = new URLSearchParams(searchParams.toString());
+    const nextTab = updates.tab !== undefined ? updates.tab : activeSubReport;
+    const nextPeriod = updates.period !== undefined ? updates.period : period;
+    const nextStart = updates.startDate !== undefined ? updates.startDate : startDate;
+    const nextEnd = updates.endDate !== undefined ? updates.endDate : endDate;
+    const nextChannel = updates.channel !== undefined ? updates.channel : channel;
+    const nextStaffId = updates.staffId !== undefined ? updates.staffId : staffId;
+
+    if (nextTab === 'subreport-general') params.delete('tab');
+    else params.set('tab', nextTab);
+
+    if (nextPeriod === '7d') params.delete('period');
+    else params.set('period', nextPeriod);
+
+    if (!nextStart) params.delete('startDate');
+    else params.set('startDate', nextStart);
+
+    if (!nextEnd) params.delete('endDate');
+    else params.set('endDate', nextEnd);
+
+    if (nextChannel === 'ALL') params.delete('channel');
+    else params.set('channel', nextChannel);
+
+    if (nextStaffId === 'ALL') params.delete('staffId');
+    else params.set('staffId', nextStaffId);
+
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
 
   // Dynamic Staff List (ONLY Staff CS accounts)
   const [staffList, setStaffList] = useState<{ username: string; fullName: string }[]>([]);
@@ -646,7 +716,11 @@ export const PartnerAnalyticsView: React.FC = () => {
               className="select-custom"
               style={{ padding: '6px 10px', fontSize: '13px', minWidth: '140px' }}
               value={period}
-              onChange={(e) => setPeriod(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setPeriod(v);
+                updateUrlParams({ period: v });
+              }}
             >
               <option value="today">Hôm nay</option>
               <option value="7d">7 ngày qua</option>
@@ -659,9 +733,29 @@ export const PartnerAnalyticsView: React.FC = () => {
 
             {period === 'custom' && (
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(15, 23, 42, 0.6)', padding: '4px 8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                <input type="date" className="input-custom" style={{ padding: '4px 8px', fontSize: '12px', width: '125px' }} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                <input
+                  type="date"
+                  className="input-custom"
+                  style={{ padding: '4px 8px', fontSize: '12px', width: '125px' }}
+                  value={startDate}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setStartDate(v);
+                    updateUrlParams({ startDate: v });
+                  }}
+                />
                 <span style={{ color: '#94a3b8', fontSize: '12px' }}>đến</span>
-                <input type="date" className="input-custom" style={{ padding: '4px 8px', fontSize: '12px', width: '125px' }} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                <input
+                  type="date"
+                  className="input-custom"
+                  style={{ padding: '4px 8px', fontSize: '12px', width: '125px' }}
+                  value={endDate}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setEndDate(v);
+                    updateUrlParams({ endDate: v });
+                  }}
+                />
               </div>
             )}
           </div>
@@ -673,7 +767,11 @@ export const PartnerAnalyticsView: React.FC = () => {
               className="select-custom"
               style={{ padding: '6px 10px', fontSize: '13px', minWidth: '140px' }}
               value={channel}
-              onChange={(e) => setChannel(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setChannel(v);
+                updateUrlParams({ channel: v });
+              }}
             >
               <option value="ALL">-- Tất cả Kênh --</option>
               <option value="CHAT">💬 Chat Direct</option>
@@ -688,7 +786,11 @@ export const PartnerAnalyticsView: React.FC = () => {
               className="select-custom"
               style={{ padding: '6px 10px', fontSize: '13px', minWidth: '180px' }}
               value={staffId}
-              onChange={(e) => setStaffId(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setStaffId(v);
+                updateUrlParams({ staffId: v });
+              }}
             >
               <option value="ALL">-- Tất cả Nhân viên CS --</option>
               {staffList.map((s) => (
@@ -716,31 +818,73 @@ export const PartnerAnalyticsView: React.FC = () => {
 
       {/* SUB-REPORT SWITCHER PILLS */}
       <div className="report-subnav">
-        <button className={`report-tab-pill ${activeSubReport === 'subreport-general' ? 'active' : ''}`} onClick={() => setActiveSubReport('subreport-general')}>
+        <button
+          className={`report-tab-pill ${activeSubReport === 'subreport-general' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveSubReport('subreport-general');
+            updateUrlParams({ tab: 'subreport-general' });
+          }}
+        >
           <span>📊</span>
           <span>1. GENERAL OVERVIEW</span>
         </button>
-        <button className={`report-tab-pill ${activeSubReport === 'subreport-ai-perf' ? 'active' : ''}`} onClick={() => setActiveSubReport('subreport-ai-perf')}>
+        <button
+          className={`report-tab-pill ${activeSubReport === 'subreport-ai-perf' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveSubReport('subreport-ai-perf');
+            updateUrlParams({ tab: 'subreport-ai-perf' });
+          }}
+        >
           <span>🤖</span>
           <span>2. AI PERFORMANCE</span>
         </button>
-        <button className={`report-tab-pill ${activeSubReport === 'subreport-staff-perf' ? 'active' : ''}`} onClick={() => setActiveSubReport('subreport-staff-perf')}>
+        <button
+          className={`report-tab-pill ${activeSubReport === 'subreport-staff-perf' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveSubReport('subreport-staff-perf');
+            updateUrlParams({ tab: 'subreport-staff-perf' });
+          }}
+        >
           <span>👨‍💼</span>
           <span>3. STAFF PERFORMANCE</span>
         </button>
-        <button className={`report-tab-pill ${activeSubReport === 'subreport-cx' ? 'active' : ''}`} onClick={() => setActiveSubReport('subreport-cx')}>
+        <button
+          className={`report-tab-pill ${activeSubReport === 'subreport-cx' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveSubReport('subreport-cx');
+            updateUrlParams({ tab: 'subreport-cx' });
+          }}
+        >
           <span>💎</span>
           <span>4. CUSTOMER EXPERIENCE</span>
         </button>
-        <button className={`report-tab-pill ${activeSubReport === 'subreport-operational' ? 'active' : ''}`} onClick={() => setActiveSubReport('subreport-operational')}>
+        <button
+          className={`report-tab-pill ${activeSubReport === 'subreport-operational' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveSubReport('subreport-operational');
+            updateUrlParams({ tab: 'subreport-operational' });
+          }}
+        >
           <span>⚙️</span>
           <span>5. OPERATIONAL</span>
         </button>
-        <button className={`report-tab-pill ${activeSubReport === 'subreport-issue' ? 'active' : ''}`} onClick={() => setActiveSubReport('subreport-issue')}>
+        <button
+          className={`report-tab-pill ${activeSubReport === 'subreport-issue' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveSubReport('subreport-issue');
+            updateUrlParams({ tab: 'subreport-issue' });
+          }}
+        >
           <span>🧩</span>
           <span>6. ISSUE ANALYSIS</span>
         </button>
-        <button className={`report-tab-pill ${activeSubReport === 'subreport-ai-learning' ? 'active' : ''}`} onClick={() => setActiveSubReport('subreport-ai-learning')}>
+        <button
+          className={`report-tab-pill ${activeSubReport === 'subreport-ai-learning' ? 'active' : ''}`}
+          onClick={() => {
+            setActiveSubReport('subreport-ai-learning');
+            updateUrlParams({ tab: 'subreport-ai-learning' });
+          }}
+        >
           <span>🧠</span>
           <span>7. AI LEARNING</span>
         </button>

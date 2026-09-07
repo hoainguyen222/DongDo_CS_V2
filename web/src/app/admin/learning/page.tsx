@@ -13,13 +13,22 @@ import {
 } from '@/lib/hooks/useApi';
 import { Pagination } from '@/components/admin/AdminSidebar';
 import { useUIStore } from '@/lib/stores/uiStore';
+import { useListUrlParams } from '@/lib/hooks/useListUrlParams';
 import styles from '@/components/admin/AdminPage.module.scss';
 import local from './page.local.module.scss';
 
 export default function LearningPage() {
   const { addToast, openConfirm } = useUIStore();
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const {
+    page,
+    limit: pageSize,
+    setPage,
+    setLimit: setPageSize,
+  } = useListUrlParams({
+    defaultPage: 1,
+    defaultLimit: 10,
+    paramNames: { page: 'page', limit: 'limit' },
+  });
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editQ, setEditQ] = useState('');
   const [editA, setEditA] = useState('');
@@ -183,7 +192,7 @@ export default function LearningPage() {
             pageSize={pageSize}
             totalItems={total}
             onPageChange={setPage}
-            onPageSizeChange={(s) => { setPageSize(s); setPage(1); }}
+            onPageSizeChange={setPageSize}
           />
         </div>
       )}
