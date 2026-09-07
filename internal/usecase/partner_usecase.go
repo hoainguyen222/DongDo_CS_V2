@@ -263,12 +263,24 @@ func (uc *PartnerUseCase) CreateSystemError(ctx context.Context, errRecord *doma
 }
 
 func (uc *PartnerUseCase) ListSystemErrors(ctx context.Context) ([]*domain.SystemErrorRecord, error) {
-	errors, err := uc.partnerRepo.ListSystemErrors(ctx)
+	errors, total, err := uc.partnerRepo.ListSystemErrors(ctx, 1, 1000)
 	if err != nil {
 		uc.logger.Error().Err(err).Msg("failed to list system errors")
 		return nil, err
 	}
+	_ = total
 	return errors, nil
+}
+
+// ListSystemErrorsPaged returns paginated system errors.
+// Returns (errors, total, error).
+func (uc *PartnerUseCase) ListSystemErrorsPaged(ctx context.Context, page, limit int) ([]*domain.SystemErrorRecord, int64, error) {
+	errors, total, err := uc.partnerRepo.ListSystemErrors(ctx, page, limit)
+	if err != nil {
+		uc.logger.Error().Err(err).Msg("failed to list system errors paged")
+		return nil, 0, err
+	}
+	return errors, total, nil
 }
 
 func (uc *PartnerUseCase) MarkSystemErrorHandled(ctx context.Context, id string) error {

@@ -7,58 +7,77 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hoainguyen222/DongDo_CS_V2/internal/config"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
 	infraRedis "github.com/hoainguyen222/DongDo_CS_V2/internal/infra/redis"
 	"github.com/rs/zerolog"
 )
 
+// DBWorker consumes messages from Redis Stream and batch inserts to PostgreSQL.
+// It implements configurable batch processing with flush intervals and safety caps.
 type DBWorker struct {
 	eventBus      *infraRedis.EventBusService
 	messageRepo   domain.MessageRepository
 	consumer      string
-	batchSize     int
-	flushInterval time.Duration
+	cfg           config.WorkerDBConfig
 	buffer        []*domain.Message
 	msgIDs        []string
 	mu            sync.Mutex
 	logger        zerolog.Logger
 }
 
+// NewDBWorker creates a new DB worker with the provided configuration.
 func NewDBWorker(
 	eventBus *infraRedis.EventBusService,
 	messageRepo domain.MessageRepository,
 	consumerName string,
-	batchSize int,
-	flushInterval time.Duration,
+	cfg config.WorkerDBConfig,
 ) *DBWorker {
 	logger := zerolog.New(os.Stderr).With().Timestamp().Logger()
 	logger = logger.With().Str("component", "db_worker").Str("consumer", consumerName).Logger()
 
-	if batchSize <= 0 {
-		batchSize = 50
+	// Apply defaults if not set
+	if cfg.BatchSize <= 0 {
+		cfg.BatchSize = 50
 	}
-	if flushInterval <= 0 {
-		flushInterval = 2 * time.Second
+	if cfg.FlushInterval <= 0 {
+		cfg.FlushInterval = 2 * time.Second
+	}
+	if cfg.MaxBufferSize <= 0 {
+		cfg.MaxBufferSize = 5000
+	}
+	if cfg.ReadCount <= 0 {
+		cfg.ReadCount = 50
+	}
+	if cfg.BlockTimeout <= 0 {
+		cfg.BlockTimeout = 1 * time.Second
+	}
+	if cfg.RetryDelay <= 0 {
+		cfg.RetryDelay = 200 * time.Millisecond
 	}
 
 	return &DBWorker{
 		eventBus:      eventBus,
 		messageRepo:   messageRepo,
 		consumer:      consumerName,
-		batchSize:     batchSize,
-		flushInterval: flushInterval,
-		buffer:        make([]*domain.Message, 0, batchSize),
-		msgIDs:        make([]string, 0, batchSize),
+		cfg:           cfg,
+		buffer:        make([]*domain.Message, 0, cfg.BatchSize),
+		msgIDs:        make([]string, 0, cfg.BatchSize),
 		logger:        logger,
 	}
 }
 
 // Start runs the worker loop consuming from stream:db and batch inserting to PostgreSQL.
 func (w *DBWorker) Start(ctx context.Context) {
-	w.logger.Info().Msg("Database Batch Worker started")
+	w.logger.Info().
+		Int("batch_size", w.cfg.BatchSize).
+		Dur("flush_interval", w.cfg.FlushInterval).
+		Int("max_buffer", w.cfg.MaxBufferSize).
+		Msg("Database Batch Worker started")
+
 	defer w.logger.Info().Msg("Database Batch Worker stopped")
 
-	ticker := time.NewTicker(w.flushInterval)
+	ticker := time.NewTicker(w.cfg.FlushInterval)
 	defer ticker.Stop()
 
 	for {
@@ -71,10 +90,17 @@ func (w *DBWorker) Start(ctx context.Context) {
 			w.Flush(ctx)
 
 		default:
-			messages, err := w.eventBus.ReadStreamGroup(ctx, infraRedis.StreamDB, infraRedis.GroupDB, w.consumer, int64(w.batchSize), 1*time.Second)
+			messages, err := w.eventBus.ReadStreamGroup(
+				ctx,
+				infraRedis.StreamDB,
+				infraRedis.GroupDB,
+				w.consumer,
+				w.cfg.ReadCount,
+				w.cfg.BlockTimeout,
+			)
 			if err != nil {
 				w.logger.Error().Err(err).Msg("Error reading from DB stream")
-				time.Sleep(200 * time.Millisecond)
+				time.Sleep(w.cfg.RetryDelay)
 				continue
 			}
 
@@ -91,7 +117,18 @@ func (w *DBWorker) Start(ctx context.Context) {
 					w.msgIDs = append(w.msgIDs, xmsg.ID)
 				}
 			}
-			needFlush := len(w.buffer) >= w.batchSize
+
+			// Check if we need to flush due to batch size
+			needFlush := len(w.buffer) >= w.cfg.BatchSize
+
+			// Safety check: don't let buffer grow unbounded
+			if len(w.buffer) >= w.cfg.MaxBufferSize {
+				w.logger.Warn().
+					Int("buffer_size", len(w.buffer)).
+					Int("max_buffer", w.cfg.MaxBufferSize).
+					Msg("Buffer limit reached, forcing flush")
+				needFlush = true
+			}
 			w.mu.Unlock()
 
 			if needFlush {
@@ -111,8 +148,8 @@ func (w *DBWorker) Flush(ctx context.Context) {
 
 	msgsToFlush := w.buffer
 	idsToAck := w.msgIDs
-	w.buffer = make([]*domain.Message, 0, w.batchSize)
-	w.msgIDs = make([]string, 0, w.batchSize)
+	w.buffer = make([]*domain.Message, 0, w.cfg.BatchSize)
+	w.msgIDs = make([]string, 0, w.cfg.BatchSize)
 	w.mu.Unlock()
 
 	if err := w.messageRepo.InsertBatch(ctx, msgsToFlush); err != nil {

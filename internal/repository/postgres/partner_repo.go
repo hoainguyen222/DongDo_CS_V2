@@ -676,14 +676,26 @@ func (r *PartnerRepo) CreateSystemError(ctx context.Context, errRecord *domain.S
 	return errRecord, nil
 }
 
-func (r *PartnerRepo) ListSystemErrors(ctx context.Context) ([]*domain.SystemErrorRecord, error) {
-	if err := r.db.Partner.PurgeOldSystemErrors(ctx); err != nil {
+// ListSystemErrors returns paginated system errors.
+// Returns (errors, totalCount, error).
+func (r *PartnerRepo) ListSystemErrors(ctx context.Context, page, limit int) ([]*domain.SystemErrorRecord, int64, error) {
+	offset := (page - 1) * limit
+
+	// Get total count
+	total, err := r.db.Partner.CountSystemErrors(ctx)
+	if err != nil {
+		r.logger.Error().Err(err).Msg("CountSystemErrors failed")
+		return nil, 0, err
 	}
 
-	rows, err := r.db.Partner.ListSystemErrors(ctx)
+	// Get paginated results
+	rows, err := r.db.Partner.ListSystemErrors(ctx, partnerdb.ListSystemErrorsParams{
+		Limit:  int32(limit),
+		Offset: int32(offset),
+	})
 	if err != nil {
 		r.logger.Error().Err(err).Msg("failed to list system errors")
-		return nil, err
+		return nil, 0, err
 	}
 
 	list := make([]*domain.SystemErrorRecord, 0, len(rows))
@@ -700,7 +712,17 @@ func (r *PartnerRepo) ListSystemErrors(ctx context.Context) ([]*domain.SystemErr
 		})
 	}
 
-	return list, nil
+	return list, total, nil
+}
+
+// CountSystemErrors returns the total count of system errors.
+func (r *PartnerRepo) CountSystemErrors(ctx context.Context) (int64, error) {
+	total, err := r.db.Partner.CountSystemErrors(ctx)
+	if err != nil {
+		r.logger.Error().Err(err).Msg("CountSystemErrors failed")
+		return 0, err
+	}
+	return total, nil
 }
 
 func (r *PartnerRepo) MarkSystemErrorHandled(ctx context.Context, id string) error {

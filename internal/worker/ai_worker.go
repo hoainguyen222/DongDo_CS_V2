@@ -7,12 +7,15 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hoainguyen222/DongDo_CS_V2/internal/config"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
 	infraRedis "github.com/hoainguyen222/DongDo_CS_V2/internal/infra/redis"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/usecase"
 	"github.com/rs/zerolog"
 )
 
+// AIWorker consumes AI processing jobs from Redis Stream and generates RAG responses.
+// It processes queries sequentially with configurable timeouts.
 type AIWorker struct {
 	eventBus    *infraRedis.EventBusService
 	stateMgr    domain.StateManager
@@ -20,9 +23,11 @@ type AIWorker struct {
 	messageRepo domain.MessageRepository
 	caseRepo    domain.CaseRepository
 	consumer    string
+	cfg         config.WorkerAIConfig
 	logger      zerolog.Logger
 }
 
+// NewAIWorker creates a new AI worker with the provided configuration.
 func NewAIWorker(
 	eventBus *infraRedis.EventBusService,
 	stateMgr domain.StateManager,
@@ -30,9 +35,21 @@ func NewAIWorker(
 	messageRepo domain.MessageRepository,
 	caseRepo domain.CaseRepository,
 	consumerName string,
+	cfg config.WorkerAIConfig,
 ) *AIWorker {
 	logger := zerolog.New(os.Stderr).With().Timestamp().Logger()
 	logger = logger.With().Str("component", "ai_worker").Str("consumer", consumerName).Logger()
+
+	// Apply defaults if not set
+	if cfg.ReadCount <= 0 {
+		cfg.ReadCount = 1 // Sequential processing by default
+	}
+	if cfg.BlockTimeout <= 0 {
+		cfg.BlockTimeout = 2 * time.Second
+	}
+	if cfg.RetryDelay <= 0 {
+		cfg.RetryDelay = 500 * time.Millisecond
+	}
 
 	return &AIWorker{
 		eventBus:    eventBus,
@@ -41,13 +58,18 @@ func NewAIWorker(
 		messageRepo: messageRepo,
 		caseRepo:    caseRepo,
 		consumer:    consumerName,
+		cfg:         cfg,
 		logger:      logger,
 	}
 }
 
 // Start runs the worker loop consuming from stream:ai with consumer group ai_group.
 func (w *AIWorker) Start(ctx context.Context) {
-	w.logger.Info().Msg("AI RAG Worker started")
+	w.logger.Info().
+		Int64("read_count", w.cfg.ReadCount).
+		Dur("block_timeout", w.cfg.BlockTimeout).
+		Msg("AI RAG Worker started")
+
 	defer w.logger.Info().Msg("AI RAG Worker stopped")
 
 	for {
@@ -55,10 +77,17 @@ func (w *AIWorker) Start(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		default:
-			messages, err := w.eventBus.ReadStreamGroup(ctx, infraRedis.StreamAI, infraRedis.GroupAI, w.consumer, 1, 2*time.Second)
+			messages, err := w.eventBus.ReadStreamGroup(
+				ctx,
+				infraRedis.StreamAI,
+				infraRedis.GroupAI,
+				w.consumer,
+				w.cfg.ReadCount,
+				w.cfg.BlockTimeout,
+			)
 			if err != nil {
 				w.logger.Error().Err(err).Msg("Error reading from AI stream")
-				time.Sleep(500 * time.Millisecond)
+				time.Sleep(w.cfg.RetryDelay)
 				continue
 			}
 

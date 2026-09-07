@@ -74,13 +74,20 @@ func (r *LearningRepo) ListByStatus(ctx context.Context, status domain.LearnStat
 	var err error
 
 	if status != "" {
-		rows, err = r.db.Learning.ListLearningByStatus(ctx, status)
+		rows, err = r.db.Learning.ListLearningByStatus(ctx, learningdb.ListLearningByStatusParams{
+			Column1: status,
+			Limit:   10000, // Large limit for backward compatibility
+			Offset:  0,
+		})
 		if err != nil {
 			r.logger.Error().Err(err).Str("status_filter", string(status)).Msg("ListLearningByStatus failed")
 			return nil, err
 		}
 	} else {
-		rows, err = r.db.Learning.ListAllLearning(ctx)
+		rows, err = r.db.Learning.ListAllLearning(ctx, learningdb.ListAllLearningParams{
+			Limit:  10000, // Large limit for backward compatibility
+			Offset: 0,
+		})
 		if err != nil {
 			r.logger.Error().Err(err).Msg("ListAllLearning failed")
 			return nil, err
@@ -92,6 +99,67 @@ func (r *LearningRepo) ListByStatus(ctx context.Context, status domain.LearnStat
 		out = append(out, learningQueueToDomain(&rows[i]))
 	}
 	return out, nil
+}
+
+// ListPaged returns paginated learning items filtered by status.
+// Returns (items, totalCount, error).
+func (r *LearningRepo) ListPaged(ctx context.Context, status domain.LearnStatus, page, limit int) ([]*domain.LearningItem, int64, error) {
+	offset := (page - 1) * limit
+
+	// Get total count
+	var total int64
+	var countErr error
+	if status != "" {
+		total, countErr = r.db.Learning.CountLearningByStatus(ctx, status)
+	} else {
+		total, countErr = r.db.Learning.CountAllLearning(ctx)
+	}
+	if countErr != nil {
+		r.logger.Error().Err(countErr).Msg("CountLearningByStatus/CountAllLearning failed")
+		return nil, 0, countErr
+	}
+
+	// Get paginated results
+	var rows []learningdb.LearningQueue
+	var err error
+	if status != "" {
+		rows, err = r.db.Learning.ListLearningByStatus(ctx, learningdb.ListLearningByStatusParams{
+			Column1: status,
+			Limit:   int32(limit),
+			Offset:  int32(offset),
+		})
+	} else {
+		rows, err = r.db.Learning.ListAllLearning(ctx, learningdb.ListAllLearningParams{
+			Limit:  int32(limit),
+			Offset: int32(offset),
+		})
+	}
+	if err != nil {
+		r.logger.Error().Err(err).Msg("ListLearningByStatus/ListAllLearning failed")
+		return nil, 0, err
+	}
+
+	out := make([]*domain.LearningItem, 0, len(rows))
+	for i := range rows {
+		out = append(out, learningQueueToDomain(&rows[i]))
+	}
+	return out, total, nil
+}
+
+// CountByStatus returns the total count of learning items with the given status.
+func (r *LearningRepo) CountByStatus(ctx context.Context, status domain.LearnStatus) (int64, error) {
+	var total int64
+	var err error
+	if status != "" {
+		total, err = r.db.Learning.CountLearningByStatus(ctx, status)
+	} else {
+		total, err = r.db.Learning.CountAllLearning(ctx)
+	}
+	if err != nil {
+		r.logger.Error().Err(err).Msg("CountLearningByStatus/CountAllLearning failed")
+		return 0, err
+	}
+	return total, nil
 }
 
 // Get returns a single learning item by ID. Returns (nil, nil) when not found.

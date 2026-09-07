@@ -4,6 +4,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Config holds all application configuration loaded from environment variables.
@@ -47,26 +48,117 @@ type Config struct {
 	// Paths
 	DocumentsDir string
 
-	// WebSocket
-	WSPingInterval int // seconds
-	WSWriteTimeout int // seconds
-
-	// Workers
-	DBBatchSize     int
-	DBBatchInterval int // milliseconds
-	RetryMaxCount   int
-	RetryClaimAfter int // seconds
-
-	// Voice Call
-	STUNServers []string
-
 	// System Prompt
 	SystemPrompt string
+
+	// Worker Configuration
+	Worker WorkerConfig
+
+	// Backward compatibility aliases (deprecated, use Worker.* instead)
+	DBBatchSize      int // deprecated: use Worker.DB.BatchSize
+	DBBatchInterval  int // deprecated: use Worker.DB.FlushInterval (ms)
+	RetryMaxCount    int // deprecated: use Worker.Retry.MaxRetries
+	RetryClaimAfter  int // deprecated: use Worker.Retry.ClaimAfter (seconds)
+}
+
+// WorkerConfig holds all worker-related configuration for Redis Streams consumers.
+type WorkerConfig struct {
+	// DB Worker - batch writes to PostgreSQL
+	DB WorkerDBConfig
+
+	// WS Worker - WebSocket message dispatch
+	WS WorkerWSConfig
+
+	// AI Worker - RAG processing
+	AI WorkerAIConfig
+
+	// Retry Worker - dead letter queue handling
+	Retry WorkerRetryConfig
+
+	// Redis Streams configuration
+	Streams StreamsConfig
+
+	// HTTP Server timeouts
+	HTTP HTTPConfig
+
+	// Redis client connection pool
+	RedisPool RedisPoolConfig
+}
+
+// WorkerDBConfig holds database batch worker configuration.
+type WorkerDBConfig struct {
+	BatchSize      int           // Number of messages to batch before flushing to DB
+	FlushInterval  time.Duration // How often to flush the batch regardless of size
+	MaxBufferSize  int           // Safety cap to prevent memory issues
+	ReadCount      int64         // Messages to read from stream per iteration
+	BlockTimeout   time.Duration // How long to block on XREADGROUP
+	RetryDelay     time.Duration // Delay before retrying after error
+}
+
+// WorkerWSConfig holds WebSocket worker configuration.
+type WorkerWSConfig struct {
+	ReadCount    int64         // Messages to read from stream per iteration
+	BlockTimeout time.Duration // How long to block on XREADGROUP
+	RetryDelay   time.Duration // Delay before retrying after error
+}
+
+// WorkerAIConfig holds AI/RAG worker configuration.
+type WorkerAIConfig struct {
+	ReadCount    int64         // Messages to read from stream per iteration (1 = sequential)
+	BlockTimeout time.Duration // How long to block on XREADGROUP
+	RetryDelay   time.Duration // Delay before retrying after error
+}
+
+// WorkerRetryConfig holds retry worker configuration for DLQ processing.
+type WorkerRetryConfig struct {
+	MaxRetries     int           // Maximum retries before moving to DLQ
+	ClaimAfter     time.Duration // Min idle time before claiming pending messages
+	CheckInterval  time.Duration // How often to check for pending messages
+	ClaimBatchSize int64         // How many messages to claim per cycle
+}
+
+// StreamsConfig holds Redis Streams configuration.
+type StreamsConfig struct {
+	MaxLen     int64  // Maximum stream length (approximate trimming)
+	ApproxTrim bool   // Use approximate trimming (faster)
+}
+
+// HTTPConfig holds HTTP server timeouts.
+type HTTPConfig struct {
+	ReadTimeout  time.Duration
+	WriteTimeout time.Duration
+	IdleTimeout  time.Duration
+}
+
+// RedisPoolConfig holds Redis connection pool configuration.
+type RedisPoolConfig struct {
+	PoolSize     int
+	MinIdleConns int
+	DialTimeout  time.Duration
+	ReadTimeout  time.Duration
+	WriteTimeout time.Duration
+	PoolTimeout  time.Duration
+	ConnMaxLifetime time.Duration
+}
+
+// WebSocketConfig holds WebSocket timeouts and limits.
+type WebSocketConfig struct {
+	PingInterval   time.Duration
+	PongWait       time.Duration
+	WriteWait      time.Duration
+	MaxMessageSize int64
+	SendBufferSize int
+}
+
+// StateConfig holds Redis state TTL configuration.
+type StateConfig struct {
+	TypingTTL      time.Duration // Typing indicator TTL
+	AIExecTTL      time.Duration // AI execution lock TTL
 }
 
 // Load reads configuration from environment variables with sensible defaults.
 func Load() *Config {
-	return &Config{
+	cfg := &Config{
 		// Server
 		ServerPort: getEnv("PORT", "8080"),
 		ServerHost: getEnv("SERVER_HOST", "0.0.0.0"),
@@ -106,23 +198,66 @@ func Load() *Config {
 		// Paths
 		DocumentsDir: getEnv("DOCUMENTS_DIR", "./tailieu"),
 
-		// WebSocket
-		WSPingInterval: getEnvInt("WS_PING_INTERVAL", 30),
-		WSWriteTimeout: getEnvInt("WS_WRITE_TIMEOUT", 10),
-
-		// Workers
-		DBBatchSize:     getEnvInt("DB_BATCH_SIZE", 50),
-		DBBatchInterval: getEnvInt("DB_BATCH_INTERVAL_MS", 2000),
-		RetryMaxCount:   getEnvInt("RETRY_MAX_COUNT", 3),
-		RetryClaimAfter: getEnvInt("RETRY_CLAIM_AFTER_SEC", 60),
-
-		// Voice Call (Google free STUN servers)
-		STUNServers: strings.Split(getEnv("STUN_SERVERS", "stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302"), ","),
-
 		// System Prompt
 		SystemPrompt: getEnv("SYSTEM_PROMPT", defaultSystemPrompt),
 	}
+
+	// Load worker configuration
+	cfg.Worker = WorkerConfig{
+		DB: WorkerDBConfig{
+			BatchSize:     getEnvInt("WORKER_DB_BATCH_SIZE", 50),
+			FlushInterval: time.Duration(getEnvInt("WORKER_DB_FLUSH_INTERVAL_MS", 2000)) * time.Millisecond,
+			MaxBufferSize: getEnvInt("WORKER_DB_MAX_BUFFER", 5000),
+			ReadCount:     int64(getEnvInt("WORKER_DB_READ_COUNT", 50)),
+			BlockTimeout:  time.Duration(getEnvInt("WORKER_DB_BLOCK_TIMEOUT_MS", 1000)) * time.Millisecond,
+			RetryDelay:    time.Duration(getEnvInt("WORKER_DB_RETRY_DELAY_MS", 200)) * time.Millisecond,
+		},
+		WS: WorkerWSConfig{
+			ReadCount:    int64(getEnvInt("WORKER_WS_READ_COUNT", 10)),
+			BlockTimeout: time.Duration(getEnvInt("WORKER_WS_BLOCK_TIMEOUT_MS", 2000)) * time.Millisecond,
+			RetryDelay:   time.Duration(getEnvInt("WORKER_WS_RETRY_DELAY_MS", 500)) * time.Millisecond,
+		},
+		AI: WorkerAIConfig{
+			ReadCount:    int64(getEnvInt("WORKER_AI_READ_COUNT", 1)),
+			BlockTimeout: time.Duration(getEnvInt("WORKER_AI_BLOCK_TIMEOUT_MS", 2000)) * time.Millisecond,
+			RetryDelay:   time.Duration(getEnvInt("WORKER_AI_RETRY_DELAY_MS", 500)) * time.Millisecond,
+		},
+		Retry: WorkerRetryConfig{
+			MaxRetries:     getEnvInt("WORKER_RETRY_MAX_COUNT", 3),
+			ClaimAfter:     time.Duration(getEnvInt("WORKER_RETRY_CLAIM_AFTER_SEC", 60)) * time.Second,
+			CheckInterval:  time.Duration(getEnvInt("WORKER_RETRY_CHECK_INTERVAL_SEC", 30)) * time.Second,
+			ClaimBatchSize: int64(getEnvInt("WORKER_RETRY_CLAIM_BATCH_SIZE", 20)),
+		},
+		Streams: StreamsConfig{
+			MaxLen:     int64(getEnvInt("STREAM_MAX_LEN", 5000)),
+			ApproxTrim: getEnvBool("STREAM_APPROX_TRIM", true),
+		},
+		HTTP: HTTPConfig{
+			ReadTimeout:  time.Duration(getEnvInt("HTTP_READ_TIMEOUT_SEC", 30)) * time.Second,
+			WriteTimeout: time.Duration(getEnvInt("HTTP_WRITE_TIMEOUT_SEC", 30)) * time.Second,
+			IdleTimeout:  time.Duration(getEnvInt("HTTP_IDLE_TIMEOUT_SEC", 120)) * time.Second,
+		},
+		RedisPool: RedisPoolConfig{
+			PoolSize:        getEnvInt("REDIS_POOL_SIZE", 20),
+			MinIdleConns:    getEnvInt("REDIS_MIN_IDLE_CONNS", 5),
+			DialTimeout:     time.Duration(getEnvInt("REDIS_DIAL_TIMEOUT_SEC", 5)) * time.Second,
+			ReadTimeout:     time.Duration(getEnvInt("REDIS_READ_TIMEOUT_SEC", 3)) * time.Second,
+			WriteTimeout:    time.Duration(getEnvInt("REDIS_WRITE_TIMEOUT_SEC", 3)) * time.Second,
+			PoolTimeout:     time.Duration(getEnvInt("REDIS_POOL_TIMEOUT_SEC", 5)) * time.Second,
+			ConnMaxLifetime: time.Duration(getEnvInt("REDIS_CONN_MAX_LIFETIME_SEC", 3600)) * time.Second,
+		},
+	}
+
+	// Backward compatibility aliases for existing code
+	cfg.DBBatchSize = cfg.Worker.DB.BatchSize
+	cfg.DBBatchInterval = int(cfg.Worker.DB.FlushInterval.Milliseconds())
+	cfg.RetryMaxCount = cfg.Worker.Retry.MaxRetries
+	cfg.RetryClaimAfter = int(cfg.Worker.Retry.ClaimAfter.Seconds())
+
+	return cfg
 }
+
+// Helper functions for reading environment variables
 
 func getEnv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
@@ -157,6 +292,7 @@ func getEnvBool(key string, fallback bool) bool {
 	return strings.ToLower(v) == "true" || v == "1"
 }
 
+// Default system prompt for the AI assistant
 const defaultSystemPrompt = `Bạn là chuyên viên Chăm sóc khách hàng của Đông Đô Partners. Nhiệm vụ của bạn là tư vấn, giải đáp thắc mắc cho khách hàng về Hàng hóa phái sinh, hướng dẫn nền tảng DDP Invest, quy trình nạp/rút tiền và quản trị rủi ro.
 
 PHONG CÁCH GIAO TIẾP VÀ XƯNG HÔ:
@@ -178,6 +314,6 @@ Bước 1 (Giải thích lịch sự): Lịch sự xin lỗi và thông báo (V�
 
 Bước 2 (Chuyển giao người thật): BẮT BUỘC chốt lại bằng đúng nguyên văn câu nói sau: 'Vui lòng đợi trong giây lát, chuyên viên CSKH của Đông Đô sẽ trực tiếp tham gia cuộc trò chuyện để hỗ trợ bạn ngay.' (Tuyệt đối không hướng dẫn gọi Hotline nữa).
 
-KHI TRẢ LỜI VỀ CÁC QUY TRÌNH HOẶC CON SỐ (THỜI GIAN, TỶ LỆ, CHI PHÍ...), PHẢI TRÍCH XUẤT CHÍNH XÁC 100% CÁC CON SỐ TRONG TÀI LIỆU. TUYỆT ĐỐI KHÔNG DÙNG TỪ NGỮ CHUNG CHUNG (VÍ DỤ: 'NHANH CHÓNG', 'TÙY THUỘC') ĐỂ LẤP LIẾM NẾU TÀI LIỆU CÓ GHI RÕ SỐ GIỜ/NGÀY.
+KHI TRẢ LỜI VỀ CÁC QUY TRÌNH HOẶC CON SỐ (THỜI GIAN, TỶ LỆ, CHI PHÍ...), PHẢI TRÍCH XUẤT CHÍNH XÁC 100% CÁC CON SỐ TRONG TÀI LIỆU. TUYỆT ĐỐI KHÔNG DÙNG TỪ NGỮ CHUNG CHUNG (VÍ DỤ: 'NHANH CHÓNG', 'TÙY THUỘC') ĐỂ LẤP LIỆM NẾU TÀI LIỆU CÓ GHI RÕ SỐ GIỜ/NGÀY.
 
 KHI CÂU TRẢ LỜI LÀ MỘT DANH SÁCH (CÁC ĐIỀU KIỆN, CÁC BƯỚC, CÁC MẶT HÀNG...), BẠN PHẢI ĐỌC THẬT KỸ VÀ LIỆT KÊ ĐẦY ĐỦ TẤT CẢ CÁC Ý/GẠCH ĐẦU DÒNG CÓ TRONG TÀI LIỆU, KHÔNG ĐƯỢC TÓM TẮT HAY BỎ SÓT.`

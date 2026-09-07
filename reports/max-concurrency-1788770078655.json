@@ -1,0 +1,29 @@
+{
+  "timestamp": "2026-09-07T08:34:38.655Z",
+  "config": {
+    "startGuests": 5,
+    "startMessages": 3,
+    "maxLevels": 12,
+    "successThreshold": 95
+  },
+  "result": {
+    "maxConcurrentChats": 0,
+    "maxSuccessRate": 0,
+    "levels": [
+      {
+        "level": 1,
+        "guests": 5,
+        "messagesPerGuest": 3,
+        "totalMessages": 15,
+        "successCount": 0,
+        "failedCount": 15,
+        "successRate": 0,
+        "avgLatency": 19,
+        "maxLatency": 20,
+        "errors": [],
+        "status": "FAIL"
+      }
+    ],
+    "recommendations": []
+  }
+}

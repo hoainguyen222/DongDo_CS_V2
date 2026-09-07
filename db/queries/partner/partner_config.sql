@@ -89,7 +89,12 @@ ON CONFLICT (id) DO UPDATE SET is_handled = EXCLUDED.is_handled;
 -- name: ListSystemErrors :many
 SELECT id, source, title, details, severity, is_handled, suggested_fix, created_at
 FROM system_errors
-ORDER BY created_at DESC;
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2;
+
+-- name: CountSystemErrors :one
+SELECT COUNT(*)
+FROM system_errors;
 
 -- name: MarkSystemErrorHandled :exec
 UPDATE system_errors SET is_handled = TRUE WHERE id = $1;
