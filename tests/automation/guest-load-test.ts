@@ -58,7 +58,7 @@ async function registerGuest(displayName: string): Promise<{ session: GuestSessi
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
-    const data = await response.json();
+    const data: any = await response.json();
     return { session: data, duration };
   } catch (error: any) {
     testLogger.error(`Failed to register guest ${displayName}:`, error.message);

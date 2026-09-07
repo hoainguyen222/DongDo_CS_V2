@@ -48,11 +48,13 @@ export interface HumanCSTrigger {
 }
 
 export interface TestScenario {
+  description?: string;
   guest_count: number;
   messages_per_guest: number;
   ai_questions?: string[];
   concurrent_agents?: number;
   burst_messages?: boolean;
+  human_escalation?: boolean;
 }
 
 export interface ReportingConfig {
@@ -189,7 +191,8 @@ class AgentConfigManager {
    * Get test scenario by name
    */
   getTestScenario(name: string): TestScenario | undefined {
-    return this.getConfig().test_scenarios[name as keyof typeof this.getConfig().test_scenarios];
+    const scenarios = this.getConfig().test_scenarios as Record<string, TestScenario>;
+    return scenarios[name];
   }
 
   /**
@@ -232,7 +235,7 @@ class AgentConfigManager {
         return null;
       }
 
-      const data = await response.json();
+      const data: any = await response.json();
       const token = data.token || data.access_token;
 
       if (!token) {

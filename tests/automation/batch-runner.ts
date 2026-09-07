@@ -79,8 +79,10 @@ async function runAgentChatTest(
         });
 
         if (response.ok) {
-          const data = await response.json();
-          guests.push({ session_id: data.session_id, display_name: data.display_name });
+          const data: any = await response.json();
+          if (data && data.session_id && data.display_name) {
+            guests.push({ session_id: data.session_id, display_name: data.display_name });
+          }
         }
       } catch (e: any) {
         errors.push(`Guest ${i}: ${e.message}`);
@@ -177,7 +179,7 @@ async function runAgentCSTest(
 
     // Try to take a case
     if (casesResponse.ok) {
-      const casesData = await casesResponse.json();
+      const casesData: any = await casesResponse.json();
       const cases = casesData.cases || [];
 
       if (cases.length > 0) {

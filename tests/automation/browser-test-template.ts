@@ -405,10 +405,9 @@ export const BROWSER_TEST_HTML = `
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ display_name: displayName, phone }),
         });
-        
         if (!response.ok) throw new Error('Failed to register');
-        
-        session = await response.json();
+
+        session = await response.json() as any;
         console.log('Session created:', session);
         
         // Show chat

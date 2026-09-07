@@ -90,8 +90,8 @@ async function getChatHistory(sessionID: string): Promise<Message[]> {
   try {
     const response = await fetch(`${TEST_CONFIG.API_BASE}/history/${sessionID}`);
     if (!response.ok) return [];
-    
-    const data = await response.json();
+
+    const data: any = await response.json();
     return data.messages || [];
   } catch {
     return [];

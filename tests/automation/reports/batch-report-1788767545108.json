@@ -1,0 +1,99 @@
+{
+  "timestamp": "2026-09-07T07:52:25.104Z",
+  "scenario": "light_load",
+  "totalAgents": 5,
+  "successfulAgents": 5,
+  "failedAgents": 0,
+  "totalDuration": 1762,
+  "results": [
+    {
+      "agentId": "agent_001",
+      "agentName": "cskh01",
+      "success": true,
+      "duration": 1643,
+      "metrics": {
+        "total": 25,
+        "success": 25,
+        "failed": 0,
+        "errors": []
+      },
+      "details": {
+        "guestsCreated": 5,
+        "messagesPerGuest": 5
+      }
+    },
+    {
+      "agentId": "agent_002",
+      "agentName": "cskh02",
+      "success": true,
+      "duration": 1653,
+      "metrics": {
+        "total": 25,
+        "success": 25,
+        "failed": 0,
+        "errors": []
+      },
+      "details": {
+        "guestsCreated": 5,
+        "messagesPerGuest": 5
+      }
+    },
+    {
+      "agentId": "agent_003",
+      "agentName": "cskh03",
+      "success": true,
+      "duration": 1661,
+      "metrics": {
+        "total": 25,
+        "success": 25,
+        "failed": 0,
+        "errors": []
+      },
+      "details": {
+        "guestsCreated": 5,
+        "messagesPerGuest": 5
+      }
+    },
+    {
+      "agentId": "agent_004",
+      "agentName": "cskh04",
+      "success": true,
+      "duration": 1670,
+      "metrics": {
+        "total": 25,
+        "success": 25,
+        "failed": 0,
+        "errors": []
+      },
+      "details": {
+        "guestsCreated": 5,
+        "messagesPerGuest": 5
+      }
+    },
+    {
+      "agentId": "agent_005",
+      "agentName": "cskh05",
+      "success": true,
+      "duration": 1617,
+      "metrics": {
+        "total": 25,
+        "success": 25,
+        "failed": 0,
+        "errors": []
+      },
+      "details": {
+        "guestsCreated": 5,
+        "messagesPerGuest": 5
+      }
+    }
+  ],
+  "errors": [],
+  "metrics": {
+    "avgDuration": 1648.8,
+    "minDuration": 1617,
+    "maxDuration": 1670,
+    "totalMessages": 125,
+    "totalSuccess": 125,
+    "totalFailed": 0
+  }
+}

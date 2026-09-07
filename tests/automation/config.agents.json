@@ -31,49 +31,49 @@
   "agent_users": [
     {
       "id": "agent_001",
-      "username": "cskh_agent_1",
-      "password": "AgentPass123!",
-      "full_name": "Nguyễn Văn Agent 1",
+      "username": "cskh01",
+      "password": "DongDo@123",
+      "full_name": "CSKH Nguyễn Văn 01",
       "role": "cs_agent",
       "enabled": true
     },
     {
       "id": "agent_002",
-      "username": "cskh_agent_2",
-      "password": "AgentPass123!",
-      "full_name": "Trần Thị Agent 2",
+      "username": "cskh02",
+      "password": "DongDo@123",
+      "full_name": "CSKH Trần Thị 02",
       "role": "cs_agent",
       "enabled": true
     },
     {
       "id": "agent_003",
-      "username": "cskh_agent_3",
-      "password": "AgentPass123!",
-      "full_name": "Lê Văn Agent 3",
+      "username": "cskh03",
+      "password": "DongDo@123",
+      "full_name": "CSKH Lê Văn 03",
       "role": "cs_agent",
       "enabled": true
     },
     {
       "id": "agent_004",
-      "username": "cskh_agent_4",
-      "password": "AgentPass123!",
-      "full_name": "Phạm Thị Agent 4",
+      "username": "cskh04",
+      "password": "DongDo@123",
+      "full_name": "CSKH Phạm Thị 04",
       "role": "cs_agent",
       "enabled": true
     },
     {
       "id": "agent_005",
-      "username": "cskh_agent_5",
-      "password": "AgentPass123!",
-      "full_name": "Hoàng Văn Agent 5",
+      "username": "cskh05",
+      "password": "DongDo@123",
+      "full_name": "CSKH Hoàng Văn 05",
       "role": "cs_agent",
       "enabled": true
     },
     {
       "id": "admin_001",
       "username": "admin",
-      "password": "admin123",
-      "full_name": "Quản trị viên",
+      "password": "DongDo@2026",
+      "full_name": "Quản trị viên hệ thống",
       "role": "owner",
       "enabled": true
     }
@@ -81,36 +81,94 @@
 
   "test_scenarios": {
     "smoke_test": {
-      "guest_count": 1,
+      "description": "1 agent, 2 guests, 2 messages - smoke test nhanh",
+      "guest_count": 2,
       "messages_per_guest": 2,
       "ai_questions": [
-        "Hàng hóa phái sinh là gì?"
+        "Hàng hóa phái sinh là gì?",
+        "Cách nạp tiền vào tài khoản?"
       ]
     },
     "light_load": {
+      "description": "3 agents, 5 guests/guest, 5 messages - nhẹ, test AI response",
+      "guest_count": 5,
+      "messages_per_guest": 5,
+      "ai_questions": [
+        "Hàng hóa phái sinh là gì?",
+        "Cách nạp tiền vào tài khoản?",
+        "Giới thiệu về DDP Invest",
+        "Quản lý rủi ro khi giao dịch",
+        "Phí giao dịch là bao nhiêu?"
+      ]
+    },
+    "medium_load": {
+      "description": "5 agents, 10 guests/guest, 8 messages - trung bình, test AI + CS team",
+      "guest_count": 10,
+      "messages_per_guest": 8,
+      "concurrent_agents": 5,
+      "ai_questions": [
+        "Hàng hóa phái sinh là gì?",
+        "Cách nạp tiền vào tài khoản?",
+        "Giới thiệu về DDP Invest",
+        "Quản lý rủi ro khi giao dịch",
+        "Phí giao dịch là bao nhiêu?",
+        "Làm sao để rút tiền?",
+        "Thời gian giao dịch là khi nào?",
+        "Có ứng dụng mobile không?"
+      ]
+    },
+    "heavy_load": {
+      "description": "5 agents, 20 guests/guest, 10 messages - nặng, test chịu tải",
+      "guest_count": 20,
+      "messages_per_guest": 10,
+      "concurrent_agents": 5,
+      "ai_questions": [
+        "Hàng hóa phái sinh là gì?",
+        "Cách nạp tiền?",
+        "Giới thiệu DDP Invest",
+        "Quản lý rủi ro",
+        "Phí giao dịch?",
+        "Làm sao rút tiền?",
+        "Thời gian giao dịch?",
+        "Có app mobile không?"
+      ]
+    },
+    "stress_test": {
+      "description": "5 agents, 50 guests/guest, 5 messages - stress test cực nặng",
+      "guest_count": 50,
+      "messages_per_guest": 5,
+      "concurrent_agents": 5,
+      "burst_messages": true
+    },
+    "ai_load_test": {
+      "description": "Test AI response under load - 10 guests đồng thời, AI xử lý hết",
       "guest_count": 10,
       "messages_per_guest": 5,
       "ai_questions": [
         "Hàng hóa phái sinh là gì?",
         "Cách nạp tiền vào tài khoản?",
-        "Giới thiệu về DDP Invest"
+        "Giới thiệu về DDP Invest",
+        "Quản lý rủi ro khi giao dịch",
+        "Phí giao dịch là bao nhiêu?",
+        "Làm sao để rút tiền?",
+        "Thời gian giao dịch là khi nào?",
+        "Có ứng dụng mobile không?",
+        "Tôi muốn mở tài khoản giao dịch",
+        "Hỗ trợ tôi về hợp đồng futures"
       ]
     },
-    "medium_load": {
-      "guest_count": 25,
-      "messages_per_guest": 8,
-      "concurrent_agents": 3
-    },
-    "heavy_load": {
-      "guest_count": 50,
-      "messages_per_guest": 10,
-      "concurrent_agents": 5
-    },
-    "stress_test": {
-      "guest_count": 100,
-      "messages_per_guest": 5,
-      "concurrent_agents": 10,
-      "burst_messages": true
+    "cs_team_load_test": {
+      "description": "Test CS team response - 5 agents nhận case từ 20 guests",
+      "guest_count": 20,
+      "messages_per_guest": 3,
+      "human_escalation": true,
+      "ai_questions": [
+        "Tôi cần hỗ trợ từ chuyên viên",
+        "Không hiểu về cách đặt lệnh",
+        "Cần người thật hỗ trợ ngay",
+        "Tài khoản của tôi có vấn đề",
+        "Giúp tôi với giao dịch"
+      ]
     }
   },
 

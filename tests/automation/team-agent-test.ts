@@ -207,7 +207,7 @@ async function sendCSReply(
       return { success: false, error: `HTTP ${response.status}` };
     }
 
-    const data = await response.json();
+    const data: any = await response.json();
     return { success: true, messageId: data.id };
   } catch (error: any) {
     return { success: false, error: error.message };
