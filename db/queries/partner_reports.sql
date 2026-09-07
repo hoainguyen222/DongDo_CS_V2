@@ -51,17 +51,17 @@ ORDER BY date_day ASC;
 
 -- name: GetStaffPerformanceReport :many
 SELECT
-    COALESCE(u.username, c.assigned_cs) AS staff_username,
-    COALESCE(NULLIF(u.full_name, ''), c.assigned_cs) AS staff_full_name,
-    COALESCE(NULLIF(u.role, ''), 'cskh') AS staff_role,
+    COALESCE(c.assigned_cs, 'Chưa phân công') AS staff_username,
+    u.full_name AS staff_full_name,
+    u.role AS staff_role,
     COUNT(c.id)::int AS total_cases_handled,
     COUNT(CASE WHEN c.status = 'RESOLVED' THEN 1 END)::int AS resolved_cases,
-    COALESCE((SELECT AVG(cf.rating)::float FROM csat_feedback cf WHERE (cf.staff_username = c.assigned_cs OR cf.staff_username = u.username) AND cf.created_at >= $1 AND cf.created_at <= $2), 4.95)::float AS avg_csat
+    COALESCE((SELECT AVG(cf.rating)::float FROM csat_feedback cf WHERE cf.staff_username = c.assigned_cs AND cf.created_at >= $1 AND cf.created_at <= $2), 4.95)::float AS avg_csat
 FROM chat_cases c
-LEFT JOIN users u ON LOWER(c.assigned_cs) = LOWER(u.username) OR LOWER(c.assigned_cs) = LOWER(u.full_name)
+LEFT JOIN users u ON c.assigned_cs = u.username
 WHERE c.created_at >= $1 AND c.created_at <= $2
   AND c.assigned_cs != ''
-GROUP BY c.assigned_cs, u.username, u.full_name, u.role
+GROUP BY c.assigned_cs, u.full_name, u.role
 ORDER BY total_cases_handled DESC;
 
 -- ============================================================

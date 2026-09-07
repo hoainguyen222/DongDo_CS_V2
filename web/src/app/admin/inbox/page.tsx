@@ -244,7 +244,7 @@ export default function InboxPage() {
 
   // Populate lastSenderMap whenever allCases changes
   useEffect(() => {
-    allCases.forEach((c) => {
+    allCases.forEach((c: ChatCase) => {
       const st = c.last_sender_type;
       if (st) {
         setLastSenderMap((prev) => {

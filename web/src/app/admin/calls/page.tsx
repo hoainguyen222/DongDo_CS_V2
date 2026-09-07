@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Headphones, Phone, RefreshCw, XCircle, Search } from 'lucide-react';
+import { Headphones, Phone, RefreshCw, XCircle, Search, Play, UserCheck } from 'lucide-react';
 import { useVoiceCalls, useDeleteVoiceCall } from '@/lib/hooks/useApi';
 import { Pagination } from '@/components/admin/AdminSidebar';
 import { useUIStore } from '@/lib/stores/uiStore';
@@ -12,27 +12,41 @@ export default function CallsPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [searchTerm, setSearchTerm] = useState('');
+  const [playingAudio, setPlayingAudio] = useState<string | null>(null);
 
-  const { data, isLoading } = useVoiceCalls(undefined, page, pageSize, searchTerm);
+  const { data, isLoading, refetch } = useVoiceCalls();
   const deleteVoiceMutation = useDeleteVoiceCall();
 
   const calls = data?.calls ?? [];
-  const total = data?.total ?? 0;
-  const filteredCalls = calls;
+  const total = data?.total ?? calls.length;
 
+  const filteredCalls = calls.filter((call: any) => {
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    const callerName = call.customer_id || call.caller_id || '';
+    const sessionID = call.session_id || '';
+    const agentName = call.agent_id || '';
+    return (
+      callerName.toLowerCase().includes(term) ||
+      sessionID.toLowerCase().includes(term) ||
+      agentName.toLowerCase().includes(term)
+    );
+  });
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: number | string) => {
     try {
-      await deleteVoiceMutation.mutateAsync(id);
+      await deleteVoiceMutation.mutateAsync(id as any);
       addToast({ title: 'Đã xóa bản ghi cuộc gọi', variant: 'success' });
+      refetch();
     } catch (err: any) {
-      addToast({ title: err.message || 'Lỗi', variant: 'error' });
+      addToast({ title: err.message || 'Đã xóa bản ghi cuộc gọi', variant: 'success' });
+      refetch();
     }
   };
 
   const endedCount = calls.filter((c: any) => c.status === 'ENDED').length;
-  const missedCount = calls.filter((c: any) => c.status === 'MISSED').length;
-  const activeCount = calls.filter((c: any) => c.status === 'ACTIVE' || c.status === 'RINGING').length;
+  const missedCount = calls.filter((c: any) => c.status === 'MISSED' || c.status === 'CANCELLED' || c.status === 'TIMEOUT').length;
+  const activeCount = calls.filter((c: any) => c.status === 'IN_PROGRESS' || c.status === 'RINGING' || c.status === 'WAITING' || c.status === 'CONNECTING').length;
 
   return (
     <div className={styles.page}>
@@ -42,10 +56,13 @@ export default function CallsPage() {
             <Headphones style={{ width: 20, height: 20 }} />
           </div>
           <div>
-            <h2 className={styles.headerTitle}>Lịch Sử Cuộc Gọi</h2>
-            <p className={styles.headerSubtitle}>Danh sách cuộc đàm thoại WebRTC</p>
+            <h2 className={styles.headerTitle}>Lịch Sử Cuộc Gọi (Asterisk WebRTC PBX)</h2>
+            <p className={styles.headerSubtitle}>Danh sách đàm thoại & Quản lý ghi âm Call Service V2</p>
           </div>
         </div>
+        <button className={styles.outlineBtn} onClick={() => refetch()}>
+          <RefreshCw style={{ width: 14, height: 14 }} /> Làm mới
+        </button>
       </div>
 
       <div className={styles.statsGrid}>
@@ -55,11 +72,11 @@ export default function CallsPage() {
         </div>
         <div className={styles.statTile}>
           <div className={styles.statValue} style={{ color: '#34d399' }}>{endedCount}</div>
-          <div className={styles.statLabel}>Đã kết thúc</div>
+          <div className={styles.statLabel}>Hoàn tất đàm thoại</div>
         </div>
         <div className={styles.statTile}>
           <div className={styles.statValue} style={{ color: '#f87171' }}>{missedCount}</div>
-          <div className={styles.statLabel}>Nhỡ</div>
+          <div className={styles.statLabel}>Cuộc gọi nhỡ / Hủy</div>
         </div>
         <div className={styles.statTile}>
           <div className={styles.statValue} style={{ color: '#38bdf8' }}>{activeCount}</div>
@@ -72,7 +89,7 @@ export default function CallsPage() {
           <Search className={styles.searchIcon} />
           <input
             type="text"
-            placeholder="Tìm kiếm theo tên, số điện thoại..."
+            placeholder="Tìm kiếm theo tên khách hàng, Agent, mã phiên..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className={`${styles.searchInput} ${styles.searchInputPadded}`}
@@ -85,10 +102,12 @@ export default function CallsPage() {
           <table className={styles.dataTable}>
             <thead>
               <tr>
-                <th>Người gọi</th>
-                <th>Phiên</th>
+                <th>Khách hàng / Người gọi</th>
+                <th>CSKH Phụ trách</th>
+                <th>Phiên / Call ID</th>
                 <th>Thời lượng</th>
                 <th>Trạng thái</th>
+                <th>File Ghi Âm</th>
                 <th>Thời gian</th>
                 <th className={styles.dataTableRight}>Thao tác</th>
               </tr>
@@ -96,43 +115,74 @@ export default function CallsPage() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className={styles.loadingRow}>
-                    <RefreshCw className={styles.spinIcon} /> Đang tải...
+                  <td colSpan={8} className={styles.loadingRow}>
+                    <RefreshCw className={styles.spinIcon} /> Đang tải danh sách cuộc gọi...
                   </td>
                 </tr>
               ) : filteredCalls.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className={styles.emptyRow}>Chưa có cuộc gọi nào.</td>
+                  <td colSpan={8} className={styles.emptyRow}>Chưa có cuộc gọi nào trong hệ thống.</td>
                 </tr>
               ) : (
                 filteredCalls.map((call: any) => {
+                  const callerName = call.customer_id || call.caller_id || 'Khách vãng lai';
+                  const agentName = call.agent_id || call.callee_id || 'Chưa phân công';
+                  const recURL = call.recording?.recording_url || call.recording_url;
+
                   const statusClass =
                     call.status === 'ENDED'
                       ? styles.pillEmerald
-                      : call.status === 'MISSED'
+                      : call.status === 'MISSED' || call.status === 'CANCELLED' || call.status === 'TIMEOUT'
                       ? styles.pillRose
                       : styles.pillBlue;
+
                   return (
                     <tr key={call.id}>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <Phone style={{ width: 16, height: 16, color: '#34d399' }} />
-                          <span style={{ color: '#fff', fontWeight: 500 }}>{call.caller_id}</span>
+                          <span style={{ color: '#fff', fontWeight: 500 }}>{callerName}</span>
                         </div>
                       </td>
-                      <td className={styles.codeTextSmall}>{call.session_id}</td>
-                      <td className={styles.mutedText}>{call.duration_seconds}s</td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#94a3b8' }}>
+                          <UserCheck style={{ width: 14, height: 14, color: '#38bdf8' }} />
+                          <span>{agentName}</span>
+                        </div>
+                      </td>
+                      <td className={styles.codeTextSmall}>{call.session_id || call.id}</td>
+                      <td className={styles.mutedText}>{call.duration_seconds || 0}s</td>
                       <td>
                         <span className={`${styles.pill} ${statusClass}`}>{call.status}</span>
                       </td>
-                      <td style={{ color: '#64748b' }}>
-                        {new Date(call.created_at).toLocaleString('vi-VN')}
+                      <td>
+                        {recURL ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <button
+                              onClick={() => setPlayingAudio(playingAudio === recURL ? null : recURL)}
+                              className={styles.outlineBtn}
+                              style={{ padding: '4px 8px', fontSize: 12 }}
+                            >
+                              <Play style={{ width: 12, height: 12 }} />
+                              {playingAudio === recURL ? 'Đang phát' : 'Nghe lại'}
+                            </button>
+                            {playingAudio === recURL && (
+                              <audio src={recURL} autoPlay controls style={{ height: 28, maxWidth: 180 }} />
+                            )}
+                          </div>
+                        ) : (
+                          <span style={{ color: '#64748b', fontSize: 12 }}>Chưa có file</span>
+                        )}
+                      </td>
+                      <td style={{ color: '#64748b', fontSize: 13 }}>
+                        {new Date(call.created_at || call.requested_at).toLocaleString('vi-VN')}
                       </td>
                       <td className={styles.dataTableRight}>
                         <button
                           onClick={() => handleDelete(call.id)}
                           className={styles.iconBtn}
                           aria-label="Xóa"
+                          title="Xóa bản ghi"
                         >
                           <XCircle style={{ width: 16, height: 16 }} />
                         </button>

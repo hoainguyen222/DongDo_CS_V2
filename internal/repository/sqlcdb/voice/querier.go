@@ -9,7 +9,6 @@ import (
 )
 
 type Querier interface {
-	CountVoiceCalls(ctx context.Context, arg CountVoiceCallsParams) (int64, error)
 	// ============================================================
 	// Voice calls (WebRTC)
 	// ============================================================
@@ -19,8 +18,6 @@ type Querier interface {
 	GetCallByID(ctx context.Context, id int64) (VoiceCall, error)
 	GetCallsBySession(ctx context.Context, sessionID string) ([]VoiceCall, error)
 	ListAllCalls(ctx context.Context) ([]VoiceCall, error)
-	ListVoiceCallsPaginated(ctx context.Context, arg ListVoiceCallsPaginatedParams) ([]VoiceCall, error)
-	MarkMissedCall(ctx context.Context, id int64) error
 	SetCallTranscript(ctx context.Context, arg SetCallTranscriptParams) error
 	UpdateCallStatus(ctx context.Context, arg UpdateCallStatusParams) error
 }

@@ -8,7 +8,7 @@ export default function AdminRootPage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace('/admin/dashboard');
+    router.replace('/admin/inbox');
   }, [router]);
 
   return (

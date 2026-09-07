@@ -97,53 +97,6 @@ func (r *GuestRepo) List(ctx context.Context) ([]*domain.CustomerProfile, error)
 	return profiles, nil
 }
 
-func (r *GuestRepo) ListPaginated(ctx context.Context, filter domain.GuestFilter) ([]*domain.CustomerProfile, int64, error) {
-	page := filter.Page
-	if page < 1 {
-		page = 1
-	}
-	limit := filter.Limit
-	if limit < 1 || limit > 100 {
-		limit = 10
-	}
-	offset := (page - 1) * limit
-
-	rows, err := r.db.Chat.ListGuestsWithLastCasePaginated(ctx, chatdb.ListGuestsWithLastCasePaginatedParams{
-		Column1: filter.Search,
-		Limit:   int32(limit),
-		Offset:  int32(offset),
-	})
-
-	if err != nil {
-		r.logger.Error().Err(err).Msg("ListGuestsWithLastCasePaginated failed")
-		return nil, 0, err
-	}
-
-	total, err := r.db.Chat.CountGuests(ctx, filter.Search)
-	if err != nil {
-		r.logger.Error().Err(err).Msg("CountGuests failed")
-		return nil, 0, err
-	}
-
-	profiles := make([]*domain.CustomerProfile, 0, len(rows))
-	for _, row := range rows {
-		profiles = append(profiles, &domain.CustomerProfile{
-			ID:            row.ID,
-			GuestID:       row.GuestID,
-			DisplayName:   row.DisplayName,
-			Phone:         row.Phone,
-			LastSessionID: row.LastSessionID,
-			LastMessage:   row.LastMessage,
-			LastStatus:    stringFromInterface(row.LastStatus),
-			CreatedAt:     row.CreatedAt,
-			UpdatedAt:     row.UpdatedAt,
-		})
-	}
-
-	return profiles, total, nil
-}
-
-
 // Update updates a guest's display name and phone and synchronizes any active
 // chat cases with the new customer name and phone.
 func (r *GuestRepo) Update(ctx context.Context, guestID uuid.UUID, displayName, phone string) error {

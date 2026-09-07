@@ -1,12 +1,10 @@
 package domain
 
 import (
-	"context"
 	"time"
 
 	"github.com/google/uuid"
 )
-
 
 // ============================================================
 // User (CSKH Staff & Admin)
@@ -130,43 +128,12 @@ type ChatCase struct {
 	Status         CaseStatus `json:"status"`
 	AssignedCS     string     `json:"assigned_cs"`
 	LastMessage    string     `json:"last_message"`
-	LastSenderType string     `json:"last_sender_type,omitempty"`
 	ResolutionNote string     `json:"resolution_note"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
-type CaseListFilter struct {
-	Status CaseStatus `json:"status"`
-	Search string     `json:"search"`
-	Page   int        `json:"page"`
-	Limit  int        `json:"limit"`
-}
-
-type CaseStatusCounts struct {
-	Total       int64 `json:"total"`
-	NeedsHuman  int64 `json:"needs_human"`
-	HumanActive int64 `json:"human_active"`
-	Resolved    int64 `json:"resolved"`
-	AIActive    int64 `json:"ai_active"`
-}
-
-type VoiceCallFilter struct {
-	SessionID string `json:"session_id"`
-	Status    string `json:"status"`
-	Search    string `json:"search"`
-	Page      int    `json:"page"`
-	Limit     int    `json:"limit"`
-}
-
-type GuestFilter struct {
-	Search string `json:"search"`
-	Page   int    `json:"page"`
-	Limit  int    `json:"limit"`
-}
-
 // ============================================================
-
 // Learning Queue
 // ============================================================
 
@@ -380,23 +347,14 @@ type GeneralOverviewMetrics struct {
 	ResolutionRate string `json:"resolution_rate"`
 }
 
-type AIPerformanceDailyItem struct {
-	DateDay          time.Time `json:"date_day"`
-	Label            string    `json:"label"`
-	TotalCases       int       `json:"total_cases"`
-	AIResolvedCases  int       `json:"ai_resolved_cases"`
-	AIResolutionRate string    `json:"ai_resolution_rate"`
-}
-
 type AIPerformanceMetrics struct {
-	TotalCases       int                       `json:"total_cases"`
-	AIResolvedCases  int                       `json:"ai_resolved_cases"`
-	HandoffCases     int                       `json:"handoff_cases"`
-	AIResolutionRate string                    `json:"ai_resolution_rate"`
-	HandoffRate      string                    `json:"handoff_rate"`
-	AvgAICSAT        float64                   `json:"avg_ai_csat"`
-	AvgResponseTime  string                    `json:"avg_response_time"`
-	DailyTrend       []*AIPerformanceDailyItem `json:"daily_trend"`
+	TotalCases       int     `json:"total_cases"`
+	AIResolvedCases  int     `json:"ai_resolved_cases"`
+	HandoffCases     int     `json:"handoff_cases"`
+	AIResolutionRate string  `json:"ai_resolution_rate"`
+	HandoffRate      string  `json:"handoff_rate"`
+	AvgAICSAT        float64 `json:"avg_ai_csat"`
+	AvgResponseTime  string  `json:"avg_response_time"`
 }
 
 type StaffPerformanceItem struct {
@@ -451,89 +409,3 @@ type SystemErrorRecord struct {
 	SuggestedFix string    `json:"suggested_fix"`
 	CreatedAt    time.Time `json:"created_at"`
 }
-
-// ============================================================
-// Chat Tag System
-// ============================================================
-
-type ChatTag struct {
-	ID          int64     `json:"id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	Color       string    `json:"color"`
-	CreatedBy   string    `json:"created_by"`
-	IsActive    bool      `json:"is_active"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
-}
-
-type CaseTag struct {
-	ID         int64     `json:"id"`
-	SessionID  string    `json:"session_id"`
-	TagID      int64     `json:"tag_id"`
-	AssignedBy string    `json:"assigned_by"`
-	CreatedAt  time.Time `json:"created_at"`
-	// Joined fields
-	TagName  string `json:"tag_name,omitempty"`
-	TagColor string `json:"tag_color,omitempty"`
-}
-
-type CaseTagHistory struct {
-	ID          int64     `json:"id"`
-	SessionID   string    `json:"session_id"`
-	TagID       int64     `json:"tag_id"`
-	TagName     string    `json:"tag_name"`
-	TagColor    string    `json:"tag_color"`
-	Action      string    `json:"action"` // "attach" | "detach"
-	PerformedBy string    `json:"performed_by"`
-	CreatedAt   time.Time `json:"created_at"`
-}
-
-// ============================================================
-// Alert Config & Events
-// ============================================================
-
-type AlertConfig struct {
-	ID             int64     `json:"id"`
-	IsEnabled      bool      `json:"is_enabled"`
-	TimeoutSeconds int       `json:"timeout_seconds"`
-	AlertContent   string    `json:"alert_content"`
-	UpdatedBy      string    `json:"updated_by"`
-	UpdatedAt      time.Time `json:"updated_at"`
-}
-
-type AlertEvent struct {
-	ID             int64      `json:"id"`
-	SessionID      string     `json:"session_id"`
-	TimeoutSeconds int        `json:"timeout_seconds"`
-	TriggeredAt    time.Time  `json:"triggered_at"`
-	ResolvedAt     *time.Time `json:"resolved_at,omitempty"`
-	IsResolved     bool       `json:"is_resolved"`
-}
-
-// ============================================================
-// ChatTagRepository interface
-// ============================================================
-
-type ChatTagRepository interface {
-	// Tag CRUD
-	ListTags(ctx context.Context) ([]*ChatTag, error)
-	CreateTag(ctx context.Context, tag *ChatTag) (*ChatTag, error)
-	UpdateTag(ctx context.Context, id int64, name, description, color string) error
-	DeleteTag(ctx context.Context, id int64) error
-
-	// Case Tag operations
-	GetCaseTags(ctx context.Context, sessionID string) ([]*CaseTag, error)
-	AttachTag(ctx context.Context, sessionID string, tagID int64, assignedBy string) error
-	DetachTag(ctx context.Context, sessionID string, tagID int64, performedBy string) error
-
-	// Alert Config
-	GetAlertConfig(ctx context.Context) (*AlertConfig, error)
-	UpsertAlertConfig(ctx context.Context, cfg *AlertConfig) error
-
-	// Alert Events
-	CreateAlertEvent(ctx context.Context, sessionID string, timeoutSeconds int) (*AlertEvent, error)
-	ResolveAlertEvent(ctx context.Context, sessionID string) error
-	ListUnresolvedAlertEvents(ctx context.Context) ([]*AlertEvent, error)
-}
-

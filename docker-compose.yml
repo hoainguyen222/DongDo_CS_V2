@@ -87,7 +87,52 @@ services:
       qdrant:
         condition: service_started
 
+  # 5. Asterisk PBX (WebRTC, PJSIP & ARI)
+  asterisk:
+    build:
+      context: ./services/call-service/docker/asterisk
+      dockerfile: Dockerfile
+    container_name: dongdo_asterisk
+    restart: unless-stopped
+    ports:
+      - "8088:8088"
+      - "5060:5060/udp"
+      - "10000-10200:10000-10200/udp"
+    healthcheck:
+      test: ["CMD", "asterisk", "-rx", "core show version"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 6. Standalone WebRTC Call Service (Go Microservice)
+  call_service:
+    build:
+      context: ./services/call-service
+      dockerfile: Dockerfile
+    container_name: dongdo_call_service
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      CALL_SERVICE_PORT: "8081"
+      DATABASE_URL: "postgres://postgres:postgrespassword@postgres:5432/dongdo_cs?sslmode=disable"
+      REDIS_URL: "redis://redis:6379"
+      ASTERISK_URL: "http://asterisk:8088"
+      ASTERISK_USER: "asterisk"
+      ASTERISK_PASS: "callservicesecretpassword"
+      ASTERISK_APP: "dongdo-call-app"
+    volumes:
+      - ./recordings:/app/recordings
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      asterisk:
+        condition: service_healthy
+
 volumes:
   pgdata:
   redisdata:
   qdrantdata:
+

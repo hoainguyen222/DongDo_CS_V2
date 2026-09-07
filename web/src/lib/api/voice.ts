@@ -1,36 +1,12 @@
 // ============================================================
-// Voice Calls API — WebRTC call history
+// Voice Calls API — WebRTC call history (Call Service V2)
 // ============================================================
 
 import { apiClient, API_BASE } from './client';
-
-export interface InitiateCallParams {
-  sessionId: string;
-  callerType: 'guest' | 'cskh';
-  callerId: string;
-  calleeType: 'guest' | 'cskh';
-  calleeId?: string;
-}
-
-export interface VoiceCallResponse {
-  id: number;
-  session_id: string;
-  caller_type: string;
-  caller_id: string;
-  callee_type: string;
-  callee_id: string;
-  status: string;
-  duration_seconds: number;
-  recording_url?: string;
-  transcript?: string;
-  created_at: string;
-  ended_at?: string;
-}
+import { fetchCallHistory, hangupCall, rejectCall } from './callService';
 
 export interface ListVoiceCallsParams {
   sessionId?: string;
-  status?: string;
-  search?: string;
   page?: number;
   limit?: number;
 }
@@ -43,77 +19,54 @@ export interface ListVoiceCallsResult {
   total_pages: number;
 }
 
-export interface TeamAgentGuestCallNotification {
-  session_id: string;
-  guest_name: string;
-  guest_id: string;
-  call_id?: number;
-  timestamp: string;
-}
-
 export const voiceApi = {
-  async initiateCall(params: InitiateCallParams): Promise<VoiceCallResponse> {
-    const res = await fetch(`${API_BASE}/api/voice/initiate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        session_id: params.sessionId,
-        caller_type: params.callerType,
-        caller_id: params.callerId,
-        callee_type: params.calleeType,
-        callee_id: params.calleeId || '',
-      }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: 'Không thể khởi tạo cuộc gọi' }));
-      throw new Error(err.detail || 'Không thể khởi tạo cuộc gọi');
-    }
-    return res.json();
-  },
-
   async list(params: ListVoiceCallsParams = {}): Promise<ListVoiceCallsResult> {
-    const { sessionId, status, search, page = 1, limit = 10 } = params;
-    const qs = new URLSearchParams();
-    if (sessionId) qs.append('session_id', sessionId);
-    if (status) qs.append('status', status);
-    if (search) qs.append('search', search);
-    qs.append('page', page.toString());
-    qs.append('limit', limit.toString());
-    return apiClient.get<ListVoiceCallsResult>(`/api/admin/voice/calls?${qs.toString()}`);
+    const { page = 1, limit = 10 } = params;
+    try {
+      const data = await fetchCallHistory(limit * 5);
+      const calls = data.calls || [];
+      const total = data.total || calls.length;
+      return {
+        calls,
+        total,
+        page,
+        limit,
+        total_pages: Math.ceil(total / limit) || 1,
+      };
+    } catch (err) {
+      // Legacy API Fallback
+      const qs = new URLSearchParams();
+      if (params.sessionId) qs.append('session_id', params.sessionId);
+      qs.append('page', page.toString());
+      qs.append('limit', limit.toString());
+      return apiClient.get<ListVoiceCallsResult>(`/api/admin/voice/calls?${qs.toString()}`);
+    }
   },
 
-
-  async delete(callID: number): Promise<void> {
-    await apiClient.delete(`/api/admin/voice/calls/${callID}`);
+  async delete(callID: number | string): Promise<void> {
+    await apiClient.delete(`/api/admin/voice/calls/${callID}`).catch(() => {});
   },
 
   async endCall(sessionID: string, durationSeconds: number = 0): Promise<void> {
-    const res = await fetch(`${API_BASE}/api/voice/end`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        session_id: sessionID,
-        duration_seconds: durationSeconds,
-      }),
+    await hangupCall(sessionID, durationSeconds).catch(async () => {
+      await fetch(`${API_BASE}/api/voice/end`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionID,
+          duration_seconds: durationSeconds,
+        }),
+      });
     });
-    if (!res.ok) throw new Error('Không thể kết thúc cuộc gọi');
   },
 
   async declineCall(sessionID: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/api/voice/decline`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionID }),
+    await rejectCall(sessionID, 'agent').catch(async () => {
+      await fetch(`${API_BASE}/api/voice/decline`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionID }),
+      });
     });
-    if (!res.ok) throw new Error('Không thể từ chối cuộc gọi');
-  },
-
-  async markMissed(callID: number, sessionID: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/api/voice/missed`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ call_id: callID, session_id: sessionID }),
-    });
-    if (!res.ok) throw new Error('Không thể đánh dấu cuộc gọi nhỡ');
   },
 };

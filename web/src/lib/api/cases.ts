@@ -21,7 +21,6 @@ export interface ListCasesResult {
   status_counts?: CaseStatusCounts;
 }
 
-
 export const casesApi = {
   async list(params: ListCasesParams = {}): Promise<ListCasesResult> {
     const { status, page = 1, limit = 10, search } = params;

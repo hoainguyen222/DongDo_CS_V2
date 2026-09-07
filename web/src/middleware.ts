@@ -13,7 +13,7 @@ const adminPublicRoutes = ['/admin/login'];
 //   - /login        → /            (về portal khách hàng) — CHỈ khi có dongdo_auth_token
 // NOTE: /login bây giờ là form guest (họ tên + phone), không phải admin login
 const authRoutes: Array<{ prefix: string; redirect: string }> = [
-  { prefix: '/admin/login', redirect: '/admin/dashboard' },
+  { prefix: '/admin/login', redirect: '/admin/inbox' },
 ];
 
 export function middleware(request: NextRequest) {
@@ -33,9 +33,9 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/admin/login', request.url));
   }
 
-  // If already authenticated and trying to access /admin/login, redirect to /admin/dashboard
+  // If already authenticated and trying to access /admin/login, redirect to /admin/inbox
   if (pathname === '/admin/login' && isAuthenticated) {
-    return NextResponse.redirect(new URL('/admin/dashboard', request.url));
+    return NextResponse.redirect(new URL('/admin/inbox', request.url));
   }
 
   return NextResponse.next();

@@ -10,12 +10,15 @@ import {
   Mic,
   MicOff,
   PhoneOff,
-  Users,
+  PhoneCall,
   X,
-  Headphones,
+  CheckCircle2,
+  Clock,
 } from 'lucide-react';
+import { useAuthStore } from '@/lib/stores/authStore';
 import { WSClient } from '@/lib/ws';
 import { WebRTCManager } from '@/lib/webrtc';
+import { acceptCall } from '@/lib/api/callService';
 import styles from './AdminSidebar.module.scss';
 
 // ── RBAC Helpers ───────────────────────────────────────────
@@ -119,7 +122,7 @@ function NavButton({
   );
 }
 
-// ── Call Components (kept inside this file for cohesion) ─────
+// ── Call Components ─────────────────────────────────────────
 export function IncomingCallBanner({
   incomingCall,
   onAnswer,
@@ -265,6 +268,8 @@ export function AdminSidebar({
   customersCount,
   voiceCallsCount,
   pendingLearningCount,
+  pendingCalls = [],
+  onAcceptPendingCall,
   onLogout,
 }: {
   user: any;
@@ -274,8 +279,14 @@ export function AdminSidebar({
   customersCount: number;
   voiceCallsCount: number;
   pendingLearningCount: number;
+  pendingCalls?: any[];
+  onAcceptPendingCall?: (call: any) => void;
   onLogout: () => void;
 }) {
+  const [showPendingModal, setShowPendingModal] = useState(false);
+
+  const hasPending = pendingCalls && pendingCalls.length > 0;
+
   const navIcon = {
     dashboard: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c084fc" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -352,146 +363,190 @@ export function AdminSidebar({
   };
 
   return (
-    <aside className={styles.aside}>
-      <div className={styles.logoBar}>
-        <Image
-          src="/logo/Logo Dọc_Trắng.svg"
-          alt="Logo Đông Đô Partners"
-          width={40}
-          height={40}
-          className={styles.logoImg}
-          onError={(e) => {
-            (e.target as HTMLImageElement).style.display = 'none';
-          }}
-        />
-        <div className={styles.logoText}>
-          <h2 className={styles.logoTitle}>Đông Đô CS</h2>
-          <span className={styles.logoBadge}>STUDIO V2.0 (GO)</span>
-        </div>
-      </div>
-
-      <nav className={styles.nav}>
-        <div className={styles.section}>
-          {getFeaturePermission('partner_dashboard', role, permissions) !== 'none' && (
-            <NavButton href="/admin/dashboard" icon={navIcon.dashboard} label="Trang Chủ / Dashboard" />
-          )}
-          {getFeaturePermission('inbox', role, permissions) !== 'none' && (
-            <NavButton
-              href="/admin/inbox"
-              icon={navIcon.inbox}
-              label="Live CS Inbox"
-              badge={waitingCasesCount > 0 ? waitingCasesCount : undefined}
-              badgeVariant="rose"
-            />
-          )}
-          {getFeaturePermission('customers', role, permissions) !== 'none' && (
-            <NavButton
-              href="/admin/customers"
-              icon={navIcon.users}
-              label="Quản Lý Khách Hàng"
-              badge={customersCount > 0 ? customersCount : undefined}
-              badgeVariant="emerald"
-            />
-          )}
-          {getFeaturePermission('calls', role, permissions) !== 'none' && (
-            <NavButton
-              href="/admin/calls"
-              icon={navIcon.headphones}
-              label="Lịch Sử Cuộc Gọi"
-              badge={voiceCallsCount > 0 ? voiceCallsCount : undefined}
-              badgeVariant="cyan"
-            />
-          )}
-          {getFeaturePermission('learning', role, permissions) !== 'none' && (
-            <NavButton
-              href="/admin/learning"
-              icon={navIcon.brain}
-              label="Học Tri Thức Mới"
-              badge={pendingLearningCount > 0 ? pendingLearningCount : undefined}
-              badgeVariant="amber"
-            />
-          )}
-          {getFeaturePermission('knowledge', role, permissions) !== 'none' && (
-            <NavButton href="/admin/knowledge" icon={navIcon.book} label="Kho Tri Thức" />
-          )}
-          {getFeaturePermission('partner_analytics', role, permissions) !== 'none' && (
-            <NavButton href="/admin/analytics" icon={navIcon.trending} label="Báo Cáo & Thống Kê CX" />
-          )}
-          {getFeaturePermission('partner_config', role, permissions) !== 'none' && (
-            <NavButton href="/admin/permissions" icon={navIcon.sliders} label="Cấu Hình & Phân Quyền" />
-          )}
-          {getFeaturePermission('config', role, permissions) !== 'none' && (
-            <NavButton href="/admin/config" icon={navIcon.settings} label="Cấu Hình LLM Studio" />
-          )}
-          {role?.toLowerCase() === 'owner' && (
-            <NavButton href="/admin/test-data" icon={navIcon.testTube} label="Test Data Upload" />
-          )}
-        </div>
-      </nav>
-
-      <div className={styles.footer}>
-        <div className={styles.userInfo}>
-          <div className={styles.userText}>
-            <div className={styles.userName}>{user?.full_name || user?.username}</div>
-            <div className={styles.userRole}>{role}</div>
+    <>
+      <aside className={styles.aside}>
+        <div className={styles.logoBar}>
+          <Image
+            src="/logo/Logo Dọc_Trắng.svg"
+            alt="Logo Đông Đô Partners"
+            width={40}
+            height={40}
+            className={styles.logoImg}
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none';
+            }}
+          />
+          <div className={styles.logoText}>
+            <h2 className={styles.logoTitle}>Đông Đô CS</h2>
+            <span className={styles.logoBadge}>STUDIO V2.0 (GO)</span>
           </div>
-          <button
-            onClick={onLogout}
-            className={styles.logoutBtn}
-            aria-label="Đăng xuất"
-            title="Đăng xuất"
-          >
-            <LogOut style={{ width: 16, height: 16 }} />
-          </button>
         </div>
-      </div>
-    </aside>
+
+        <nav className={styles.nav}>
+          <div className={styles.section}>
+            {getFeaturePermission('partner_dashboard', role, permissions) !== 'none' && (
+              <NavButton href="/admin/dashboard" icon={navIcon.dashboard} label="Trang Chủ / Dashboard" />
+            )}
+            {getFeaturePermission('inbox', role, permissions) !== 'none' && (
+              <NavButton
+                href="/admin/inbox"
+                icon={navIcon.inbox}
+                label="Live CS Inbox"
+                badge={waitingCasesCount > 0 ? waitingCasesCount : undefined}
+                badgeVariant="rose"
+              />
+            )}
+            {getFeaturePermission('customers', role, permissions) !== 'none' && (
+              <NavButton
+                href="/admin/customers"
+                icon={navIcon.users}
+                label="Quản Lý Khách Hàng"
+                badge={customersCount > 0 ? customersCount : undefined}
+                badgeVariant="emerald"
+              />
+            )}
+            {getFeaturePermission('calls', role, permissions) !== 'none' && (
+              <NavButton
+                href="/admin/calls"
+                icon={navIcon.headphones}
+                label="Lịch Sử Cuộc Gọi"
+                badge={voiceCallsCount > 0 ? voiceCallsCount : undefined}
+                badgeVariant="cyan"
+              />
+            )}
+            {getFeaturePermission('learning', role, permissions) !== 'none' && (
+              <NavButton
+                href="/admin/learning"
+                icon={navIcon.brain}
+                label="Học Tri Thức Mới"
+                badge={pendingLearningCount > 0 ? pendingLearningCount : undefined}
+                badgeVariant="amber"
+              />
+            )}
+            {getFeaturePermission('knowledge', role, permissions) !== 'none' && (
+              <NavButton href="/admin/knowledge" icon={navIcon.book} label="Kho Tri Thức" />
+            )}
+            {getFeaturePermission('partner_analytics', role, permissions) !== 'none' && (
+              <NavButton href="/admin/analytics" icon={navIcon.trending} label="Báo Cáo & Thống Kê CX" />
+            )}
+            {getFeaturePermission('partner_config', role, permissions) !== 'none' && (
+              <NavButton href="/admin/permissions" icon={navIcon.sliders} label="Cấu Hình & Phân Quyền" />
+            )}
+            {getFeaturePermission('config', role, permissions) !== 'none' && (
+              <NavButton href="/admin/config" icon={navIcon.settings} label="Cấu Hình LLM Studio" />
+            )}
+            {role?.toLowerCase() === 'owner' && (
+              <NavButton href="/admin/test-data" icon={navIcon.testTube} label="Test Data Upload" />
+            )}
+          </div>
+        </nav>
+
+        <div className={styles.footer}>
+          <div className={styles.userInfo}>
+            <div className={styles.userText}>
+              <div className={styles.userName}>{user?.full_name || user?.username}</div>
+              <div className={styles.userRole}>{role}</div>
+            </div>
+
+            <div className={styles.footerActions}>
+              {/* Desk Phone Icon Call Alert Button */}
+              <button
+                onClick={() => setShowPendingModal(true)}
+                className={`${styles.deskPhoneBtn} ${hasPending ? styles.deskPhoneBlink : ''}`}
+                aria-label="Cuộc gọi đang chờ"
+                title={hasPending ? `${pendingCalls.length} cuộc gọi đang chờ tiếp nhận!` : 'Tổng đài thoại WebRTC'}
+              >
+                <PhoneCall style={{ width: 18, height: 18 }} />
+                {hasPending && (
+                  <span className={styles.phoneBadge}>{pendingCalls.length}</span>
+                )}
+              </button>
+
+              <button
+                onClick={onLogout}
+                className={styles.logoutBtn}
+                aria-label="Đăng xuất"
+                title="Đăng xuất"
+              >
+                <LogOut style={{ width: 16, height: 16 }} />
+              </button>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* Pending Calls Modal Popover */}
+      {showPendingModal && (
+        <div className={styles.pendingModalOverlay} onClick={() => setShowPendingModal(false)}>
+          <div className={styles.pendingModal} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.pendingModalHeader}>
+              <h3>
+                <PhoneCall style={{ width: 18, height: 18, color: '#10b981' }} />
+                <span>Cuộc Gọi Đang Chờ Tiếp Nhận ({pendingCalls.length})</span>
+              </h3>
+              <button
+                onClick={() => setShowPendingModal(false)}
+                className={styles.logoutBtn}
+                style={{ width: 28, height: 28 }}
+              >
+                <X style={{ width: 16, height: 16 }} />
+              </button>
+            </div>
+
+            <div className={styles.pendingModalBody}>
+              {!hasPending ? (
+                <div style={{ textAlign: 'center', padding: '24px 12px', color: '#94a3b8', fontSize: 13 }}>
+                  Hiện tại không có cuộc gọi nào đang chờ tiếp nhận.
+                </div>
+              ) : (
+                pendingCalls.map((call) => (
+                  <div key={call.call_id || call.session_id} className={styles.pendingCallItem}>
+                    <div className={styles.pendingCallInfo}>
+                      <div className={styles.pendingCallerName}>
+                        <Phone style={{ width: 14, height: 14, color: '#34d399' }} />
+                        <span>{call.caller_id || call.customer_id || 'Khách hàng'}</span>
+                      </div>
+                      <div className={styles.pendingCallMeta}>
+                        Mã phiên: {call.session_id || call.call_id}
+                      </div>
+                      <div className={styles.pendingCallMeta} style={{ color: '#f59e0b', display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                        <Clock style={{ width: 12, height: 12 }} />
+                        <span>Đang đổ chuông (Tự hủy sau 45s)</span>
+                      </div>
+                    </div>
+
+                    {/* ONLY ACCEPT BUTTON - NO DECLINE BUTTON */}
+                    <button
+                      onClick={() => {
+                        if (onAcceptPendingCall) onAcceptPendingCall(call);
+                        if (pendingCalls.length <= 1) setShowPendingModal(false);
+                      }}
+                      className={styles.acceptCallBtnOnly}
+                    >
+                      <CheckCircle2 style={{ width: 16, height: 16 }} />
+                      <span>Tiếp nhận</span>
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
 // ── WebRTC Hook for Admin ───────────────────────────────────
-const MISSED_CALL_TIMEOUT = 60; // seconds before marking as missed
-
 export function useAdminWebRTC(wsRef: React.RefObject<WSClient | null>, sessionId: string, onCallEnd: () => void) {
   const rtcRef = useRef<WebRTCManager | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const callTimerRef = useRef<any>(null);
-  const missedCallTimerRef = useRef<any>(null);
   const [isCallActive, setIsCallActive] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
-  const [incomingCall, setIncomingCall] = useState<{ session_id: string; caller_id: string; call_id?: number; offer?: any } | null>(null);
-  const [isMissedCall, setIsMissedCall] = useState(false);
-
-  const clearMissedCallTimer = useCallback(() => {
-    if (missedCallTimerRef.current) {
-      clearTimeout(missedCallTimerRef.current);
-      missedCallTimerRef.current = null;
-    }
-  }, []);
-
-  const startMissedCallTimer = useCallback((callSessionId: string, _callerId: string, callId?: number) => {
-    clearMissedCallTimer();
-    setIsMissedCall(false);
-    missedCallTimerRef.current = setTimeout(async () => {
-      // Mark as missed call if no one answered
-      setIsMissedCall(true);
-      try {
-        const { api } = await import('@/lib/api');
-        // Use the dedicated markMissedCall API to set status to MISSED
-        if (callId) {
-          await api.markMissedCall(callId, callSessionId);
-        } else {
-          await api.endCall(callSessionId, 0); // Fallback: 0 duration = missed
-        }
-      } catch (_) {}
-      // Auto-clear after showing
-      setTimeout(() => {
-        setIncomingCall(null);
-        setIsMissedCall(false);
-      }, 5000);
-    }, MISSED_CALL_TIMEOUT * 1000);
-  }, [clearMissedCallTimer]);
+  const [incomingCall, setIncomingCall] = useState<{ session_id: string; caller_id: string; offer?: any; call_id?: string } | null>(null);
+  const [pendingCalls, setPendingCalls] = useState<any[]>([]);
 
   const startCallTimer = useCallback(() => {
     clearInterval(callTimerRef.current);
@@ -501,15 +556,21 @@ export function useAdminWebRTC(wsRef: React.RefObject<WSClient | null>, sessionI
     }, 1000);
   }, []);
 
-  const handleAnswerCall = useCallback(async () => {
-    if (!incomingCall || !wsRef.current) return;
-    clearMissedCallTimer();
-    const callData = { ...incomingCall };
+  const handleAnswerCall = useCallback(async (callToAnswer?: any) => {
+    const targetCall = callToAnswer || incomingCall;
+    if (!targetCall || !wsRef.current) return;
+
+    // Trigger Call Service accept API
+    if (targetCall.call_id) {
+      acceptCall(targetCall.call_id, 'CSKH_Agent').catch(() => {});
+    }
+
     setIsCallActive(true);
     setIncomingCall(null);
-    setIsMissedCall(false);
+    setPendingCalls((prev) => prev.filter((c) => c.session_id !== targetCall.session_id && c.call_id !== targetCall.call_id));
     startCallTimer();
-    const rtc = new WebRTCManager(wsRef.current, callData.session_id, (state: any) => {
+
+    const rtc = new WebRTCManager(wsRef.current, targetCall.session_id, (state: any) => {
       if (state === 'connected') startCallTimer();
       else if (state === 'ended') {
         setIsCallActive(false);
@@ -525,34 +586,28 @@ export function useAdminWebRTC(wsRef: React.RefObject<WSClient | null>, sessionI
       }
     });
     rtcRef.current = rtc;
-    if (callData.offer) await rtc.handleOffer(callData.offer);
-  }, [incomingCall, wsRef, startCallTimer, onCallEnd, clearMissedCallTimer]);
+    if (targetCall.offer) await rtc.handleOffer(targetCall.offer);
+  }, [incomingCall, wsRef, startCallTimer, onCallEnd]);
 
   const handleDeclineCall = useCallback(() => {
-    clearMissedCallTimer();
     const { voiceApi } = require('@/lib/api');
     voiceApi.declineCall(incomingCall?.session_id || '').catch(() => {});
     setIncomingCall(null);
-    setIsMissedCall(false);
-  }, [incomingCall, clearMissedCallTimer]);
+  }, [incomingCall]);
 
   const handleEndCall = useCallback(async () => {
-    clearMissedCallTimer();
     setIsCallActive(false);
     setIncomingCall(null);
     clearInterval(callTimerRef.current);
     setCallDuration(0);
-    setIsMissedCall(false);
     if (rtcRef.current) {
       await rtcRef.current.endCall(false, callDuration).catch(() => {}); // local cleanup only
       rtcRef.current = null;
     }
     const { voiceApi } = require('@/lib/api');
-    // Use incomingCall.session_id if available, otherwise fall back to the provided sessionId
-    const targetSessionId = incomingCall?.session_id || sessionId;
-    await voiceApi.endCall(targetSessionId, callDuration).catch(() => {});
+    await voiceApi.endCall(sessionId, callDuration).catch(() => {});
     onCallEnd();
-  }, [callDuration, sessionId, incomingCall, onCallEnd, clearMissedCallTimer]);
+  }, [callDuration, sessionId, onCallEnd]);
 
   const toggleMute = useCallback(() => {
     if (rtcRef.current) {
@@ -566,41 +621,62 @@ export function useAdminWebRTC(wsRef: React.RefObject<WSClient | null>, sessionI
   useEffect(() => {
     if (!wsRef.current) return;
 
+    const addCallToPending = (callData: any) => {
+      setPendingCalls((prev) => {
+        const exists = prev.some((c) => (c.call_id && c.call_id === callData.call_id) || (c.session_id && c.session_id === callData.session_id));
+        if (exists) return prev;
+        return [...prev, callData];
+      });
+
+      // Automatic 45-second frontend timeout removal
+      setTimeout(() => {
+        setPendingCalls((prev) => prev.filter((c) => c.session_id !== callData.session_id && c.call_id !== callData.call_id));
+      }, 45000);
+    };
+
+    wsRef.current.on('incoming_call', (event: any) => {
+      const payload = event.payload || event;
+      const callData = {
+        call_id: payload.call_id,
+        session_id: payload.session_id || payload.call_id,
+        caller_id: payload.customer_id || payload.caller_id || 'Khách hàng',
+        offer: payload.offer,
+      };
+      setIncomingCall(callData);
+      addCallToPending(callData);
+    });
+
     wsRef.current.on('call_ring', (event: any) => {
       const sID = event.payload?.session_id || event.session_id;
       const cID = event.payload?.caller_id || event.sender_id || 'Khách hàng';
       const offerData = event.payload?.offer || event.payload;
+      const callData = { session_id: sID, caller_id: cID, offer: offerData, call_id: event.payload?.call_id };
       if (sID) {
-        // If already in a call, send busy notification
-        if (isCallActive) {
-          // Admin is busy, caller will get no answer
-          return;
-        }
-        const callId = event.payload?.call_id || event.call_id;
-        setIncomingCall({ session_id: sID, caller_id: cID, call_id: callId, offer: offerData });
-        // Start missed call timer with call_id for proper missed call marking
-        startMissedCallTimer(sID, cID, callId);
+        setIncomingCall(callData);
+        addCallToPending(callData);
       }
     });
 
     wsRef.current.on('call_offer', (event: any) => {
       const sID = event.payload?.session_id || event.session_id;
       const cID = event.payload?.caller_id || event.sender_id || 'Khách hàng';
+      const callData = { session_id: sID, caller_id: cID, offer: event.payload, call_id: event.payload?.call_id };
       if (sID) {
-        // If already in a call, ignore (already handled by call_ring)
-        if (!isCallActive && !incomingCall) {
-          const callId = event.payload?.call_id || event.call_id;
-          setIncomingCall({ session_id: sID, caller_id: cID, call_id: callId, offer: event.payload });
-          startMissedCallTimer(sID, cID, callId);
-        }
+        setIncomingCall(callData);
+        addCallToPending(callData);
       }
     });
 
-    wsRef.current.on('call_end', async () => {
+    wsRef.current.on('call_end', async (event: any) => {
+      const payload = event?.payload || event;
+      const endedID = payload?.call_id || payload?.session_id;
       setIsCallActive(false);
       setIncomingCall(null);
-      setIsMissedCall(false);
-      clearMissedCallTimer();
+      if (endedID) {
+        setPendingCalls((prev) => prev.filter((c) => c.session_id !== endedID && c.call_id !== endedID));
+      } else {
+        setPendingCalls([]);
+      }
       clearInterval(callTimerRef.current);
       setCallDuration(0);
       rtcRef.current = null;
@@ -609,9 +685,8 @@ export function useAdminWebRTC(wsRef: React.RefObject<WSClient | null>, sessionI
 
     return () => {
       clearInterval(callTimerRef.current);
-      clearMissedCallTimer();
     };
-  }, [wsRef, onCallEnd, isCallActive, incomingCall, startMissedCallTimer, clearMissedCallTimer]);
+  }, [wsRef, onCallEnd]);
 
   return {
     rtcRef,
@@ -620,111 +695,10 @@ export function useAdminWebRTC(wsRef: React.RefObject<WSClient | null>, sessionI
     callDuration,
     isMuted,
     incomingCall,
-    isMissedCall,
+    pendingCalls,
     handleAnswerCall,
     handleDeclineCall,
     handleEndCall,
     toggleMute,
   };
-}
-
-// ── Types for Team Agent Guest Call Notifications ────────────
-export interface TeamAgentGuestCall {
-  session_id: string;
-  guest_name: string;
-  guest_id: string;
-  call_id?: number;
-  timestamp: string;
-}
-
-// ── Hook for Team Agent Guest Call Notifications ────────────
-export function useTeamAgentNotifications(
-  wsRef: React.RefObject<WSClient | null>,
-  onTakeCall?: (sessionId: string, guestName: string) => void
-) {
-  const [pendingGuestCalls, setPendingGuestCalls] = useState<TeamAgentGuestCall[]>([]);
-
-  useEffect(() => {
-    if (!wsRef.current) return;
-
-    const handleTeamAgentCall = (event: any) => {
-      const guestCall: TeamAgentGuestCall = {
-        session_id: event.payload?.session_id || event.session_id,
-        guest_name: event.payload?.guest_name || event.guest_name || 'Khách hàng',
-        guest_id: event.payload?.guest_id || event.guest_id || '',
-        call_id: event.payload?.call_id || event.call_id,
-        timestamp: event.payload?.timestamp || event.timestamp || new Date().toISOString(),
-      };
-      // Avoid duplicates
-      setPendingGuestCalls((prev) => {
-        if (prev.some((c) => c.session_id === guestCall.session_id)) return prev;
-        return [...prev, guestCall];
-      });
-    };
-
-    const unsubscribe = wsRef.current.on('team_agent_call', handleTeamAgentCall);
-
-    return () => {
-      unsubscribe();
-    };
-  }, [wsRef]);
-
-  const dismissCall = useCallback((sessionId: string) => {
-    setPendingGuestCalls((prev) => prev.filter((c) => c.session_id !== sessionId));
-  }, []);
-
-  const handleTakeCall = useCallback((call: TeamAgentGuestCall) => {
-    onTakeCall?.(call.session_id, call.guest_name);
-    dismissCall(call.session_id);
-  }, [onTakeCall, dismissCall]);
-
-  return {
-    pendingGuestCalls,
-    dismissCall,
-    handleTakeCall,
-  };
-}
-
-// ── Team Agent Guest Call Banner Component ──────────────────
-export function TeamAgentGuestCallBanner({
-  call,
-  onTakeCall,
-  onDismiss,
-}: {
-  call: TeamAgentGuestCall;
-  onTakeCall: (call: TeamAgentGuestCall) => void;
-  onDismiss: (sessionId: string) => void;
-}) {
-  const sessionPreview = call.session_id.length > 12
-    ? call.session_id.slice(0, 12) + '...'
-    : call.session_id;
-
-  return (
-    <div className={styles.teamAgentBanner}>
-      <div className={styles.teamAgentIcon}>
-        <Headphones style={{ width: 20, height: 20 }} />
-      </div>
-      <div className={styles.teamAgentText}>
-        <div className={styles.teamAgentLabel}>Khách hàng đang chờ</div>
-        <div className={styles.teamAgentGuest}>{call.guest_name}</div>
-        <div className={styles.teamAgentSession}>{sessionPreview}</div>
-      </div>
-      <div className={styles.teamAgentActions}>
-        <button
-          onClick={() => onTakeCall(call)}
-          className={styles.teamAgentBtn}
-        >
-          <Phone style={{ width: 14, height: 14 }} />
-          <span>Nhận cuộc gọi</span>
-        </button>
-        <button
-          onClick={() => onDismiss(call.session_id)}
-          className={styles.teamAgentDismissBtn}
-          aria-label="Bỏ qua thông báo"
-        >
-          <X style={{ width: 16, height: 16 }} />
-        </button>
-      </div>
-    </div>
-  );
 }
