@@ -1,3 +1,5 @@
+import { apiClient, API_BASE, getAuthToken } from './client';
+
 const CALL_SERVICE_BASE = typeof window !== 'undefined' && window.location.hostname
   ? `${window.location.protocol}//${window.location.hostname}:8081`
   : 'http://localhost:8081';
@@ -66,14 +68,34 @@ export async function hangupCall(callID: string, durationSeconds: number = 0): P
 }
 
 export async function fetchCallHistory(limit: number = 100): Promise<{ calls: CallV2[]; total: number }> {
-  const res = await fetch(`${CALL_SERVICE_BASE}/api/v1/calls?limit=${limit}`);
-  if (!res.ok) {
-    // Fallback to legacy endpoint if standalone service is offline
-    const legacy = await fetch('/api/voice/calls');
-    if (legacy.ok) return legacy.json();
-    throw new Error(`Fetch history failed: ${res.statusText}`);
+  // 1. Primary: Backend Go (port 8080) via apiClient (includes Bearer Auth token)
+  try {
+    const legacy = await apiClient.get<{ calls: any[]; total: number }>(`/api/admin/voice/calls?limit=${limit}`);
+    if (legacy && Array.isArray(legacy.calls)) {
+      return {
+        calls: legacy.calls,
+        total: legacy.total || legacy.calls.length,
+      };
+    }
+  } catch (e) {
+    // Backend API (port 8080) offline / error
   }
-  return res.json();
+
+  // 2. Fallback: Standalone call-service (port 8081) if active
+  try {
+    const token = getAuthToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`${CALL_SERVICE_BASE}/api/v1/calls?limit=${limit}`, { headers });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (e) {
+    // Call service (port 8081) offline
+  }
+
+  return { calls: [], total: 0 };
 }
 
 export async function setAgentStatus(agentID: string, status: 'AVAILABLE' | 'OFFLINE' | 'AWAY'): Promise<void> {
