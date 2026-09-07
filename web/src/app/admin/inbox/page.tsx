@@ -10,7 +10,6 @@ import {
   useVoiceCalls,
   useClearAllCases,
 } from '@/lib/hooks/useApi';
-import { useWebSocket } from '@/lib/hooks/useWebSocket';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { Pagination } from '@/components/admin/AdminSidebar';
 import { useUIStore } from '@/lib/stores/uiStore';
@@ -195,47 +194,18 @@ export default function InboxPage() {
   );
   const { data: voiceCallsData } = useVoiceCalls();
 
-  // Real-time WebSocket connection to receive case updates instantly
-  // The WS server broadcasts WSEventCaseUpdate to the `admin_inbox` channel whenever
-  // any case changes (new message, status change, etc.). This keeps the list in sync
-  // without polling the REST API on a timer.
-  useWebSocket({
-    sessionId: 'admin_inbox',
-    username: user?.username || 'admin',
-    role: user?.role || 'admin',
-    onCaseUpdate: () => {
-      queryClient.invalidateQueries({ queryKey: ['cases'] });
-    },
-    onMessage: (event?: any) => {
-      const sid = event?.session_id || event?.payload?.session_id;
-      const senderType = event?.sender_type || event?.payload?.sender_type || 'guest';
-      const content = event?.content || event?.payload?.content;
-
-      if (sid) {
-        setLastSenderMap((prev) => ({ ...prev, [sid]: senderType }));
-
-        // Optimistically update the cached case list
-        queryClient.setQueriesData({ queryKey: ['cases'] }, (oldData: any) => {
-          if (!oldData || !oldData.cases) return oldData;
-          const nowISO = new Date().toISOString();
-          const updatedCases = oldData.cases.map((c: ChatCase) => {
-            if (c.session_id === sid) {
-              return {
-                ...c,
-                last_message: content ?? c.last_message,
-                last_sender_type: senderType,
-                updated_at: nowISO,
-              };
-            }
-            return c;
-          });
-          return { ...oldData, cases: updatedCases };
-        });
-
-        queryClient.invalidateQueries({ queryKey: ['cases'] });
-      }
-    },
-  });
+  // NOTE: Real-time WebSocket for `admin_inbox` is now handled ONCE by
+  // AdminLayout (the layout is mounted for every authenticated admin page,
+  // so child pages don't need their own connection). Previously this page
+  // also opened a WSClient, which produced a 2nd/3rd duplicate socket
+  // on top of the layout-level one.
+  //
+  // The layout still performs:
+  //   • invalidateQueries(['cases','customers','analytics','voiceCalls'])
+  //     on `case_update` / `call_end`
+  //   • optimistic setQueriesData for last_message + last_sender_type
+  //     on every inbound `message` event
+  // so this page gets instant updates without owning a socket.
 
   const clearAllMutation = useClearAllCases();
 

@@ -15,30 +15,47 @@ import (
 )
 
 const (
-	StreamWS   = "stream:ws"
-	StreamAI   = "stream:ai"
-	StreamDB   = "stream:db"
-	StreamDLQ  = "stream:dlq"
+	StreamWS  = "stream:ws"
+	StreamAI  = "stream:ai"
+	StreamDB  = "stream:db"
+	StreamDLQ = "stream:dlq"
 
 	GroupWS = "ws_group"
 	GroupAI = "ai_group"
 	GroupDB = "db_group"
 
-	// Retention: trim stream to 5000 max items (approximate)
-	StreamMaxLen = 5000
+	// Default retention: trim stream to 5000 max items (approximate)
+	// This can be overridden via config.Streams.MaxLen
+	DefaultStreamMaxLen = 5000
 )
 
+// EventBusService handles publishing and consuming Redis Stream messages.
 type EventBusService struct {
-	client *Client
-	hub    domain.HubBroadcaster
-	logger zerolog.Logger
+	client    *Client
+	hub       domain.HubBroadcaster
+	logger    zerolog.Logger
+	streamMaxLen int64
 }
 
+// NewEventBus creates a new EventBus service with optional configuration.
 func NewEventBus(client *Client) *EventBusService {
+	return NewEventBusWithConfig(client, DefaultStreamMaxLen)
+}
+
+// NewEventBusWithConfig creates a new EventBus service with custom stream max length.
+func NewEventBusWithConfig(client *Client, streamMaxLen int64) *EventBusService {
 	logger := zerolog.New(os.Stderr).With().Timestamp().Logger()
 	logger = logger.With().Str("component", "event_bus").Logger()
 
-	eb := &EventBusService{client: client, logger: logger}
+	if streamMaxLen <= 0 {
+		streamMaxLen = DefaultStreamMaxLen
+	}
+
+	eb := &EventBusService{
+		client:        client,
+		logger:        logger,
+		streamMaxLen:  streamMaxLen,
+	}
 	eb.initGroups(context.Background())
 	return eb
 }
@@ -94,7 +111,7 @@ func (eb *EventBusService) PublishWS(ctx context.Context, sessionID string, even
 
 	args := &redis.XAddArgs{
 		Stream: StreamWS,
-		MaxLen: StreamMaxLen,
+		MaxLen: eb.streamMaxLen,
 		Approx: true,
 		Values: map[string]interface{}{
 			"session_id": sessionID,
@@ -124,7 +141,7 @@ func (eb *EventBusService) PublishAIJob(ctx context.Context, sessionID string, q
 
 	args := &redis.XAddArgs{
 		Stream: StreamAI,
-		MaxLen: StreamMaxLen,
+		MaxLen: eb.streamMaxLen,
 		Approx: true,
 		Values: map[string]interface{}{
 			"session_id":    sessionID,
@@ -153,7 +170,7 @@ func (eb *EventBusService) PublishDBJob(ctx context.Context, msg *domain.Message
 
 	args := &redis.XAddArgs{
 		Stream: StreamDB,
-		MaxLen: StreamMaxLen,
+		MaxLen: eb.streamMaxLen,
 		Approx: true,
 		Values: map[string]interface{}{
 			"session_id": msg.SessionID,
@@ -237,7 +254,7 @@ func (eb *EventBusService) MoveToDLQ(ctx context.Context, originalStream, messag
 
 	args := &redis.XAddArgs{
 		Stream: StreamDLQ,
-		MaxLen: StreamMaxLen,
+		MaxLen: eb.streamMaxLen,
 		Approx: true,
 		Values: dlqValues,
 	}

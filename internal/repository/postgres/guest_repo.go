@@ -73,7 +73,11 @@ func (r *GuestRepo) GetByID(ctx context.Context, guestID uuid.UUID) (*domain.Gue
 
 // List returns all guests with their latest associated chat case (if any).
 func (r *GuestRepo) List(ctx context.Context) ([]*domain.CustomerProfile, error) {
-	rows, err := r.db.Chat.ListGuestsWithLastCase(ctx)
+	rows, err := r.db.Chat.ListGuestsWithLastCase(ctx, chatdb.ListGuestsWithLastCaseParams{
+		Column1: "",
+		Limit:   10000, // Large limit for backward compatibility
+		Offset:  0,
+	})
 	if err != nil {
 		r.logger.Error().Err(err).Msg("ListGuestsWithLastCase failed")
 		return nil, err
@@ -81,20 +85,66 @@ func (r *GuestRepo) List(ctx context.Context) ([]*domain.CustomerProfile, error)
 
 	profiles := make([]*domain.CustomerProfile, 0, len(rows))
 	for _, row := range rows {
-		profiles = append(profiles, &domain.CustomerProfile{
-			ID:            row.ID,
-			GuestID:       row.GuestID,
-			DisplayName:   row.DisplayName,
-			Phone:         row.Phone,
-			LastSessionID: row.LastSessionID,
-			LastMessage:   row.LastMessage,
-			LastStatus:    stringFromInterface(row.LastStatus),
-			CreatedAt:     row.CreatedAt,
-			UpdatedAt:     row.UpdatedAt,
-		})
+		profiles = append(profiles, guestRowToProfile(&row))
 	}
 
 	return profiles, nil
+}
+
+// ListPaged returns paginated guests with optional search.
+// Returns (profiles, totalCount, error).
+func (r *GuestRepo) ListPaged(ctx context.Context, search string, page, limit int) ([]*domain.CustomerProfile, int64, error) {
+	offset := (page - 1) * limit
+
+	// Get total count
+	total, err := r.db.Chat.CountGuests(ctx, search)
+	if err != nil {
+		r.logger.Error().Err(err).Msg("CountGuests failed")
+		return nil, 0, err
+	}
+
+	// Get paginated results
+	rows, err := r.db.Chat.ListGuestsWithLastCase(ctx, chatdb.ListGuestsWithLastCaseParams{
+		Column1: search,
+		Limit:   int32(limit),
+		Offset:  int32(offset),
+	})
+	if err != nil {
+		r.logger.Error().Err(err).Msg("ListGuestsWithLastCase failed")
+		return nil, 0, err
+	}
+
+	profiles := make([]*domain.CustomerProfile, 0, len(rows))
+	for _, row := range rows {
+		profiles = append(profiles, guestRowToProfile(&row))
+	}
+
+	return profiles, total, nil
+}
+
+// Count returns the total count of guests matching the given search.
+func (r *GuestRepo) Count(ctx context.Context, search string) (int64, error) {
+	countRow, err := r.db.Chat.CountGuests(ctx, search)
+	if err != nil {
+		r.logger.Error().Err(err).Msg("CountGuests failed")
+		return 0, err
+	}
+	return countRow, nil
+}
+
+// guestRowToProfile converts a ListGuestsWithLastCaseRow to CustomerProfile domain entity.
+func guestRowToProfile(row *chatdb.ListGuestsWithLastCaseRow) *domain.CustomerProfile {
+	return &domain.CustomerProfile{
+		ID:            row.ID,
+		GuestID:       row.GuestID,
+		DisplayName:   row.DisplayName,
+		Phone:         row.Phone,
+		LastSessionID: row.LastSessionID,
+		LastMessage:   row.LastMessage,
+		LastStatus:    stringFromInterface(row.LastStatus),
+		CreatedAt:     row.CreatedAt,
+		UpdatedAt:     row.UpdatedAt,
+	}
 }
 
 // Update updates a guest's display name and phone and synchronizes any active

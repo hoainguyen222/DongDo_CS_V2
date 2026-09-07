@@ -409,3 +409,52 @@ type SystemErrorRecord struct {
 	SuggestedFix string    `json:"suggested_fix"`
 	CreatedAt    time.Time `json:"created_at"`
 }
+
+// ============================================================
+// Chat Tag entities
+// ============================================================
+
+// ChatTag represents a reusable label applied to chat cases.
+type ChatTag struct {
+	ID          int64     `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Color       string    `json:"color"`
+	CreatedBy   string    `json:"created_by"`
+	IsActive    bool      `json:"is_active"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// CaseTag is the join between a chat session (case) and a ChatTag,
+// denormalized with the tag's name/color for read-side display.
+type CaseTag struct {
+	ID         int64     `json:"id"`
+	SessionID  string    `json:"session_id"`
+	TagID      int64     `json:"tag_id"`
+	AssignedBy string    `json:"assigned_by"`
+	CreatedAt  time.Time `json:"created_at"`
+	TagName    string    `json:"tag_name"`
+	TagColor   string    `json:"tag_color"`
+}
+
+// AlertConfig controls the SLA / timeout alert broadcast on the admin inbox.
+// Single-row table keyed by id=1.
+type AlertConfig struct {
+	ID             int64     `json:"id"`
+	IsEnabled      bool      `json:"is_enabled"`
+	TimeoutSeconds int       `json:"timeout_seconds"`
+	AlertContent   string    `json:"alert_content"`
+	UpdatedBy      string    `json:"updated_by"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+// AlertEvent records a single triggered alert for a case awaiting CS attention.
+type AlertEvent struct {
+	ID             int64      `json:"id"`
+	SessionID      string     `json:"session_id"`
+	TimeoutSeconds int        `json:"timeout_seconds"`
+	TriggeredAt    time.Time  `json:"triggered_at"`
+	ResolvedAt     *time.Time `json:"resolved_at,omitempty"`
+	IsResolved     bool       `json:"is_resolved"`
+}

@@ -75,7 +75,6 @@ export default function CaseDetailPage() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WSClient | null>(null);
-  const inboxWsRef = useRef<WSClient | null>(null);
 
   // ── listPanel: fetch cases for the side list
   const { data: casesData, isLoading: isLoadingCases } = useCases(
@@ -170,23 +169,10 @@ export default function CaseDetailPage() {
     };
   }, [sessionId, user?.username, user?.role, queryClient, router]);
 
-  // ── WebSocket for admin_inbox (listPanel realtime)
-  useEffect(() => {
-    if (!user) return;
-    const ws = new WSClient('admin_inbox', user.username, user.role);
-    inboxWsRef.current = ws;
-    ws.connect();
-
-    const unsubscribe = ws.on('case_update', () => {
-      queryClient.invalidateQueries({ queryKey: ['cases'] });
-    });
-
-    return () => {
-      unsubscribe();
-      ws.disconnect();
-      inboxWsRef.current = null;
-    };
-  }, [user?.username, user?.role, queryClient]);
+  // NOTE: The `admin_inbox` WebSocket is owned by AdminLayout (it broadcasts
+  // `case_update` to every ['cases'] cache). Previously this page opened a
+  // second `WSClient('admin_inbox', …)` here just to invalidate ['cases'],
+  // which produced a 3rd duplicate socket for admin users. Removed.
 
   // ── Initial case fetch via REST (one-time)
   useEffect(() => {

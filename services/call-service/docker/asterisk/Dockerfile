@@ -3,7 +3,6 @@ FROM alpine:3.19
 RUN apk add --no-cache \
     asterisk \
     asterisk-sample-config \
-    asterisk-sound-en \
     openssl \
     ca-certificates
 

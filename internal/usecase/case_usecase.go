@@ -53,6 +53,17 @@ func (uc *CaseUseCase) ListCustomers(ctx context.Context) ([]*domain.CustomerPro
 	return customers, nil
 }
 
+// ListCustomersPaged returns paginated customers with optional search.
+// Returns (customers, total, error).
+func (uc *CaseUseCase) ListCustomersPaged(ctx context.Context, search string, page, limit int) ([]*domain.CustomerProfile, int64, error) {
+	customers, total, err := uc.guestRepo.ListPaged(ctx, search, page, limit)
+	if err != nil {
+		uc.logger.Error().Err(err).Msg("failed to list customers paged")
+		return nil, 0, err
+	}
+	return customers, total, nil
+}
+
 func (uc *CaseUseCase) UpdateCustomer(ctx context.Context, guestIDStr, displayName, phone string) error {
 	gID, err := uuid.Parse(guestIDStr)
 	if err != nil {
@@ -149,6 +160,18 @@ func (uc *CaseUseCase) ListCases(ctx context.Context, status domain.CaseStatus) 
 		return nil, err
 	}
 	return cases, nil
+}
+
+// ListCasesPaged returns paginated cases with optional status filter and search.
+// Returns (cases, total, error).
+func (uc *CaseUseCase) ListCasesPaged(ctx context.Context, status domain.CaseStatus, search string, page, limit int) ([]*domain.ChatCase, int64, error) {
+	cases, total, err := uc.caseRepo.ListPaged(ctx, status, search, page, limit)
+	if err != nil {
+		uc.logger.Error().Err(err).Str("status_filter", string(status)).
+			Msg("failed to list cases paged")
+		return nil, 0, err
+	}
+	return cases, total, nil
 }
 
 func (uc *CaseUseCase) GetCase(ctx context.Context, sessionID string) (*domain.ChatCase, error) {

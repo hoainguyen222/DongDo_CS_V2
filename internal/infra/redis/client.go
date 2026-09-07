@@ -6,17 +6,33 @@ import (
 	"os"
 	"time"
 
+	"github.com/hoainguyen222/DongDo_CS_V2/internal/config"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 )
 
+// Client wraps the go-redis client with logging and configuration.
 type Client struct {
 	rdb    *redis.Client
 	logger zerolog.Logger
 }
 
 // NewClient initializes a connection to Redis (supports standard URL and TLS for Upstash).
+// Uses default connection pool settings.
 func NewClient(redisURL string) (*Client, error) {
+	return NewClientWithConfig(redisURL, config.RedisPoolConfig{
+		PoolSize:        20,
+		MinIdleConns:    5,
+		DialTimeout:     5 * time.Second,
+		ReadTimeout:     3 * time.Second,
+		WriteTimeout:    3 * time.Second,
+		PoolTimeout:     5 * time.Second,
+		ConnMaxLifetime: time.Hour,
+	})
+}
+
+// NewClientWithConfig initializes a Redis client with custom connection pool configuration.
+func NewClientWithConfig(redisURL string, poolCfg config.RedisPoolConfig) (*Client, error) {
 	logger := zerolog.New(os.Stderr).With().Timestamp().Logger()
 	logger = logger.With().Str("component", "redis_client").Logger()
 
@@ -31,15 +47,32 @@ func NewClient(redisURL string) (*Client, error) {
 		return nil, fmt.Errorf("invalid REDIS_URL: %w", err)
 	}
 
-	opt.PoolSize = 20
-	opt.MinIdleConns = 5
-	opt.DialTimeout = 5 * time.Second
-	opt.ReadTimeout = 3 * time.Second
-	opt.WriteTimeout = 3 * time.Second
+	// Apply connection pool configuration from config
+	if poolCfg.PoolSize > 0 {
+		opt.PoolSize = poolCfg.PoolSize
+	}
+	if poolCfg.MinIdleConns > 0 {
+		opt.MinIdleConns = poolCfg.MinIdleConns
+	}
+	if poolCfg.DialTimeout > 0 {
+		opt.DialTimeout = poolCfg.DialTimeout
+	}
+	if poolCfg.ReadTimeout > 0 {
+		opt.ReadTimeout = poolCfg.ReadTimeout
+	}
+	if poolCfg.WriteTimeout > 0 {
+		opt.WriteTimeout = poolCfg.WriteTimeout
+	}
+	if poolCfg.PoolTimeout > 0 {
+		opt.PoolTimeout = poolCfg.PoolTimeout
+	}
+	if poolCfg.ConnMaxLifetime > 0 {
+		opt.ConnMaxLifetime = poolCfg.ConnMaxLifetime
+	}
 
 	rdb := redis.NewClient(opt)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), poolCfg.DialTimeout)
 	defer cancel()
 
 	if err := rdb.Ping(ctx).Err(); err != nil {
@@ -47,7 +80,11 @@ func NewClient(redisURL string) (*Client, error) {
 		return nil, fmt.Errorf("failed to ping Redis at %s: %w", opt.Addr, err)
 	}
 
-	logger.Info().Str("addr", opt.Addr).Msg("Redis connected")
+	logger.Info().
+		Str("addr", opt.Addr).
+		Int("pool_size", opt.PoolSize).
+		Int("min_idle", opt.MinIdleConns).
+		Msg("Redis connected")
 
 	return &Client{rdb: rdb, logger: logger}, nil
 }

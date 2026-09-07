@@ -85,3 +85,34 @@ SELECT
 FROM chat_cases c
 LEFT JOIN guests g ON c.guest_id = g.guest_id
 WHERE c.session_id = $1;
+
+-- name: ListCasesPaged :many
+SELECT id, session_id, guest_id, customer_name, customer_phone,
+       status, assigned_cs, last_message, resolution_note, created_at, updated_at
+FROM chat_cases
+WHERE (
+    ($1::text IS NULL OR $1 = '' OR status::text = $1::text)
+    AND (
+        $2::text IS NULL
+        OR LOWER(customer_name) LIKE '%' || LOWER($2::text) || '%'
+        OR LOWER(customer_phone) LIKE '%' || LOWER($2::text) || '%'
+        OR LOWER(session_id) LIKE '%' || LOWER($2::text) || '%'
+        OR LOWER(last_message) LIKE '%' || LOWER($2::text) || '%'
+    )
+)
+ORDER BY created_at DESC, id DESC
+LIMIT $3 OFFSET $4;
+
+-- name: CountCases :one
+SELECT COUNT(*)
+FROM chat_cases
+WHERE (
+    ($1::text IS NULL OR $1 = '' OR status::text = $1::text)
+    AND (
+        $2::text IS NULL
+        OR LOWER(customer_name) LIKE '%' || LOWER($2::text) || '%'
+        OR LOWER(customer_phone) LIKE '%' || LOWER($2::text) || '%'
+        OR LOWER(session_id) LIKE '%' || LOWER($2::text) || '%'
+        OR LOWER(last_message) LIKE '%' || LOWER($2::text) || '%'
+    )
+);

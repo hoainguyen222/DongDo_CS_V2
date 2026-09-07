@@ -11,12 +11,23 @@ RETURNING id, session_id, question, answer, status, created_by, approved_by, cre
 SELECT id, session_id, question, answer, status, created_by, approved_by, created_at, approved_at
 FROM learning_queue
 WHERE status = $1::learn_status
-ORDER BY id DESC;
+ORDER BY created_at DESC, id DESC
+LIMIT $2 OFFSET $3;
 
 -- name: ListAllLearning :many
 SELECT id, session_id, question, answer, status, created_by, approved_by, created_at, approved_at
 FROM learning_queue
-ORDER BY id DESC;
+ORDER BY created_at DESC, id DESC
+LIMIT $1 OFFSET $2;
+
+-- name: CountLearningByStatus :one
+SELECT COUNT(*)
+FROM learning_queue
+WHERE status = $1::learn_status;
+
+-- name: CountAllLearning :one
+SELECT COUNT(*)
+FROM learning_queue;
 
 -- name: GetLearningItem :one
 SELECT id, session_id, question, answer, status, created_by, approved_by, created_at, approved_at

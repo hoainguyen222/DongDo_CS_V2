@@ -68,9 +68,9 @@ export async function hangupCall(callID: string, durationSeconds: number = 0): P
 export async function fetchCallHistory(limit: number = 100): Promise<{ calls: CallV2[]; total: number }> {
   const res = await fetch(`${CALL_SERVICE_BASE}/api/v1/calls?limit=${limit}`);
   if (!res.ok) {
-    // Fallback to legacy endpoint if standalone service is offline
-    const legacy = await fetch('/api/voice/calls');
-    if (legacy.ok) return legacy.json();
+    // Legacy endpoint on the main backend was removed — the admin API
+    // (/api/admin/voice/calls) is the only call-history source now.
+    // Throw so callers can fall back to the admin endpoint.
     throw new Error(`Fetch history failed: ${res.statusText}`);
   }
   return res.json();

@@ -19,6 +19,14 @@ chat_history.db-wal
 .env.test.local
 .env.production.local
 
+# Test Reports & Logs
+tests/automation/reports/*.json
+tests/automation/*.log
+tests/automation/logs/
+*.test.log
+test-results/
+coverage/
+
 # Voice Recordings & Uploads
 /recordings/
 *.webm

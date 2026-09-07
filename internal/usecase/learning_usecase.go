@@ -57,6 +57,17 @@ func (uc *LearningUseCase) ListPending(ctx context.Context) ([]*domain.LearningI
 	return items, nil
 }
 
+// ListPendingPaged returns paginated pending learning items.
+// Returns (items, total, error).
+func (uc *LearningUseCase) ListPendingPaged(ctx context.Context, page, limit int) ([]*domain.LearningItem, int64, error) {
+	items, total, err := uc.learningRepo.ListPaged(ctx, domain.LearnPending, page, limit)
+	if err != nil {
+		uc.logger.Error().Err(err).Msg("failed to list pending learning items paged")
+		return nil, 0, err
+	}
+	return items, total, nil
+}
+
 func (uc *LearningUseCase) Approve(ctx context.Context, itemID int64, approverName string) error {
 	item, err := uc.learningRepo.Get(ctx, itemID)
 	if err != nil {
