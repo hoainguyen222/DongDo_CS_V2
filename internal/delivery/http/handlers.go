@@ -51,12 +51,12 @@ type Handler struct {
 	authUC      *usecase.AuthUseCase
 	chatUC      *usecase.ChatUseCase
 	caseUC      *usecase.CaseUseCase
+	tagUC       *usecase.ChatTagUseCase
 	learningUC  *usecase.LearningUseCase
 	voiceUC     *usecase.VoiceUseCase
 	analyticsUC *usecase.AnalyticsUseCase
 	partnerUC   *usecase.PartnerUseCase
 	ragUC       *usecase.RAGUseCase
-	tagUC       *usecase.ChatTagUseCase
 	vectorStore domain.VectorStore
 	embedder    domain.Embedder
 	docsDir     string
@@ -79,16 +79,18 @@ func NewHandler(
 	docsDir string,
 	eventBus domain.EventBus,
 ) *Handler {
+	var tUC *usecase.ChatTagUseCase
+
 	return &Handler{
 		authUC:      authUC,
 		chatUC:      chatUC,
 		caseUC:      caseUC,
+		tagUC:       tUC,
 		learningUC:  learningUC,
 		voiceUC:     voiceUC,
 		analyticsUC: analyticsUC,
 		partnerUC:   partnerUC,
 		ragUC:       ragUC,
-		tagUC:       tagUC,
 		vectorStore: vectorStore,
 		embedder:    embedder,
 		docsDir:     docsDir,
@@ -411,12 +413,36 @@ func (h *Handler) HandleListCases(c *gin.Context) {
 		totalPages = 1
 	}
 
+	var aiActiveCount, needsHumanCount, humanActiveCount, resolvedCount int64
+	allUnfilteredCases, countErr := h.caseUC.ListCases(c.Request.Context(), "")
+	if countErr == nil {
+		for _, cs := range allUnfilteredCases {
+			switch cs.Status {
+			case domain.StatusAIActive:
+				aiActiveCount++
+			case domain.StatusNeedsHumanCS:
+				needsHumanCount++
+			case domain.StatusHumanCSActive:
+				humanActiveCount++
+			case domain.StatusResolved:
+				resolvedCount++
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"cases":       pagedCases,
 		"total":       total,
 		"page":        page,
 		"limit":       limit,
 		"total_pages": totalPages,
+		"status_counts": gin.H{
+			"ai_active":    aiActiveCount,
+			"needs_human":  needsHumanCount,
+			"human_active": humanActiveCount,
+			"resolved":     resolvedCount,
+			"total":        int64(len(allUnfilteredCases)),
+		},
 	})
 }
 
@@ -451,6 +477,17 @@ func (h *Handler) HandleReplyCase(c *gin.Context) {
 		return
 	}
 
+	// Single active handler enforcement for Staff role
+	if user.Role == domain.RoleCSKH {
+		existingCase, err := h.caseUC.GetCase(c.Request.Context(), sessionID)
+		if err == nil && existingCase != nil && existingCase.ActiveAssignedCS != "" {
+			if existingCase.ActiveAssignedCS != user.Username && existingCase.ActiveAssignedCS != user.FullName {
+				c.JSON(http.StatusForbidden, gin.H{"detail": fmt.Sprintf("Đoạn chat này hiện đang do %s xử lý.", existingCase.ActiveAssignedCS)})
+				return
+			}
+		}
+	}
+
 	_, err := h.chatUC.SendCSReply(c.Request.Context(), sessionID, user.Username, user.FullName, req.Message)
 	if err != nil {
 		Logger.Error().Str("session_id", sessionID).Err(err).Msg("Failed to send CS reply")
@@ -470,6 +507,27 @@ func (h *Handler) HandleResolveCase(c *gin.Context) {
 	sessionID := c.Param("session_id")
 	user := c.MustGet("user").(*domain.SessionUser)
 
+	// Close Case permission enforcement for Staff role
+	if user.Role == domain.RoleCSKH {
+		existingCase, err := h.caseUC.GetCase(c.Request.Context(), sessionID)
+		if err == nil && existingCase != nil {
+			isAssigned := false
+			if existingCase.ActiveAssignedCS == user.Username || existingCase.AssignedCS == user.Username || existingCase.AssignedCS == user.FullName {
+				isAssigned = true
+			}
+			for _, hUser := range existingCase.AssignedCSHistory {
+				if hUser == user.Username || hUser == user.FullName {
+					isAssigned = true
+					break
+				}
+			}
+			if !isAssigned {
+				c.JSON(http.StatusForbidden, gin.H{"detail": "Chỉ tài khoản tiếp nhận hội thoại mới được quyền đóng case này."})
+				return
+			}
+		}
+	}
+
 	var req ResolveRequest
 	_ = c.ShouldBindJSON(&req)
 
@@ -488,6 +546,69 @@ func (h *Handler) HandleResolveCase(c *gin.Context) {
 		"learned_count": count,
 		"message":       fmt.Sprintf("Đã đóng case thành công (%d mẩu tri thức xử lý).", count),
 	})
+}
+
+type HelperSubmitRequest struct {
+	HelpContent string `json:"help_content" binding:"required"`
+}
+
+func (h *Handler) HandleSubmitCaseHelper(c *gin.Context) {
+	sessionID := c.Param("session_id")
+	user := c.MustGet("user").(*domain.SessionUser)
+
+	var req HelperSubmitRequest
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.HelpContent) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "Vui lòng nhập nội dung cần hỗ trợ chi tiết"})
+		return
+	}
+
+	err := h.caseUC.SubmitCaseHelper(c.Request.Context(), sessionID, strings.TrimSpace(req.HelpContent), user.Username)
+	if err != nil {
+		Logger.Error().Str("session_id", sessionID).Err(err).Msg("Failed to submit helper request")
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Đã gửi yêu cầu hỗ trợ thành công"})
+}
+
+func (h *Handler) HandleListHelperCases(c *gin.Context) {
+	cases, err := h.caseUC.ListHelperCases(c.Request.Context())
+	if err != nil {
+		Logger.Error().Err(err).Msg("Failed to list helper cases")
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"cases": cases,
+		"total": len(cases),
+	})
+}
+
+type ProcessHelperRequest struct {
+	Action         string `json:"action" binding:"required"` // 'take_over' | 'transfer'
+	TargetUsername string `json:"target_username"`
+}
+
+func (h *Handler) HandleProcessHelperCase(c *gin.Context) {
+	sessionID := c.Param("session_id")
+	user := c.MustGet("user").(*domain.SessionUser)
+
+	var req ProcessHelperRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "Dữ liệu thao tác không hợp lệ"})
+		return
+	}
+
+	err := h.caseUC.ProcessHelperCase(c.Request.Context(), sessionID, req.Action, req.TargetUsername, user.Username)
+	if err != nil {
+		Logger.Error().Str("session_id", sessionID).Err(err).Msg("Failed to process helper case")
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Đã xử lý yêu cầu hỗ trợ thành công"})
 }
 
 func (h *Handler) HandleDeleteCase(c *gin.Context) {

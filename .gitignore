@@ -66,3 +66,4 @@ block.prof
 /prometheus_data/
 /grafana_data/
 /alertmanager_data/
+/tests/automation/reports

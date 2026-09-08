@@ -37,8 +37,7 @@ export default function AdminLayout({
   const [showVoiceHistoryModal, setShowVoiceHistoryModal] = useState(false);
   const [toastError, setToastError] = useState<{ title: string; source: string; details: string } | null>(null);
 
-  // Call WebRTC hook unconditionally at top level to satisfy React Rules of Hooks
-  const { pendingCalls, handleAnswerCall } = useAdminWebRTC(wsRef, '', () => {
+  const webRtc = useAdminWebRTC(wsRef, '', () => {
     queryClient.invalidateQueries({ queryKey: ['voiceCalls'] });
   });
 
@@ -175,9 +174,10 @@ export default function AdminLayout({
         customersCount={0}
         voiceCallsCount={voiceCalls.length}
         pendingLearningCount={pendingLearning.length}
-        pendingCalls={pendingCalls}
-        onAcceptPendingCall={handleAnswerCall}
+        pendingCalls={webRtc.pendingCalls}
+        onAcceptPendingCall={webRtc.handleAnswerCall}
         onLogout={handleLogout}
+        webRtc={webRtc}
       />
 
       <main className={styles.main}>

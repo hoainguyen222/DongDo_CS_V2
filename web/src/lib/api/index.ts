@@ -73,6 +73,9 @@ export const api = {
   deleteCase: casesApi.delete,
   updateCustomerInfo: casesApi.updateCustomerInfo,
   clearAllCases: casesApi.clearAll,
+  submitCaseHelper: casesApi.submitHelper,
+  getHelperCases: casesApi.getHelperCases,
+  processHelperCase: casesApi.processHelper,
 
   // Customers
   getCustomers: (
