@@ -1,0 +1,19 @@
+# Grafana datasources provisioning.
+#
+# This file is mounted at /etc/grafana/provisioning/datasources/datasource.yml
+# inside the Grafana container. Grafana auto-loads it on boot — no manual
+# setup required.
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: 15s
+      httpMethod: POST
+      manageAlerts: true

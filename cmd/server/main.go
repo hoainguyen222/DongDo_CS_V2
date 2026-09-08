@@ -16,11 +16,13 @@ import (
 	infraEmbedding "github.com/hoainguyen222/DongDo_CS_V2/internal/infra/embedding"
 	infraQdrant "github.com/hoainguyen222/DongDo_CS_V2/internal/infra/qdrant"
 	infraRedis "github.com/hoainguyen222/DongDo_CS_V2/internal/infra/redis"
+	"github.com/hoainguyen222/DongDo_CS_V2/internal/observability"
 	repoPostgres "github.com/hoainguyen222/DongDo_CS_V2/internal/repository/postgres"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/usecase"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/worker"
 	"github.com/hoainguyen222/DongDo_CS_V2/pkg/graceful"
 
+	redisGo "github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -261,7 +263,60 @@ func main() {
 			Msg("Redis not available; background workers not started")
 	}
 
-	// 9. Initialize HTTP Router
+	// 9. Initialize observability (Prometheus + pprof + business poller)
+	httpMetrics := observability.NewHTTPMetrics()
+	wsMetrics := observability.NewWSMetrics()
+	businessMetrics := observability.NewBusinessMetrics()
+
+	var metricsServer *observability.MetricsServer
+	var pprofServer *observability.PprofServer
+	if cfg.Observability.MetricsEnabled {
+		metricsServer = observability.NewMetricsServer(cfg.Observability.MetricsAddr)
+		sm.Register("Prometheus Metrics Server", func(ctx context.Context) error {
+			// Use a fresh context bounded by the parent's lifetime for
+			// shutdown. MetricsServer.Start already handles ctx.Done, so we
+			// just cancel a dedicated ctx here.
+			return nil
+		})
+		go func() {
+			if err := metricsServer.Start(ctx); err != nil {
+				logger.Warn().Err(err).Msg("Metrics server exited with error")
+			}
+		}()
+		logger.Info().
+			Str("address", cfg.Observability.MetricsAddr).
+			Msg("Prometheus /metrics endpoint listening")
+	}
+
+	if cfg.Observability.PprofEnabled {
+		pprofServer = observability.NewPprofServer(cfg.Observability.PprofAddr)
+		go func() {
+			if err := pprofServer.Start(ctx); err != nil {
+				logger.Warn().Err(err).Msg("pprof server exited with error")
+			}
+		}()
+		logger.Info().
+			Str("address", cfg.Observability.PprofAddr).
+			Msg("pprof debug server listening")
+	}
+
+	if cfg.Observability.BusinessEnabled {
+		var rdb = redisClientForMetrics(redisClient)
+		hubRef := hub
+		go businessMetrics.StartBusinessPoller(
+			ctx,
+			cfg.Observability.BusinessPollInterval,
+			pgDB.Pool,
+			rdb,
+			func() int { return hubRef.OnlineStaffCount() },
+			nil,
+		)
+		logger.Info().
+			Dur("interval", cfg.Observability.BusinessPollInterval).
+			Msg("Business metrics poller started")
+	}
+
+	// 10. Initialize HTTP Router
 	handler := deliveryHTTP.NewHandler(
 		authUC,
 		chatUC,
@@ -278,7 +333,7 @@ func main() {
 		eventBus,
 	)
 
-	router := deliveryHTTP.SetupRouter(handler, hub, chatUC, voiceUC, stateMgr, eventBus, authUC)
+	router := deliveryHTTP.SetupRouter(handler, hub, chatUC, voiceUC, stateMgr, eventBus, authUC, httpMetrics, wsMetrics)
 
 	// 10. Start HTTP Server with configured timeouts
 	srv := &http.Server{
@@ -312,4 +367,14 @@ func main() {
 
 	logger.Info().
 		Msg("Server shutdown complete")
+}
+
+// redisClientForMetrics exposes the underlying *redis.Client from the
+// infraRedis.Client wrapper. Returns nil if Redis was not configured (NoOp
+// mode), so the business poller can still run with DB-only gauges.
+func redisClientForMetrics(c *infraRedis.Client) *redisGo.Client {
+	if c == nil {
+		return nil
+	}
+	return c.RDB()
 }

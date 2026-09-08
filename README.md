@@ -20,6 +20,7 @@ Hệ thống Chăm Sóc Khách Hàng Thông Minh & Quản Trị Tri Thức Đôn
 | **LLM Engine** | Claude Haiku 4.5 / Sonnet / Opus | RAG Pipeline tiếng Việt, Zero hallucination |
 | **Voice Calling** | WebRTC (P2P Audio) | Gọi điện thoại 2 chiều qua trình duyệt, STUN server, ghi âm |
 | **Database** | PostgreSQL 16 | Source of Truth, Batch Upsert (pgx.Batch), Idempotent |
+| **Observability** | Prometheus + Grafana + pprof | `/metrics`, `/debug/pprof`, 5 dashboards, alert rules — see `monitoring/README.md` |
 
 ---
 
@@ -72,6 +73,12 @@ DongDo_CS_V2/
 ├── web/                     # Next.js Frontend
 ├── docker-compose.yml
 ├── Dockerfile
+├── monitoring/              # 📊 Observability stack (Prometheus, Grafana, exporters)
+│   ├── docker-compose.monitoring.yml
+│   ├── prometheus/          # scrape config + alert rules
+│   ├── alertmanager/
+│   ├── grafana/             # provisioning + dashboards
+│   └── README.md            # operational runbook
 └── README.md
 ```
 
@@ -322,6 +329,69 @@ Sau mỗi batch test sẽ hiển thị:
 | `admin` | `DongDo@2026` | Quản trị viên hệ thống |
 | `cskh01` - `cskh05` | `DongDo@123` | Chuyên viên CSKH |
 | **Khách hàng** | *Không cần mật khẩu* | Chỉ cần nhập Tên + SĐT (tùy chọn) |
+
+---
+
+## 📊 Observability / Monitoring
+
+The system ships with a production-ready observability stack: Prometheus,
+Grafana, pprof and exporters for PostgreSQL, Redis and the host. It lives
+in `monitoring/` and is enabled via a separate Docker Compose profile so
+it stays opt-in.
+
+### Chạy nhanh
+
+```bash
+# 1. Chạy app stack (Postgres, Redis, Qdrant, Server).
+make up
+
+# 2. Chạy monitoring stack (Prometheus, Grafana, exporters).
+make monitoring-up
+
+# 3. Mở các UI (chờ ~15s để Prometheus scrape xong):
+#    Grafana       → http://localhost:3050  (admin / admin — đổi ngay!)
+#    Prometheus    → http://localhost:9090
+#    Alertmanager  → http://localhost:9093
+```
+
+### Các lệnh Makefile thường dùng
+
+```bash
+make up                  # Start app stack
+make monitoring-up       # Start monitoring stack (phải chạy sau `make up`)
+make monitoring-down     # Stop monitoring stack
+make monitoring-logs     # Tail logs của monitoring
+make monitoring-status   # Xem containers nào đang chạy
+make metrics             # Hit /metrics của Go server
+make health              # Probe /health endpoint
+make pprof-cpu           # Capture 30s CPU profile (interactive)
+make pprof-heap          # Heap snapshot
+make pprof-goroutine     # Goroutine dump
+make down                # Stop app stack
+```
+
+### Endpoints quan trọng
+
+| Service          | URL                                    | Bảo mật               |
+|------------------|----------------------------------------|-----------------------|
+| App API          | `http://localhost:8080`                | Public                |
+| App `/metrics`   | `http://localhost:9090/metrics`        | Loopback only         |
+| App `/debug/pprof` | `http://localhost:6060/debug/pprof/` | Loopback only         |
+| Grafana          | `http://localhost:3050`                | admin / admin (đổi!); **3050** để không trùng với `npm run dev` |
+| Prometheus       | `http://localhost:9090`                | Expose nội bộ        |
+| Alertmanager     | `http://localhost:9093`                | Expose nội bộ        |
+
+> ⚠️ **`/metrics` và `/debug/pprof` mặc định bind `127.0.0.1`** — an toàn cho production. Muốn truy cập từ xa, dùng `ssh -L 9090:127.0.0.1:9090 user@host` rồi mở `http://localhost:9090`.
+
+Five pre-built dashboards (auto-load vào Grafana):
+
+- **Infrastructure** — host CPU / memory / disk / network / load
+- **Golang API** — request rate, error rate, P50/P95/P99, goroutines, heap, GC
+- **Chat / WebSocket** — active connections, messages/sec, agent states, waiting customers
+- **Database** — connections, slow queries (`pg_stat_statements`), locks
+- **Redis** — memory, commands, streams, pool stats
+
+Full operational runbook — debug CPU, memory leak, slow SQL, WS lag, alerts — xem **[`monitoring/README.md`](monitoring/README.md)**.
 
 ---
 

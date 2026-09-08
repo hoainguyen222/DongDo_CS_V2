@@ -1,0 +1,74 @@
+# Prometheus configuration for the DongDo CS observability stack.
+#
+# Scrape jobs:
+#   - prometheus      : self-monitoring
+#   - node            : EC2 host metrics (CPU, memory, disk, network)
+#   - server          : CSKH Go server's /metrics endpoint
+#   - postgres        : PostgreSQL exporter (queries, connections, locks)
+#   - redis           : Redis exporter (memory, clients, commands)
+#
+# SECURITY: All exporters bind to the private monitoring network. Prometheus
+# is the only service that needs to reach both the app network and the
+# monitoring network. Grafana and Alertmanager are isolated.
+
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: dongdo-cs
+    env: production
+
+rule_files:
+  - /etc/prometheus/alert.rules.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - localhost:9090
+
+  - job_name: node
+    static_configs:
+      - targets:
+          - node-exporter:9100
+        labels:
+          component: host
+
+  - job_name: server
+    metrics_path: /metrics
+    static_configs:
+      # The Go server binds METRICS_ADDR (default 127.0.0.1:9090) on the host.
+      # Prometheus reaches it via `host.docker.internal` — works out of the
+      # box on macOS/Windows Docker Desktop. On Linux Docker, the default
+      # gateway's IP is used instead (see `extra_hosts` below).
+      # If the server has been moved to a container (not the case here), point
+      # this at the service name `server:<port>` directly.
+      - targets:
+          - host.docker.internal:9090
+        labels:
+          component: cskh-server
+          service: dongdo-cs-server
+    # Skip if server is not running yet (e.g. monitoring started first).
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+  - job_name: postgres
+    static_configs:
+      - targets:
+          - postgres-exporter:9187
+        labels:
+          component: postgres
+
+  - job_name: redis
+    static_configs:
+      - targets:
+          - redis-exporter:9121
+        labels:
+          component: redis

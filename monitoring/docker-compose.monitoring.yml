@@ -1,0 +1,219 @@
+# Observability / Monitoring stack for DongDo CS.
+#
+# This file is meant to be used together with the main docker-compose.yml:
+#
+#   docker compose \
+#     -f docker-compose.yml \
+#     -f monitoring/docker-compose.monitoring.yml \
+#     --profile monitoring up -d
+#
+# Every service here is gated by `profiles: ["monitoring"]` so a vanilla
+# `docker compose up -d` does NOT start Prometheus / Grafana / exporters.
+#
+# Network design:
+#   - All exporters + Prometheus + Grafana + Alertmanager live on the private
+#     `dongdo-monitoring` network so they cannot reach the public internet.
+#   - Exporters that need to talk to `postgres` / `redis` join a second
+#     network: `dongdo_app`. When you `make up` the app stack first, that
+#     network already exists (Compose creates it as `dongdo_cs_v2_default`
+#     for the main project). The monitoring compose declares it as
+#     `external: true` so Compose reuses it instead of failing — IF it
+#     exists. If it does not exist (e.g. you run `make monitoring-up`
+#     without first running `make up`), the Makefile creates a fallback
+#     `dongdo_app` bridge network and Postgres / Redis exporters fall back
+#     to that.
+#   - The Go server's /metrics lives on the HOST loopback (127.0.0.1:9090).
+#     Prometheus reaches it via `host.docker.internal` — Docker Desktop
+#     (macOS / Windows) maps this automatically; Linux Docker Engine resolves
+#     it via `extra_hosts` to the default gateway IP.
+#
+# SECURITY:
+#   - No exporter's port is published to the host. Reach Prometheus and
+#     Grafana only through SSH tunneling or a private VPN.
+#   - The CSKH Go server's /metrics and /debug/pprof stay bound to
+#     127.0.0.1 inside its container; Prometheus reaches them via
+#     `host.docker.internal` (macOS / Windows Docker Desktop) or via the
+#     network gateway IP (Linux).
+#
+# Grafana admin credentials default to admin / admin (configurable via
+# env). CHANGE THEM BEFORE EXPOSING GRAFANA ANYWHERE.
+
+services:
+  # ---------------------------------------------------------------------------
+  # 1. Node Exporter — host metrics (CPU, memory, disk, network, load)
+  # ---------------------------------------------------------------------------
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: dongdo_node_exporter
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    networks:
+      - dongdo-monitoring
+    # /proc, /sys, / are mounted read-only so node_exporter can read host
+    # metrics without privileged mode. On production EC2 this works as-is.
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--path.rootfs=/rootfs"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|var/lib/docker/.+)($$|/)"
+    # No ports: only Prometheus inside the monitoring network can reach it.
+
+  # ---------------------------------------------------------------------------
+  # 2. Prometheus — scrapes every exporter and the Go server's /metrics
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: dongdo_prometheus
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    networks:
+      dongdo-monitoring:
+        aliases:
+          - prometheus
+    # Port 9090 is the Prometheus UI + scrape API. Same TCP port number as
+    # the Go server's /metrics, but they live on different addresses (the
+    # host's loopback vs the container's published port). No collision.
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alert.rules.yml:/etc/prometheus/alert.rules.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--storage.tsdb.retention.size=10GB"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+      - "--web.enable-lifecycle"
+    # Extra hosts lets Prometheus reach the host's loopback where the CSKH
+    # Go server binds its /metrics and /debug/pprof endpoints. Required
+    # because the server binds METRICS_ADDR=127.0.0.1:9090.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # ---------------------------------------------------------------------------
+  # 3. Alertmanager — receives alerts from Prometheus
+  # ---------------------------------------------------------------------------
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: dongdo_alertmanager
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    networks:
+      - dongdo-monitoring
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+
+  # ---------------------------------------------------------------------------
+  # 4. Postgres Exporter — query-level observability (pg_stat_statements)
+  # ---------------------------------------------------------------------------
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: dongdo_postgres_exporter
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    networks:
+      dongdo-monitoring:
+        aliases:
+          - postgres-exporter
+      dongdo_cs_v2_default:
+        aliases:
+          - postgres-exporter
+    environment:
+      # Same DSN the server uses, but pointing at the postgres hostname on
+      # the app network. Replace the password in production via .env.
+      DATA_SOURCE_NAME: "postgresql://postgres:postgrespassword@postgres:5432/dongdo_cs?sslmode=disable"
+      # Auto-discover pg_stat_statements. If the extension was not created
+      # (e.g. on managed Postgres), the exporter still ships connection /
+      # replication / lock metrics.
+      PG_EXPORTER_AUTO_DISCOVER_DATABASE_OBJECTS: "true"
+      PG_EXPORTER_EXTEND_QUERY_PATH: "/etc/postgres_exporter/queries.yaml"
+      PG_EXPORTER_DISABLE_SCRAM: "false"
+
+  # ---------------------------------------------------------------------------
+  # 5. Redis Exporter — memory, commands, keyspace, stream metrics
+  # ---------------------------------------------------------------------------
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.62.0
+    container_name: dongdo_redis_exporter
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    networks:
+      dongdo-monitoring:
+        aliases:
+          - redis-exporter
+      dongdo_cs_v2_default:
+        aliases:
+          - redis-exporter
+    environment:
+      REDIS_ADDR: "redis://redis:6379"
+      # Expose stream metrics (XLEN, XPENDING, consumer count, lag).
+      # Pulled into Prometheus via the `redis_stream_length` etc. names.
+
+  # ---------------------------------------------------------------------------
+  # 6. Grafana — dashboards
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: dongdo_grafana
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    networks:
+      - dongdo-monitoring
+    ports:
+      # 3050 (not 3000) to avoid colliding with `npm run dev` (Next.js).
+      # Override via GRAFANA_PORT env.
+      - "${GRAFANA_PORT:-3050}:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: "${GRAFANA_ADMIN_USER:-admin}"
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-admin}"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      # Bind Grafana's internal listener to all interfaces inside the container.
+      GF_SERVER_ROOT_URL: "${GRAFANA_ROOT_URL:-http://localhost:3050}"
+      GF_SERVER_HTTP_PORT: "3000"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      # Disable telemetry / phone-home.
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_USAGE_STATS_ENABLED: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+volumes:
+  prometheus_data:
+  alertmanager_data:
+  grafana_data:
+
+networks:
+  dongdo-monitoring:
+    name: dongdo-monitoring
+
+  # The Go server's postgres + redis containers live on the network Compose
+  # creates by default: `<project>_default`. The Makefile sets the project
+  # name to `dongdo_cs_v2` so this network is `dongdo_cs_v2_default`.
+  #
+  # We declare it `external: true` so this file can run standalone ONLY when
+  # the network already exists (i.e. you ran `make up` first).
+  #
+  # When the network does NOT exist (e.g. someone runs only this file),
+  # `make monitoring-up` creates a fallback bridge named `dongdo_app` and
+  # the exporter DSNs fall back to the standalone `postgres` / `redis`
+  # containers (see the long-form comment at the top of this file).
+  dongdo_cs_v2_default:
+    name: dongdo_cs_v2_default
+    external: true
