@@ -146,8 +146,14 @@ export default function InboxPage() {
     [router]
   );
 
+  const isStaff = user?.role === 'cskh';
+
   // Clear all cases
   const handleClearAllCases = () => {
+    if (isStaff) {
+      addToast({ title: 'Không có quyền', message: 'Tài khoản Staff không có quyền xóa hội thoại.', variant: 'error' });
+      return;
+    }
     openConfirm({
       title: 'Xóa toàn bộ case?',
       message: 'Bạn có chắc chắn muốn xóa toàn bộ danh sách case test không?',
@@ -196,9 +202,11 @@ export default function InboxPage() {
             onChange={(e) => setCaseFilter(e.target.value)}
             className={styles.searchInput}
           />
-          <button onClick={handleClearAllCases} className={styles.clearAllBtn}>
-            🗑️ Xóa test
-          </button>
+          {!isStaff && (
+            <button onClick={handleClearAllCases} className={styles.clearAllBtn}>
+              🗑️ Xóa test
+            </button>
+          )}
         </div>
       </div>
 

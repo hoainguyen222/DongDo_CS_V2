@@ -100,7 +100,7 @@ WHERE (
         OR LOWER(last_message) LIKE '%' || LOWER($2::text) || '%'
     )
 )
-ORDER BY created_at DESC, id DESC
+ORDER BY updated_at DESC, id DESC
 LIMIT $3 OFFSET $4;
 
 -- name: CountCases :one

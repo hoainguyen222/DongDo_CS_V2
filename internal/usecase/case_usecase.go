@@ -349,8 +349,8 @@ func (uc *CaseUseCase) SubmitCaseHelper(ctx context.Context, sessionID, helpCont
 	return nil
 }
 
-func (uc *CaseUseCase) ListHelperCases(ctx context.Context) ([]*domain.ChatCase, error) {
-	cases, err := uc.caseRepo.ListHelperCases(ctx)
+func (uc *CaseUseCase) ListHelperCases(ctx context.Context, helperStatusFilter string) ([]*domain.ChatCase, error) {
+	cases, err := uc.caseRepo.ListHelperCases(ctx, helperStatusFilter)
 	if err != nil {
 		uc.logger.Error().Err(err).Msg("failed to list helper cases")
 		return nil, err
@@ -368,8 +368,21 @@ func (uc *CaseUseCase) ProcessHelperCase(ctx context.Context, sessionID, action,
 		"session_id":    sessionID,
 		"action":        action,
 		"target":        targetUsername,
-		"requires_help": false,
+		"helper_status": "processing",
 	}, currentLeader)
+	return nil
+}
+
+func (uc *CaseUseCase) UpdateHelperStatus(ctx context.Context, sessionID, status, updatedBy string) error {
+	if err := uc.caseRepo.UpdateHelperStatus(ctx, sessionID, status); err != nil {
+		uc.logger.Error().Err(err).Str("session_id", sessionID).Str("status", status).Msg("failed to update helper status")
+		return err
+	}
+	_ = uc.eventBus.PublishWS(ctx, "admin_inbox", domain.WSEventCaseUpdate, map[string]interface{}{
+		"type":          "helper_status_updated",
+		"session_id":    sessionID,
+		"helper_status": status,
+	}, updatedBy)
 	return nil
 }
 

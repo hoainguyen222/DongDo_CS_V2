@@ -35,35 +35,51 @@ export async function requestCall(customerID: string, sessionID?: string): Promi
 }
 
 export async function acceptCall(callID: string, agentID: string): Promise<void> {
-  const res = await fetch(`${CALL_SERVICE_BASE}/api/v1/calls/${callID}/accept`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ agent_id: agentID }),
-  });
-  if (!res.ok) {
-    throw new Error(`Accept call failed: ${res.statusText}`);
+  // If running in browser and 8081 service is not active, skip to avoid console network errors
+  if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_CALL_SERVICE_URL !== 'true') {
+    return;
+  }
+  try {
+    const res = await fetch(`${CALL_SERVICE_BASE}/api/v1/calls/${callID}/accept`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent_id: agentID }),
+    });
+    if (!res.ok) {
+      console.warn(`Accept call on call-service (8081) returned: ${res.statusText}`);
+    }
+  } catch (e) {
+    // Standalone call-service (port 8081) offline / unused
   }
 }
 
 export async function rejectCall(callID: string, agentID: string): Promise<void> {
-  const res = await fetch(`${CALL_SERVICE_BASE}/api/v1/calls/${callID}/reject`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ agent_id: agentID }),
-  });
-  if (!res.ok) {
-    throw new Error(`Reject call failed: ${res.statusText}`);
+  try {
+    const res = await fetch(`${CALL_SERVICE_BASE}/api/v1/calls/${callID}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent_id: agentID }),
+    });
+    if (!res.ok) {
+      console.warn(`Reject call on call-service (8081) returned: ${res.statusText}`);
+    }
+  } catch (e) {
+    // Standalone call-service (port 8081) offline / unused
   }
 }
 
 export async function hangupCall(callID: string, durationSeconds: number = 0): Promise<void> {
-  const res = await fetch(`${CALL_SERVICE_BASE}/api/v1/calls/${callID}/hangup`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ duration_seconds: durationSeconds }),
-  });
-  if (!res.ok) {
-    throw new Error(`Hangup call failed: ${res.statusText}`);
+  try {
+    const res = await fetch(`${CALL_SERVICE_BASE}/api/v1/calls/${callID}/hangup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ duration_seconds: durationSeconds }),
+    });
+    if (!res.ok) {
+      console.warn(`Hangup call on call-service (8081) returned: ${res.statusText}`);
+    }
+  } catch (e) {
+    // Standalone call-service (port 8081) offline / unused
   }
 }
 

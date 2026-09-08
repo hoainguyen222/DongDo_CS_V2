@@ -82,8 +82,9 @@ export const casesApi = {
     await apiClient.post(`/api/admin/cases/${sessionID}/helper`, { help_content: helpContent });
   },
 
-  async getHelperCases(): Promise<{ cases: ChatCase[]; total: number }> {
-    return apiClient.get('/api/admin/cases/helper-cases');
+  async getHelperCases(status?: string): Promise<{ cases: ChatCase[]; total: number }> {
+    const query = status ? `?status=${encodeURIComponent(status)}` : '';
+    return apiClient.get(`/api/admin/cases/helper-cases${query}`);
   },
 
   async processHelper(sessionID: string, action: 'take_over' | 'transfer', targetUsername?: string): Promise<void> {
@@ -91,5 +92,9 @@ export const casesApi = {
       action,
       target_username: targetUsername,
     });
+  },
+
+  async updateHelperStatus(sessionID: string, status: string): Promise<void> {
+    await apiClient.put(`/api/admin/cases/${sessionID}/helper-status`, { status });
   },
 };

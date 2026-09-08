@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Users, RefreshCw } from 'lucide-react';
 import { useCustomers, useUpdateCustomer, useDeleteCustomer } from '@/lib/hooks/useApi';
+import { useAuthStore } from '@/lib/stores/authStore';
 import { Pagination } from '@/components/admin/AdminSidebar';
 import { EditCustomerModal } from '@/components/admin/AdminModals';
 import { useUIStore } from '@/lib/stores/uiStore';
@@ -12,6 +13,8 @@ import styles from '@/components/admin/AdminPage.module.scss';
 
 export default function CustomersPage() {
   const { openConfirm } = useUIStore();
+  const { user } = useAuthStore();
+  const isStaff = user?.role === 'cskh';
   const {
     page,
     limit: pageSize,
@@ -113,10 +116,15 @@ export default function CustomersPage() {
                     <td className={styles.dataTableRight}>
                       <button onClick={() => handleEdit(c)} className={`${styles.btnGhost} ${styles.btnSm}`}>
                         ✏️ Sửa
-                      </button>{' '}
-                      <button onClick={() => handleDelete(c.guest_id)} className={`${styles.btnDanger} ${styles.btnSm}`}>
-                        🗑️
                       </button>
+                      {!isStaff && (
+                        <>
+                          {' '}
+                          <button onClick={() => handleDelete(c.guest_id)} className={`${styles.btnDanger} ${styles.btnSm}`}>
+                            🗑️
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))

@@ -77,6 +77,7 @@ export interface ChatCase {
   help_content?: string;
   help_requested_by?: string;
   help_requested_at?: string;
+  helper_status?: string;
   last_message: string;
   last_sender_type?: SenderType;
   resolution_note: string;

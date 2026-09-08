@@ -79,6 +79,13 @@ func (uc *VoiceUseCase) InitiateCall(ctx context.Context, sessionID string, call
 }
 
 func (uc *VoiceUseCase) EndCall(ctx context.Context, callID int64, sessionID string, durationSeconds int, recordingURL string) error {
+	if callID <= 0 && sessionID != "" {
+		calls, err := uc.voiceRepo.GetBySession(ctx, sessionID)
+		if err == nil && len(calls) > 0 {
+			callID = calls[0].ID
+		}
+	}
+
 	if err := uc.voiceRepo.End(ctx, callID, durationSeconds, recordingURL); err != nil {
 		uc.logger.Error().Err(err).Int64("call_id", callID).
 			Msg("failed to end voice call")

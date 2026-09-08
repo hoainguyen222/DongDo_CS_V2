@@ -47,17 +47,29 @@ export const voiceApi = {
     await apiClient.delete(`/api/admin/voice/calls/${callID}`).catch(() => {});
   },
 
-  async endCall(sessionID: string, durationSeconds: number = 0): Promise<void> {
-    await hangupCall(sessionID, durationSeconds).catch(async () => {
+  async endCall(sessionID: string, durationSeconds: number = 0, callID?: number | string): Promise<void> {
+    // 1. Standalone call-service (port 8081) cleanup if active
+    await hangupCall(sessionID, durationSeconds).catch(() => {});
+
+    // 2. Primary Go Backend (port 8080) update call status & duration
+    try {
+      await apiClient.post('/api/voice/end', {
+        session_id: sessionID,
+        call_id: callID ? Number(callID) : undefined,
+        duration_seconds: durationSeconds,
+      });
+    } catch (e) {
+      // Fallback
       await fetch(`${API_BASE}/api/voice/end`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           session_id: sessionID,
+          call_id: callID ? Number(callID) : undefined,
           duration_seconds: durationSeconds,
         }),
-      });
-    });
+      }).catch(() => {});
+    }
   },
 
   async declineCall(sessionID: string): Promise<void> {
