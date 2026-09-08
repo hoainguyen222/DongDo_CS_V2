@@ -334,6 +334,45 @@ func (uc *CaseUseCase) ClearAllCases(ctx context.Context) error {
 	return nil
 }
 
+func (uc *CaseUseCase) SubmitCaseHelper(ctx context.Context, sessionID, helpContent, requestedBy string) error {
+	if err := uc.caseRepo.SubmitHelper(ctx, sessionID, helpContent, requestedBy); err != nil {
+		uc.logger.Error().Err(err).Str("session_id", sessionID).Msg("failed to submit case helper")
+		return err
+	}
+	_ = uc.eventBus.PublishWS(ctx, "admin_inbox", domain.WSEventCaseUpdate, map[string]interface{}{
+		"type":              "helper_requested",
+		"session_id":        sessionID,
+		"requires_help":     true,
+		"help_content":      helpContent,
+		"help_requested_by": requestedBy,
+	}, requestedBy)
+	return nil
+}
+
+func (uc *CaseUseCase) ListHelperCases(ctx context.Context) ([]*domain.ChatCase, error) {
+	cases, err := uc.caseRepo.ListHelperCases(ctx)
+	if err != nil {
+		uc.logger.Error().Err(err).Msg("failed to list helper cases")
+		return nil, err
+	}
+	return cases, nil
+}
+
+func (uc *CaseUseCase) ProcessHelperCase(ctx context.Context, sessionID, action, targetUsername, currentLeader string) error {
+	if err := uc.caseRepo.ProcessHelper(ctx, sessionID, action, targetUsername, currentLeader); err != nil {
+		uc.logger.Error().Err(err).Str("session_id", sessionID).Msg("failed to process helper case")
+		return err
+	}
+	_ = uc.eventBus.PublishWS(ctx, "admin_inbox", domain.WSEventCaseUpdate, map[string]interface{}{
+		"type":          "helper_processed",
+		"session_id":    sessionID,
+		"action":        action,
+		"target":        targetUsername,
+		"requires_help": false,
+	}, currentLeader)
+	return nil
+}
+
 // Helper function to convert guestID to string safely
 func guestIDStr(id *uuid.UUID) string {
 	if id == nil {

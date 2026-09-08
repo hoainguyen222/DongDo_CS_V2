@@ -120,17 +120,24 @@ const (
 )
 
 type ChatCase struct {
-	ID             int64      `json:"id"`
-	SessionID      string     `json:"session_id"`
-	GuestID        *uuid.UUID `json:"guest_id,omitempty"`
-	CustomerName   string     `json:"customer_name"`
-	CustomerPhone  string     `json:"customer_phone"`
-	Status         CaseStatus `json:"status"`
-	AssignedCS     string     `json:"assigned_cs"`
-	LastMessage    string     `json:"last_message"`
-	ResolutionNote string     `json:"resolution_note"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
+	ID                int64      `json:"id"`
+	SessionID         string     `json:"session_id"`
+	GuestID           *uuid.UUID `json:"guest_id,omitempty"`
+	CustomerName      string     `json:"customer_name"`
+	CustomerPhone     string     `json:"customer_phone"`
+	Status            CaseStatus `json:"status"`
+	AssignedCS        string     `json:"assigned_cs"`
+	ActiveAssignedCS  string     `json:"active_assigned_cs"`
+	AssignedCSHistory []string   `json:"assigned_cs_history"`
+	RequiresHelp      bool       `json:"requires_help"`
+	HelpContent       string     `json:"help_content"`
+	HelpRequestedBy   string     `json:"help_requested_by"`
+	HelpRequestedAt   *time.Time `json:"help_requested_at,omitempty"`
+	LastMessage       string     `json:"last_message"`
+	LastSenderType    SenderType `json:"last_sender_type"`
+	ResolutionNote    string     `json:"resolution_note"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
 }
 
 // ============================================================
@@ -411,10 +418,9 @@ type SystemErrorRecord struct {
 }
 
 // ============================================================
-// Chat Tag entities
+// Chat Tags & Alerts
 // ============================================================
 
-// ChatTag represents a reusable label applied to chat cases.
 type ChatTag struct {
 	ID          int64     `json:"id"`
 	Name        string    `json:"name"`
@@ -426,20 +432,29 @@ type ChatTag struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-// CaseTag is the join between a chat session (case) and a ChatTag,
-// denormalized with the tag's name/color for read-side display.
 type CaseTag struct {
 	ID         int64     `json:"id"`
 	SessionID  string    `json:"session_id"`
 	TagID      int64     `json:"tag_id"`
-	AssignedBy string    `json:"assigned_by"`
-	CreatedAt  time.Time `json:"created_at"`
 	TagName    string    `json:"tag_name"`
 	TagColor   string    `json:"tag_color"`
+	AssignedBy string    `json:"assigned_by"`
+	CreatedAt  time.Time `json:"created_at"`
+	Name       string    `json:"name"`
+	Color      string    `json:"color"`
 }
 
-// AlertConfig controls the SLA / timeout alert broadcast on the admin inbox.
-// Single-row table keyed by id=1.
+type CaseTagHistory struct {
+	ID          int64     `json:"id"`
+	SessionID   string    `json:"session_id"`
+	TagID       int64     `json:"tag_id"`
+	TagName     string    `json:"tag_name"`
+	TagColor    string    `json:"tag_color"`
+	Action      string    `json:"action"`
+	PerformedBy string    `json:"performed_by"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
 type AlertConfig struct {
 	ID             int64     `json:"id"`
 	IsEnabled      bool      `json:"is_enabled"`
@@ -449,7 +464,6 @@ type AlertConfig struct {
 	UpdatedAt      time.Time `json:"updated_at"`
 }
 
-// AlertEvent records a single triggered alert for a case awaiting CS attention.
 type AlertEvent struct {
 	ID             int64      `json:"id"`
 	SessionID      string     `json:"session_id"`

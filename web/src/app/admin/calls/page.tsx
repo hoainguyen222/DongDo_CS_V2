@@ -178,7 +178,16 @@ export default function CallsPage() {
                               {playingAudio === recURL ? 'Đang phát' : 'Nghe lại'}
                             </button>
                             {playingAudio === recURL && (
-                              <audio src={recURL} autoPlay controls style={{ height: 28, maxWidth: 180 }} />
+                              <audio
+                                src={recURL}
+                                autoPlay
+                                controls
+                                style={{ height: 28, maxWidth: 180 }}
+                                onError={() => {
+                                  addToast({ title: 'File ghi âm không tồn tại trên máy chủ (404)', variant: 'error' });
+                                  setPlayingAudio(null);
+                                }}
+                              />
                             )}
                           </div>
                         ) : (

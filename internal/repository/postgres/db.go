@@ -18,6 +18,7 @@ import (
 	"github.com/hoainguyen222/DongDo_CS_V2/pkg/security"
 	_ "github.com/jackc/pgx/v5/stdlib" // Register pgx driver for database/sql
 	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 	"github.com/rs/zerolog"
 )

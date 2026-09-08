@@ -59,6 +59,9 @@ type CaseRepository interface {
 	Resolve(ctx context.Context, sessionID, csUsername, resolutionNote string) error
 	Delete(ctx context.Context, sessionID string) error
 	DeleteAll(ctx context.Context) error
+	SubmitHelper(ctx context.Context, sessionID, helpContent, requestedBy string) error
+	ListHelperCases(ctx context.Context) ([]*ChatCase, error)
+	ProcessHelper(ctx context.Context, sessionID, action, targetUsername, currentLeader string) error
 }
 
 type LearningRepository interface {
@@ -100,11 +103,11 @@ type AnalyticsRepository interface {
 // ============================================================
 
 type KnowledgeDocument struct {
-	ID        string                 `json:"id"`
-	Content   string                 `json:"content"`
-	Score     float32                `json:"score"`
-	Source    string                 `json:"source"`
-	Metadata  map[string]interface{} `json:"metadata"`
+	ID       string                 `json:"id"`
+	Content  string                 `json:"content"`
+	Score    float32                `json:"score"`
+	Source   string                 `json:"source"`
+	Metadata map[string]interface{} `json:"metadata"`
 }
 
 type VectorStore interface {
@@ -165,7 +168,7 @@ type PartnerRepository interface {
 	GetDashboardKpi(ctx context.Context, startDate, endDate time.Time) (*DashboardKpiSummary, error)
 	GetDashboardAutomationTrend(ctx context.Context, startDate, endDate time.Time) ([]*DashboardAutomationTrendDaily, error)
 	GetRecentCompletedChats(ctx context.Context, limit, offset int) ([]*ChatCase, error)
-	
+
 	// Quick Templates
 	ListQuickTemplates(ctx context.Context) ([]*QuickTemplate, error)
 	CreateQuickTemplate(ctx context.Context, t *QuickTemplate) (*QuickTemplate, error)
@@ -199,27 +202,21 @@ type PartnerRepository interface {
 	MarkSystemErrorHandled(ctx context.Context, id string) error
 }
 
-// ChatTagRepository manages chat tags, the case↔tag binding, the global
-// alert config and the per-case alert events emitted when a case stalls.
 type ChatTagRepository interface {
-	// Tag CRUD
 	ListTags(ctx context.Context) ([]*ChatTag, error)
 	CreateTag(ctx context.Context, tag *ChatTag) (*ChatTag, error)
 	UpdateTag(ctx context.Context, id int64, name, description, color string) error
 	DeleteTag(ctx context.Context, id int64) error
 
-	// Case ↔ tag binding
 	GetCaseTags(ctx context.Context, sessionID string) ([]*CaseTag, error)
 	AttachTag(ctx context.Context, sessionID string, tagID int64, assignedBy string) error
 	DetachTag(ctx context.Context, sessionID string, tagID int64, performedBy string) error
+	LogTagHistory(ctx context.Context, sessionID string, tagID int64, tagName, tagColor, action, performedBy string) error
 
-	// Alert config (single-row, id=1)
 	GetAlertConfig(ctx context.Context) (*AlertConfig, error)
 	UpsertAlertConfig(ctx context.Context, cfg *AlertConfig) error
 
-	// Alert events
 	CreateAlertEvent(ctx context.Context, sessionID string, timeoutSeconds int) (*AlertEvent, error)
 	ResolveAlertEvent(ctx context.Context, sessionID string) error
 	ListUnresolvedAlertEvents(ctx context.Context) ([]*AlertEvent, error)
 }
-

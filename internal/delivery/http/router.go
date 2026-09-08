@@ -144,6 +144,9 @@ func SetupRouter(
 		admin.POST("/api/admin/cases/:session_id/take", handler.HandleTakeCase)
 		admin.POST("/api/admin/cases/:session_id/reply", handler.HandleReplyCase)
 		admin.POST("/api/admin/cases/:session_id/resolve", handler.HandleResolveCase)
+		admin.POST("/api/admin/cases/:session_id/helper", handler.HandleSubmitCaseHelper)
+		admin.GET("/api/admin/cases/helper-cases", handler.HandleListHelperCases)
+		admin.POST("/api/admin/cases/:session_id/process-helper", RequireRoles(RoleLeader, RoleAdmin, RoleOwner), handler.HandleProcessHelperCase)
 		admin.PUT("/api/admin/cases/:session_id/customer", handler.HandleUpdateCaseCustomer)
 		admin.DELETE("/api/admin/cases/:session_id", RequireRoles(RoleAdmin, RoleOwner), handler.HandleDeleteCase)
 		admin.POST("/api/admin/cases/clear-all", RequireRoles(RoleAdmin, RoleOwner), handler.HandleClearAllCases)
@@ -180,6 +183,21 @@ func SetupRouter(
 		// System Configuration - Admin+ only
 		admin.GET("/api/admin/config", RequireRoles(RoleAdmin, RoleOwner), handler.HandleGetConfig)
 		admin.POST("/api/admin/config", RequireRoles(RoleAdmin, RoleOwner), handler.HandleSaveConfig)
+
+		// Chat Tags Management
+		admin.GET("/api/admin/chat/tags", handler.HandleListChatTags)
+		admin.POST("/api/admin/chat/tags", RequireRoles(RoleAdmin, RoleOwner), handler.HandleCreateChatTag)
+		admin.PUT("/api/admin/chat/tags/:id", RequireRoles(RoleAdmin, RoleOwner), handler.HandleUpdateChatTag)
+		admin.DELETE("/api/admin/chat/tags/:id", RequireRoles(RoleOwner), handler.HandleDeleteChatTag)
+
+		// Case Tags
+		admin.GET("/api/admin/cases/:session_id/tags", handler.HandleGetCaseTags)
+		admin.POST("/api/admin/cases/:session_id/tags", handler.HandleAttachCaseTag)
+		admin.DELETE("/api/admin/cases/:session_id/tags/:tag_id", handler.HandleDetachCaseTag)
+
+		// Alert Config & Events
+		admin.POST("/api/admin/chat/alert-events", handler.HandleCreateAlertEvent)
+		admin.POST("/api/admin/chat/alert-events/:session_id/resolve", handler.HandleResolveAlertEvent)
 
 		// Partner Dashboard APIs - Staff+ can view
 		admin.GET("/api/admin/partner/dashboard", handler.HandleGetDashboardData)

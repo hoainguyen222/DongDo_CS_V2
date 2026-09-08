@@ -53,3 +53,5 @@ yarn-error.log*
 *.swo
 *~
 .system_generated/
+
+/tests/automation/reports
