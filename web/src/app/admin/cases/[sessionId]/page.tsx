@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Trash2, CheckCircle2, UserCheck, Send, Tag as TagIcon, X, MessageCircle, RefreshCw, Inbox } from 'lucide-react';
+import { ArrowLeft, Trash2, CheckCircle2, UserCheck, Send, Tag as TagIcon, X, MessageCircle, RefreshCw, Inbox, LifeBuoy, Lock, AlertTriangle } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useCaseDetail,
@@ -15,6 +15,7 @@ import {
   useCaseTags,
   useAttachTag,
   useDetachTag,
+  useSubmitCaseHelper,
 } from '@/lib/hooks/useApi';
 import { WSClient } from '@/lib/ws';
 import { useAuthStore } from '@/lib/stores/authStore';
@@ -45,6 +46,8 @@ interface CaseDetailPayload {
   customer_phone?: string;
   status: string;
   assigned_cs: string;
+  active_assigned_cs?: string;
+  assigned_cs_history?: string[];
   updated_at: string;
 }
 
@@ -262,12 +265,58 @@ export default function CaseDetailPage() {
   const [showTagPicker, setShowTagPicker] = useState(false);
   const { data: allTags = [] } = useChatTags();
   const { data: attachedTags = [] } = useCaseTags(sessionId);
-  const attachTagMutation = useAttachTag();
-  const detachTagMutation = useDetachTag();
-
   const takeCaseMutation = useTakeCase();
   const resolveCaseMutation = useResolveCase();
   const deleteCaseMutation = useDeleteCase();
+  const attachTagMutation = useAttachTag();
+  const detachTagMutation = useDetachTag();
+
+  // ── Helper & Permissions
+  const [showHelperModal, setShowHelperModal] = useState(false);
+  const [helperNote, setHelperNote] = useState('');
+  const submitHelperMutation = useSubmitCaseHelper();
+
+  const isStaff = user?.role === 'cskh';
+  const activeCS = currentCase?.active_assigned_cs || currentCase?.assigned_cs || '';
+  const historyCS = currentCase?.assigned_cs_history || [];
+
+  // Single Active Handler Restriction
+  const isActiveHandler = !isStaff || !activeCS || activeCS === user?.username || activeCS === user?.full_name;
+
+  // Close Case Permission Restriction
+  const canCloseCase =
+    !isStaff ||
+    activeCS === user?.username ||
+    activeCS === user?.full_name ||
+    historyCS.includes(user?.username || '') ||
+    historyCS.includes(user?.full_name || '');
+
+  const hasNeedHelpTag = attachedTags.some(
+    (t) => t.tag_name === 'Cần Hỗ Trợ'
+  );
+
+  const handleSubmitHelper = async () => {
+    if (!currentCase || !helperNote.trim() || !hasNeedHelpTag) return;
+    try {
+      await submitHelperMutation.mutateAsync({
+        sessionId: currentCase.session_id,
+        helpContent: helperNote.trim(),
+      });
+      addToast({
+        title: 'Đã gửi yêu cầu hỗ trợ',
+        message: 'Case đã được chuyển sang danh sách "Case cần hỗ trợ"',
+        variant: 'success',
+      });
+      setShowHelperModal(false);
+      setHelperNote('');
+    } catch (err: any) {
+      addToast({
+        title: 'Lỗi gửi hỗ trợ',
+        message: err.message || 'Không thể gửi yêu cầu',
+        variant: 'error',
+      });
+    }
+  };
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -697,6 +746,19 @@ export default function CaseDetailPage() {
                 )}
               </div>
 
+              <button
+                onClick={() => {
+                  setHelperNote('');
+                  setShowHelperModal(true);
+                }}
+                className={styles.secondaryBtn}
+                style={{ borderColor: '#f59e0b', color: '#f59e0b' }}
+                title="Yêu cầu Cấp Quản Lý hỗ trợ hội thoại này"
+              >
+                <LifeBuoy size={14} />
+                <span>Helper</span>
+              </button>
+
               {currentCase?.status !== 'HUMAN_CS_ACTIVE' && (
                 <button
                   onClick={handleTakeCase}
@@ -707,7 +769,25 @@ export default function CaseDetailPage() {
                   <span>Tiếp Nhận</span>
                 </button>
               )}
-              <button onClick={openResolveModal} className={styles.secondaryBtn}>
+              <button
+                onClick={() => {
+                  if (!canCloseCase) {
+                    addToast({
+                      title: 'Không có quyền đóng case',
+                      message: 'Chỉ tài khoản tiếp nhận hội thoại mới được quyền đóng case này.',
+                      variant: 'error',
+                    });
+                    return;
+                  }
+                  openResolveModal();
+                }}
+                className={styles.secondaryBtn}
+                style={{
+                  opacity: canCloseCase ? 1 : 0.5,
+                  cursor: canCloseCase ? 'pointer' : 'not-allowed',
+                }}
+                title={canCloseCase ? 'Giải quyết & Đóng case' : 'Chỉ tài khoản tiếp nhận mới được quyền đóng case'}
+              >
                 <CheckCircle2 size={14} />
                 <span>Đóng Case</span>
               </button>
@@ -762,31 +842,247 @@ export default function CaseDetailPage() {
             <div ref={messagesEndRef} />
           </div>
 
+          {/* Single Active Handler Warning Banner */}
+          {!isActiveHandler && (
+            <div
+              style={{
+                margin: '0 16px 8px 16px',
+                padding: '10px 14px',
+                background: 'rgba(245, 158, 11, 0.15)',
+                border: '1px solid rgba(245, 158, 11, 0.3)',
+                borderRadius: '8px',
+                color: '#f59e0b',
+                fontSize: '13px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}
+            >
+              <Lock size={16} />
+              <span>
+                Đoạn chat đang do <strong>{activeCS}</strong> xử lý. Bạn chỉ có quyền xem.
+              </span>
+            </div>
+          )}
+
           {/* Reply Box */}
           <form onSubmit={handleSendReply} className={styles.replyForm}>
             <div className={styles.replyRow}>
               <textarea
                 rows={2}
                 value={replyText}
+                disabled={!isActiveHandler}
                 onChange={(e) => setReplyText(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
+                  if (e.key === 'Enter' && !e.shiftKey && isActiveHandler) {
                     e.preventDefault();
                     handleSendReply(e);
                   }
                 }}
-                placeholder="Nhập tin nhắn phản hồi... (Enter để gửi)"
+                placeholder={
+                  isActiveHandler
+                    ? 'Nhập tin nhắn phản hồi... (Enter để gửi)'
+                    : `Đoạn chat đang do ${activeCS} xử lý (Read-only)`
+                }
                 className={styles.replyInput}
+                style={{
+                  opacity: isActiveHandler ? 1 : 0.6,
+                  cursor: isActiveHandler ? 'text' : 'not-allowed',
+                }}
               />
               <button
                 type="submit"
-                disabled={!replyText.trim() || isSendingReply}
+                disabled={!isActiveHandler || !replyText.trim() || isSendingReply}
                 className={styles.replySend}
               >
                 <Send size={16} />
               </button>
             </div>
           </form>
+
+          {/* Helper Modal */}
+          {showHelperModal && (
+            <div
+              style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(0, 0, 0, 0.75)',
+                backdropFilter: 'blur(4px)',
+                zIndex: 1000,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onClick={() => setShowHelperModal(false)}
+            >
+              <div
+                style={{
+                  background: '#0f172a',
+                  border: '1px solid #334155',
+                  borderRadius: '12px',
+                  width: '100%',
+                  maxWidth: '460px',
+                  padding: '24px',
+                  boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '16px',
+                  }}
+                >
+                  <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#f8fafc', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <LifeBuoy style={{ color: '#f59e0b', width: 20, height: 20 }} />
+                    <span>Gửi Yêu Cầu Hỗ Trợ (Helper)</span>
+                  </h3>
+                  <button
+                    onClick={() => setShowHelperModal(false)}
+                    style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {!hasNeedHelpTag ? (
+                  <div
+                    style={{
+                      padding: '12px 14px',
+                      background: 'rgba(239, 68, 68, 0.15)',
+                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                      borderRadius: '8px',
+                      color: '#f87171',
+                      fontSize: '13px',
+                      marginBottom: '16px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, marginBottom: '6px' }}>
+                      <AlertTriangle size={16} />
+                      <span>Chưa đủ điều kiện gửi Helper!</span>
+                    </div>
+                    <p style={{ margin: '0 0 10px 0', lineHeight: 1.4 }}>
+                      Đoạn chat bắt buộc phải được gắn tag <strong>&quot;Cần Hỗ Trợ&quot;</strong> trước khi bấm gửi.
+                    </p>
+                    <button
+                      onClick={async () => {
+                        const targetTag = allTags.find((t) => t.name === 'Cần Hỗ Trợ');
+                        if (targetTag) {
+                          try {
+                            await attachTagMutation.mutateAsync({
+                              sessionId: currentCase!.session_id,
+                              tagId: targetTag.id,
+                            });
+                            addToast({ title: 'Đã gắn tag "Cần Hỗ Trợ"', variant: 'success' });
+                          } catch (err: any) {
+                            addToast({ title: err.message, variant: 'error' });
+                          }
+                        } else {
+                          addToast({ title: 'Tag "Cần Hỗ Trợ" chưa tồn tại trong danh mục tag', variant: 'error' });
+                        }
+                      }}
+                      style={{
+                        padding: '6px 12px',
+                        background: '#ef4444',
+                        color: '#fff',
+                        borderRadius: '6px',
+                        border: 'none',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      + Gắn Tag &quot;Cần Hỗ Trợ&quot; Ngay
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      padding: '8px 12px',
+                      background: 'rgba(16, 185, 129, 0.15)',
+                      border: '1px solid rgba(16, 185, 129, 0.3)',
+                      borderRadius: '6px',
+                      color: '#34d399',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      marginBottom: '16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <CheckCircle2 size={14} />
+                    <span>Đã gắn tag &quot;Cần Hỗ Trợ&quot; thành công</span>
+                  </div>
+                )}
+
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ display: 'block', fontSize: '13px', color: '#cbd5e1', marginBottom: '8px' }}>
+                    Nội dung cần hỗ trợ chi tiết <span style={{ color: '#f87171' }}>*</span>
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={helperNote}
+                    onChange={(e) => setHelperNote(e.target.value)}
+                    placeholder="Mô tả sự cố hoặc yêu cầu thông tin cần Leader / Cấp quản lý hỗ trợ..."
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      background: '#1e293b',
+                      border: '1px solid #334155',
+                      color: '#f8fafc',
+                      fontSize: '13px',
+                      outline: 'none',
+                      resize: 'vertical',
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                  <button
+                    onClick={() => setShowHelperModal(false)}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      background: '#1e293b',
+                      border: '1px solid #334155',
+                      color: '#cbd5e1',
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    onClick={handleSubmitHelper}
+                    disabled={!hasNeedHelpTag || !helperNote.trim() || submitHelperMutation.isPending}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      background: '#f59e0b',
+                      color: '#0f172a',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      border: 'none',
+                      cursor:
+                        !hasNeedHelpTag || !helperNote.trim() || submitHelperMutation.isPending
+                          ? 'not-allowed'
+                          : 'pointer',
+                      opacity:
+                        !hasNeedHelpTag || !helperNote.trim() || submitHelperMutation.isPending
+                          ? 0.5
+                          : 1,
+                    }}
+                  >
+                    Gửi Hỗ Trợ
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

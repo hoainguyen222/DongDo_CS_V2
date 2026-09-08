@@ -196,6 +196,48 @@ export function useClearAllCases() {
   });
 }
 
+export function useSubmitCaseHelper() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sessionId, helpContent }: { sessionId: string; helpContent: string }) =>
+      api.submitCaseHelper(sessionId, helpContent),
+    onSuccess: (_data, { sessionId }) => {
+      qc.invalidateQueries({ queryKey: ['cases'] });
+      qc.invalidateQueries({ queryKey: queryKeys.caseDetail(sessionId) });
+      qc.invalidateQueries({ queryKey: ['helperCases'] });
+    },
+  });
+}
+
+export function useHelperCases(options?: QueryOpts<{ cases: ChatCase[]; total: number }>) {
+  return useQuery({
+    queryKey: ['helperCases'],
+    queryFn: () => api.getHelperCases(),
+    staleTime: 5000,
+    ...options,
+  });
+}
+
+export function useProcessHelperCase() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      sessionId,
+      action,
+      targetUsername,
+    }: {
+      sessionId: string;
+      action: 'take_over' | 'transfer';
+      targetUsername?: string;
+    }) => api.processHelperCase(sessionId, action, targetUsername),
+    onSuccess: (_data, { sessionId }) => {
+      qc.invalidateQueries({ queryKey: ['cases'] });
+      qc.invalidateQueries({ queryKey: queryKeys.caseDetail(sessionId) });
+      qc.invalidateQueries({ queryKey: ['helperCases'] });
+    },
+  });
+}
+
 // ============================================================
 // ─── CUSTOMERS ──────────────────────────────────────────────
 

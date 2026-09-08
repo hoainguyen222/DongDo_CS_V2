@@ -73,6 +73,7 @@ func main() {
 	var voiceRepo domain.VoiceCallRepository
 	var analyticsRepo domain.AnalyticsRepository
 	var partnerRepo domain.PartnerRepository
+	var tagRepo domain.ChatTagRepository
 
 	usePostgres := cfg.DatabaseURL != "" && strings.HasPrefix(cfg.DatabaseURL, "postgres://")
 	dbLabel := "sqlite"
@@ -118,6 +119,7 @@ func main() {
 			voiceRepo = repoPostgres.NewVoiceCallRepo(pgDB)
 			analyticsRepo = repoPostgres.NewAnalyticsRepo(pgDB)
 			partnerRepo = repoPostgres.NewPartnerRepo(pgDB)
+			tagRepo = repoPostgres.NewChatTagRepo(pgDB)
 		}
 	}
 
@@ -143,6 +145,7 @@ func main() {
 		voiceRepo = repoSqlite.NewVoiceCallRepo(sqliteDB)
 		analyticsRepo = repoSqlite.NewAnalyticsRepo(sqliteDB)
 		partnerRepo = repoSqlite.NewPartnerRepo(sqliteDB)
+		tagRepo = repoSqlite.NewChatTagRepo(sqliteDB)
 	}
 
 	logger.Info().
@@ -224,6 +227,7 @@ func main() {
 	voiceUC := usecase.NewVoiceUseCase(voiceRepo, caseRepo, eventBus)
 	analyticsUC := usecase.NewAnalyticsUseCase(analyticsRepo, settingRepo)
 	partnerUC := usecase.NewPartnerUseCase(partnerRepo, settingRepo)
+	tagUC := usecase.NewChatTagUseCase(tagRepo)
 
 	// 7. Initialize WebSocket Hub
 	hub := deliveryWS.NewHub()
@@ -271,6 +275,7 @@ func main() {
 		embedder,
 		cfg.DocumentsDir,
 		eventBus,
+		tagUC,
 	)
 
 	router := deliveryHTTP.SetupRouter(handler, hub, chatUC, voiceUC, stateMgr, eventBus, authUC)

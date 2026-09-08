@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'cskh' | 'customer';
+export type UserRole = 'owner' | 'admin' | 'leader' | 'cskh' | 'customer';
 export type SenderType = 'guest' | 'ai' | 'human_cs' | 'cs' | 'system';
 export type CaseStatus = 'AI_ACTIVE' | 'NEEDS_HUMAN_CS' | 'HUMAN_CS_ACTIVE' | 'RESOLVED';
 export type LearnStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -71,6 +71,12 @@ export interface ChatCase {
   customer_phone?: string;
   status: CaseStatus;
   assigned_cs: string;
+  active_assigned_cs?: string;
+  assigned_cs_history?: string[];
+  requires_help?: boolean;
+  help_content?: string;
+  help_requested_by?: string;
+  help_requested_at?: string;
   last_message: string;
   last_sender_type?: SenderType;
   resolution_note: string;

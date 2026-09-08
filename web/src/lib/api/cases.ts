@@ -77,4 +77,19 @@ export const casesApi = {
   async clearAll(): Promise<void> {
     await apiClient.post('/api/admin/cases/clear-all');
   },
+
+  async submitHelper(sessionID: string, helpContent: string): Promise<void> {
+    await apiClient.post(`/api/admin/cases/${sessionID}/helper`, { help_content: helpContent });
+  },
+
+  async getHelperCases(): Promise<{ cases: ChatCase[]; total: number }> {
+    return apiClient.get('/api/admin/cases/helper-cases');
+  },
+
+  async processHelper(sessionID: string, action: 'take_over' | 'transfer', targetUsername?: string): Promise<void> {
+    await apiClient.post(`/api/admin/cases/${sessionID}/process-helper`, {
+      action,
+      target_username: targetUsername,
+    });
+  },
 };

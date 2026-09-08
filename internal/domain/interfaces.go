@@ -55,6 +55,9 @@ type CaseRepository interface {
 	Resolve(ctx context.Context, sessionID, csUsername, resolutionNote string) error
 	Delete(ctx context.Context, sessionID string) error
 	DeleteAll(ctx context.Context) error
+	SubmitHelper(ctx context.Context, sessionID, helpContent, requestedBy string) error
+	ListHelperCases(ctx context.Context) ([]*ChatCase, error)
+	ProcessHelper(ctx context.Context, sessionID, action, targetUsername, currentLeader string) error
 }
 
 type LearningRepository interface {
@@ -188,5 +191,24 @@ type PartnerRepository interface {
 	CreateSystemError(ctx context.Context, errRecord *SystemErrorRecord) (*SystemErrorRecord, error)
 	ListSystemErrors(ctx context.Context) ([]*SystemErrorRecord, error)
 	MarkSystemErrorHandled(ctx context.Context, id string) error
+}
+
+type ChatTagRepository interface {
+	ListTags(ctx context.Context) ([]*ChatTag, error)
+	CreateTag(ctx context.Context, tag *ChatTag) (*ChatTag, error)
+	UpdateTag(ctx context.Context, id int64, name, description, color string) error
+	DeleteTag(ctx context.Context, id int64) error
+
+	GetCaseTags(ctx context.Context, sessionID string) ([]*CaseTag, error)
+	AttachTag(ctx context.Context, sessionID string, tagID int64, assignedBy string) error
+	DetachTag(ctx context.Context, sessionID string, tagID int64, performedBy string) error
+	LogTagHistory(ctx context.Context, sessionID string, tagID int64, tagName, tagColor, action, performedBy string) error
+
+	GetAlertConfig(ctx context.Context) (*AlertConfig, error)
+	UpsertAlertConfig(ctx context.Context, cfg *AlertConfig) error
+
+	CreateAlertEvent(ctx context.Context, sessionID string, timeoutSeconds int) (*AlertEvent, error)
+	ResolveAlertEvent(ctx context.Context, sessionID string) error
+	ListUnresolvedAlertEvents(ctx context.Context) ([]*AlertEvent, error)
 }
 

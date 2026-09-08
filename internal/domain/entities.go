@@ -120,17 +120,24 @@ const (
 )
 
 type ChatCase struct {
-	ID             int64      `json:"id"`
-	SessionID      string     `json:"session_id"`
-	GuestID        *uuid.UUID `json:"guest_id,omitempty"`
-	CustomerName   string     `json:"customer_name"`
-	CustomerPhone  string     `json:"customer_phone"`
-	Status         CaseStatus `json:"status"`
-	AssignedCS     string     `json:"assigned_cs"`
-	LastMessage    string     `json:"last_message"`
-	ResolutionNote string     `json:"resolution_note"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
+	ID                int64      `json:"id"`
+	SessionID         string     `json:"session_id"`
+	GuestID           *uuid.UUID `json:"guest_id,omitempty"`
+	CustomerName      string     `json:"customer_name"`
+	CustomerPhone     string     `json:"customer_phone"`
+	Status            CaseStatus `json:"status"`
+	AssignedCS        string     `json:"assigned_cs"`
+	ActiveAssignedCS  string     `json:"active_assigned_cs"`
+	AssignedCSHistory []string   `json:"assigned_cs_history"`
+	RequiresHelp      bool       `json:"requires_help"`
+	HelpContent       string     `json:"help_content"`
+	HelpRequestedBy   string     `json:"help_requested_by"`
+	HelpRequestedAt   *time.Time `json:"help_requested_at,omitempty"`
+	LastMessage       string     `json:"last_message"`
+	LastSenderType    SenderType `json:"last_sender_type"`
+	ResolutionNote    string     `json:"resolution_note"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
 }
 
 // ============================================================
@@ -408,4 +415,60 @@ type SystemErrorRecord struct {
 	IsHandled    bool      `json:"is_handled"`
 	SuggestedFix string    `json:"suggested_fix"`
 	CreatedAt    time.Time `json:"created_at"`
+}
+
+// ============================================================
+// Chat Tags & Alerts
+// ============================================================
+
+type ChatTag struct {
+	ID          int64     `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Color       string    `json:"color"`
+	CreatedBy   string    `json:"created_by"`
+	IsActive    bool      `json:"is_active"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type CaseTag struct {
+	ID         int64     `json:"id"`
+	SessionID  string    `json:"session_id"`
+	TagID      int64     `json:"tag_id"`
+	TagName    string    `json:"tag_name"`
+	TagColor   string    `json:"tag_color"`
+	AssignedBy string    `json:"assigned_by"`
+	CreatedAt  time.Time `json:"created_at"`
+	Name       string    `json:"name"`
+	Color      string    `json:"color"`
+}
+
+type CaseTagHistory struct {
+	ID          int64     `json:"id"`
+	SessionID   string    `json:"session_id"`
+	TagID       int64     `json:"tag_id"`
+	TagName     string    `json:"tag_name"`
+	TagColor    string    `json:"tag_color"`
+	Action      string    `json:"action"`
+	PerformedBy string    `json:"performed_by"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+type AlertConfig struct {
+	ID             int64     `json:"id"`
+	IsEnabled      bool      `json:"is_enabled"`
+	TimeoutSeconds int       `json:"timeout_seconds"`
+	AlertContent   string    `json:"alert_content"`
+	UpdatedBy      string    `json:"updated_by"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+type AlertEvent struct {
+	ID             int64      `json:"id"`
+	SessionID      string     `json:"session_id"`
+	TimeoutSeconds int        `json:"timeout_seconds"`
+	TriggeredAt    time.Time  `json:"triggered_at"`
+	ResolvedAt     *time.Time `json:"resolved_at,omitempty"`
+	IsResolved     bool       `json:"is_resolved"`
 }

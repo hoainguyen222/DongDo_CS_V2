@@ -7,6 +7,7 @@ import Image from 'next/image';
 import {
   LogOut,
   Phone,
+  Headphones,
   Mic,
   MicOff,
   PhoneOff,
@@ -14,12 +15,22 @@ import {
   X,
   CheckCircle2,
   Clock,
+  Minimize2,
+  Maximize2,
+  Bell,
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { WSClient } from '@/lib/ws';
 import { WebRTCManager } from '@/lib/webrtc';
 import { acceptCall } from '@/lib/api/callService';
+import { useHelperCases } from '@/lib/hooks/useApi';
 import styles from './AdminSidebar.module.scss';
+
+function formatCallTime(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
 
 // ── RBAC Helpers ───────────────────────────────────────────
 export function getNormalizedRole(role?: string): string {
@@ -271,6 +282,7 @@ export function AdminSidebar({
   pendingCalls = [],
   onAcceptPendingCall,
   onLogout,
+  webRtc,
 }: {
   user: any;
   role: string;
@@ -282,10 +294,19 @@ export function AdminSidebar({
   pendingCalls?: any[];
   onAcceptPendingCall?: (call: any) => void;
   onLogout: () => void;
+  webRtc?: any;
 }) {
   const [showPendingModal, setShowPendingModal] = useState(false);
+  const { data: helperData } = useHelperCases();
+  const helperCasesCount = helperData?.cases?.length || 0;
 
   const hasPending = pendingCalls && pendingCalls.length > 0;
+
+  useEffect(() => {
+    if (pendingCalls && pendingCalls.length > 0) {
+      setShowPendingModal(true);
+    }
+  }, [pendingCalls?.length]);
 
   const navIcon = {
     dashboard: (
@@ -438,6 +459,13 @@ export function AdminSidebar({
             {role?.toLowerCase() === 'owner' && (
               <NavButton href="/admin/test-data" icon={navIcon.testTube} label="Test Data Upload" />
             )}
+            <NavButton
+              href="/admin/helper-cases"
+              icon={<Bell style={{ width: 16, height: 16, color: '#f59e0b' }} />}
+              label="Case Cần Hỗ Trợ"
+              badge={helperCasesCount && helperCasesCount > 0 ? helperCasesCount : undefined}
+              badgeVariant="amber"
+            />
           </div>
         </nav>
 
@@ -533,6 +561,103 @@ export function AdminSidebar({
           </div>
         </div>
       )}
+
+      {/* Remote Audio element for Staff */}
+      {webRtc?.remoteAudioRef && (
+        <audio ref={webRtc.remoteAudioRef} autoPlay style={{ display: 'none' }} />
+      )}
+
+      {/* Active In-Call Modal (Staff) */}
+      {webRtc?.isCallActive && !webRtc?.isCallMinimized && (
+        <div className={styles.activeCallModalOverlay}>
+          <div className={styles.activeCallModal}>
+            <div className={styles.activeCallHeader}>
+              <div className={styles.activeCallIconPulse}>
+                <Headphones style={{ width: 32, height: 32, color: '#10b981' }} />
+              </div>
+              <div className={styles.activeCallBadge}>
+                <span className={styles.activeDotPulse} />
+                <span>Đang nghe máy • Tư vấn khách hàng</span>
+              </div>
+              <h3 className={styles.activeCallerName}>
+                {webRtc.activeCallInfo?.caller_id || 'Khách hàng'}
+              </h3>
+              <p className={styles.activeCallSession}>
+                Mã phiên: {webRtc.activeCallInfo?.session_id || '—'}
+              </p>
+            </div>
+
+            <div className={styles.activeCallTimerBox}>
+              <Clock style={{ width: 20, height: 20, color: '#38bdf8' }} />
+              <span className={styles.activeCallTimerText}>{formatCallTime(webRtc.callDuration || 0)}</span>
+            </div>
+
+            <div className={styles.activeCallActions}>
+              <button
+                onClick={webRtc.toggleMute}
+                className={`${styles.activeCallBtn} ${webRtc.isMuted ? styles.btnMuted : styles.btnUnmuted}`}
+                title={webRtc.isMuted ? 'Mở micro' : 'Tắt micro'}
+              >
+                {webRtc.isMuted ? <MicOff style={{ width: 18, height: 18 }} /> : <Mic style={{ width: 18, height: 18 }} />}
+                <span>{webRtc.isMuted ? 'Đã tắt mic' : 'Mic bật'}</span>
+              </button>
+
+              <button
+                onClick={() => webRtc.setIsCallMinimized && webRtc.setIsCallMinimized(true)}
+                className={`${styles.activeCallBtn} ${styles.btnMinimize}`}
+                title="Thu nhỏ để vừa tư vấn vừa tra cứu thông tin"
+              >
+                <Minimize2 style={{ width: 18, height: 18 }} />
+                <span>Ẩn cuộc gọi</span>
+              </button>
+
+              <button
+                onClick={webRtc.handleEndCall}
+                className={`${styles.activeCallBtn} ${styles.btnEndCall}`}
+                title="Kết thúc cuộc gọi"
+              >
+                <PhoneOff style={{ width: 18, height: 18 }} />
+                <span>Kết thúc</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Minimized Floating Call Bar (Staff) */}
+      {webRtc?.isCallActive && webRtc?.isCallMinimized && (
+        <div className={styles.floatingCallBar}>
+          <div className={styles.floatingCallPulseIcon}>
+            <PhoneCall style={{ width: 16, height: 16, color: '#10b981' }} />
+          </div>
+          <div className={styles.floatingCallMeta}>
+            <span className={styles.floatingCaller}>
+              {webRtc.activeCallInfo?.caller_id || 'Khách hàng'}
+            </span>
+            <span className={styles.floatingTimer}>
+              {formatCallTime(webRtc.callDuration || 0)}
+            </span>
+          </div>
+          <div className={styles.floatingCallActions}>
+            <button
+              onClick={() => webRtc.setIsCallMinimized && webRtc.setIsCallMinimized(false)}
+              className={styles.floatingBtnRestore}
+              title="Mở lại popup đàm thoại"
+            >
+              <Maximize2 style={{ width: 14, height: 14 }} />
+              <span>Hiện lại</span>
+            </button>
+            <button
+              onClick={webRtc.handleEndCall}
+              className={styles.floatingBtnEnd}
+              title="Kết thúc cuộc gọi"
+            >
+              <PhoneOff style={{ width: 14, height: 14 }} />
+              <span>Kết thúc</span>
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -542,17 +667,36 @@ export function useAdminWebRTC(wsRef: React.RefObject<WSClient | null>, sessionI
   const rtcRef = useRef<WebRTCManager | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const callTimerRef = useRef<any>(null);
+  const onCallEndRef = useRef(onCallEnd);
+
+  useEffect(() => {
+    onCallEndRef.current = onCallEnd;
+  }, [onCallEnd]);
+
   const [isCallActive, setIsCallActive] = useState(false);
+  const [isCallMinimized, setIsCallMinimized] = useState(false);
+  const [activeCallInfo, setActiveCallInfo] = useState<{ session_id: string; caller_id: string; call_id?: string } | null>(null);
   const [callDuration, setCallDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [incomingCall, setIncomingCall] = useState<{ session_id: string; caller_id: string; offer?: any; call_id?: string } | null>(null);
   const [pendingCalls, setPendingCalls] = useState<any[]>([]);
 
+  const callDurationRef = useRef(0);
+
+  const stopCallTimer = useCallback(() => {
+    if (callTimerRef.current) {
+      clearInterval(callTimerRef.current);
+      callTimerRef.current = null;
+    }
+  }, []);
+
   const startCallTimer = useCallback(() => {
-    clearInterval(callTimerRef.current);
-    setCallDuration(0);
+    if (callTimerRef.current) {
+      clearInterval(callTimerRef.current);
+    }
     callTimerRef.current = setInterval(() => {
-      setCallDuration((p) => p + 1);
+      callDurationRef.current += 1;
+      setCallDuration((prev) => prev + 1);
     }, 1000);
   }, []);
 
@@ -566,18 +710,30 @@ export function useAdminWebRTC(wsRef: React.RefObject<WSClient | null>, sessionI
     }
 
     setIsCallActive(true);
+    setIsCallMinimized(false);
+    setActiveCallInfo({
+      session_id: targetCall.session_id,
+      caller_id: targetCall.caller_id || targetCall.customer_id || 'Khách hàng',
+      call_id: targetCall.call_id,
+    });
     setIncomingCall(null);
     setPendingCalls((prev) => prev.filter((c) => c.session_id !== targetCall.session_id && c.call_id !== targetCall.call_id));
+    callDurationRef.current = 0;
+    setCallDuration(0);
     startCallTimer();
 
     const rtc = new WebRTCManager(wsRef.current, targetCall.session_id, (state: any) => {
-      if (state === 'connected') startCallTimer();
-      else if (state === 'ended') {
+      if (state === 'connected') {
+        startCallTimer();
+      } else if (state === 'ended') {
         setIsCallActive(false);
+        setIsCallMinimized(false);
+        setActiveCallInfo(null);
         setIncomingCall(null);
-        clearInterval(callTimerRef.current);
+        stopCallTimer();
         setCallDuration(0);
-        onCallEnd();
+        callDurationRef.current = 0;
+        onCallEndRef.current?.();
       }
     }, (stream: any) => {
       if (remoteAudioRef.current) {
@@ -587,7 +743,7 @@ export function useAdminWebRTC(wsRef: React.RefObject<WSClient | null>, sessionI
     });
     rtcRef.current = rtc;
     if (targetCall.offer) await rtc.handleOffer(targetCall.offer);
-  }, [incomingCall, wsRef, startCallTimer, onCallEnd]);
+  }, [incomingCall, wsRef, startCallTimer, stopCallTimer]);
 
   const handleDeclineCall = useCallback(() => {
     const { voiceApi } = require('@/lib/api');
@@ -596,18 +752,22 @@ export function useAdminWebRTC(wsRef: React.RefObject<WSClient | null>, sessionI
   }, [incomingCall]);
 
   const handleEndCall = useCallback(async () => {
+    const finalDuration = callDurationRef.current;
     setIsCallActive(false);
+    setIsCallMinimized(false);
+    setActiveCallInfo(null);
     setIncomingCall(null);
-    clearInterval(callTimerRef.current);
+    stopCallTimer();
     setCallDuration(0);
+    callDurationRef.current = 0;
     if (rtcRef.current) {
-      await rtcRef.current.endCall(false, callDuration).catch(() => {}); // local cleanup only
+      await rtcRef.current.endCall(false, finalDuration).catch(() => {}); // local cleanup only
       rtcRef.current = null;
     }
     const { voiceApi } = require('@/lib/api');
-    await voiceApi.endCall(sessionId, callDuration).catch(() => {});
-    onCallEnd();
-  }, [callDuration, sessionId, onCallEnd]);
+    await voiceApi.endCall(sessionId, finalDuration).catch(() => {});
+    onCallEndRef.current?.();
+  }, [sessionId, stopCallTimer]);
 
   const toggleMute = useCallback(() => {
     if (rtcRef.current) {
@@ -619,79 +779,101 @@ export function useAdminWebRTC(wsRef: React.RefObject<WSClient | null>, sessionI
   }, []);
 
   useEffect(() => {
-    if (!wsRef.current) return;
+    let bound = false;
 
-    const addCallToPending = (callData: any) => {
-      setPendingCalls((prev) => {
-        const exists = prev.some((c) => (c.call_id && c.call_id === callData.call_id) || (c.session_id && c.session_id === callData.session_id));
-        if (exists) return prev;
-        return [...prev, callData];
+    const bindListeners = () => {
+      const ws = wsRef.current;
+      if (!ws || bound) return false;
+
+      const addCallToPending = (callData: any) => {
+        setPendingCalls((prev) => {
+          const exists = prev.some((c) => (c.call_id && c.call_id === callData.call_id) || (c.session_id && c.session_id === callData.session_id));
+          if (exists) return prev;
+          return [...prev, callData];
+        });
+
+        // Automatic 45-second frontend timeout removal
+        setTimeout(() => {
+          setPendingCalls((prev) => prev.filter((c) => c.session_id !== callData.session_id && c.call_id !== callData.call_id));
+        }, 45000);
+      };
+
+      ws.on('incoming_call', (event: any) => {
+        const payload = event.payload || event;
+        const callData = {
+          call_id: payload.call_id,
+          session_id: payload.session_id || payload.call_id,
+          caller_id: payload.customer_id || payload.caller_id || 'Khách hàng',
+          offer: payload.offer,
+        };
+        setIncomingCall(callData);
+        addCallToPending(callData);
       });
 
-      // Automatic 45-second frontend timeout removal
-      setTimeout(() => {
-        setPendingCalls((prev) => prev.filter((c) => c.session_id !== callData.session_id && c.call_id !== callData.call_id));
-      }, 45000);
+      ws.on('call_ring', (event: any) => {
+        const sID = event.payload?.session_id || event.session_id;
+        const cID = event.payload?.caller_id || event.sender_id || 'Khách hàng';
+        const offerData = event.payload?.offer || event.payload;
+        const callData = { session_id: sID, caller_id: cID, offer: offerData, call_id: event.payload?.call_id };
+        if (sID) {
+          setIncomingCall(callData);
+          addCallToPending(callData);
+        }
+      });
+
+      ws.on('call_offer', (event: any) => {
+        const sID = event.payload?.session_id || event.session_id;
+        const cID = event.payload?.caller_id || event.sender_id || 'Khách hàng';
+        const callData = { session_id: sID, caller_id: cID, offer: event.payload, call_id: event.payload?.call_id };
+        if (sID) {
+          if (rtcRef.current && activeCallInfo?.session_id === sID) {
+            rtcRef.current.handleOffer(event.payload).catch(() => {});
+          } else {
+            setIncomingCall(callData);
+            addCallToPending(callData);
+          }
+        }
+      });
+
+      ws.on('call_end', async (event: any) => {
+        const payload = event?.payload || event;
+        const endedID = payload?.call_id || payload?.session_id;
+        setIsCallActive(false);
+        setIsCallMinimized(false);
+        setActiveCallInfo(null);
+        setIncomingCall(null);
+        if (endedID) {
+          setPendingCalls((prev) => prev.filter((c) => c.session_id !== endedID && c.call_id !== endedID));
+        } else {
+          setPendingCalls([]);
+        }
+        stopCallTimer();
+        setCallDuration(0);
+        rtcRef.current = null;
+        onCallEndRef.current?.();
+      });
+
+      bound = true;
+      return true;
     };
 
-    wsRef.current.on('incoming_call', (event: any) => {
-      const payload = event.payload || event;
-      const callData = {
-        call_id: payload.call_id,
-        session_id: payload.session_id || payload.call_id,
-        caller_id: payload.customer_id || payload.caller_id || 'Khách hàng',
-        offer: payload.offer,
-      };
-      setIncomingCall(callData);
-      addCallToPending(callData);
-    });
-
-    wsRef.current.on('call_ring', (event: any) => {
-      const sID = event.payload?.session_id || event.session_id;
-      const cID = event.payload?.caller_id || event.sender_id || 'Khách hàng';
-      const offerData = event.payload?.offer || event.payload;
-      const callData = { session_id: sID, caller_id: cID, offer: offerData, call_id: event.payload?.call_id };
-      if (sID) {
-        setIncomingCall(callData);
-        addCallToPending(callData);
-      }
-    });
-
-    wsRef.current.on('call_offer', (event: any) => {
-      const sID = event.payload?.session_id || event.session_id;
-      const cID = event.payload?.caller_id || event.sender_id || 'Khách hàng';
-      const callData = { session_id: sID, caller_id: cID, offer: event.payload, call_id: event.payload?.call_id };
-      if (sID) {
-        setIncomingCall(callData);
-        addCallToPending(callData);
-      }
-    });
-
-    wsRef.current.on('call_end', async (event: any) => {
-      const payload = event?.payload || event;
-      const endedID = payload?.call_id || payload?.session_id;
-      setIsCallActive(false);
-      setIncomingCall(null);
-      if (endedID) {
-        setPendingCalls((prev) => prev.filter((c) => c.session_id !== endedID && c.call_id !== endedID));
-      } else {
-        setPendingCalls([]);
-      }
-      clearInterval(callTimerRef.current);
-      setCallDuration(0);
-      rtcRef.current = null;
-      onCallEnd();
-    });
-
-    return () => {
-      clearInterval(callTimerRef.current);
-    };
-  }, [wsRef, onCallEnd]);
+    if (!bindListeners()) {
+      const interval = setInterval(() => {
+        if (bindListeners()) {
+          clearInterval(interval);
+        }
+      }, 200);
+      return () => clearInterval(interval);
+    }
+  }, [wsRef, stopCallTimer]);
 
   return {
     rtcRef,
     remoteAudioRef,
     isCallActive,
+    isCallMinimized,
+    setIsCallMinimized,
+    activeCallInfo,
     callDuration,
     isMuted,
     incomingCall,

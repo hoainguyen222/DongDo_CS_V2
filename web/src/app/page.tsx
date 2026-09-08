@@ -147,20 +147,22 @@ export default function CustomerChatPage() {
     });
 
     ws.on('call_end', async () => {
+      const finalDuration = callDurationRef.current;
       setIsCallActive(false);
       setIncomingCall(null);
-      clearInterval(callTimerRef.current);
+      stopCallTimer();
       setCallDuration(0);
+      callDurationRef.current = 0;
       const rtc = rtcRef.current;
       rtcRef.current = null;
       if (rtc) {
-        try { await rtc.endCall(false); } catch (_) {}
+        try { await rtc.endCall(false, finalDuration); } catch (_) {}
       }
     });
 
     return () => {
       ws.disconnect();
-      clearInterval(callTimerRef.current);
+      stopCallTimer();
     };
   }, [guest?.session_id]);
 
@@ -219,11 +221,112 @@ export default function CustomerChatPage() {
     setInputText('');
   };
 
-  const startCallTimer = () => {
-    clearInterval(callTimerRef.current);
-    setCallDuration(0);
-    callTimerRef.current = setInterval(() => setCallDuration((p) => p + 1), 1000);
-  };
+  const callDurationRef = useRef(0);
+
+  const stopCallTimer = useCallback(() => {
+    if (callTimerRef.current) {
+      clearInterval(callTimerRef.current);
+      callTimerRef.current = null;
+    }
+  }, []);
+
+  const saveCallStateToStorage = useCallback((active: boolean, startTimeMs?: number) => {
+    if (typeof window === 'undefined') return;
+    const sessionKey = guest?.session_id ? `active_voice_call_${guest.session_id}` : null;
+    if (!active) {
+      if (sessionKey) sessionStorage.removeItem(sessionKey);
+      sessionStorage.removeItem('active_voice_call_customer');
+    } else {
+      const data = {
+        isCallActive: true,
+        startTime: startTimeMs || (Date.now() - (callDurationRef.current * 1000)),
+        sessionId: guest?.session_id,
+      };
+      if (sessionKey) sessionStorage.setItem(sessionKey, JSON.stringify(data));
+      sessionStorage.setItem('active_voice_call_customer', JSON.stringify(data));
+    }
+  }, [guest?.session_id]);
+
+  const startCallTimer = useCallback(() => {
+    if (callTimerRef.current) {
+      clearInterval(callTimerRef.current);
+    }
+    callTimerRef.current = setInterval(() => {
+      callDurationRef.current += 1;
+      setCallDuration((prev) => prev + 1);
+      saveCallStateToStorage(true);
+    }, 1000);
+  }, [saveCallStateToStorage]);
+
+  // Prevent accidental F5 reload or tab close during active call
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isCallActive) {
+        e.preventDefault();
+        e.returnValue = 'Cuộc gọi đang diễn ra. Bạn có chắc chắn muốn tải lại trang?';
+        return e.returnValue;
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isCallActive]);
+
+  // Auto-restore active call state, popup modal, timer and WebRTC from sessionStorage on page reload (F5)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const sessionKey = guest?.session_id ? `active_voice_call_${guest.session_id}` : null;
+    const savedStr = (sessionKey && sessionStorage.getItem(sessionKey)) || sessionStorage.getItem('active_voice_call_customer');
+
+    if (savedStr) {
+      try {
+        const saved = JSON.parse(savedStr);
+        if (saved.isCallActive && saved.startTime) {
+          const elapsed = Math.floor((Date.now() - saved.startTime) / 1000);
+          if (elapsed >= 0 && elapsed < 1800) {
+            setIsCallActive(true);
+            setCallStatusText('Đang đàm thoại');
+            callDurationRef.current = elapsed;
+            setCallDuration(elapsed);
+            startCallTimer();
+
+            // Attempt WebRTC reconnect if WS is ready
+            if (wsRef.current && guest?.session_id && !rtcRef.current) {
+              const rtc = new WebRTCManager(
+                wsRef.current,
+                guest.session_id,
+                (state: any) => {
+                  if (state === 'connected') {
+                    setCallStatusText('Đang đàm thoại');
+                  } else if (state === 'ended') {
+                    setIsCallActive(false);
+                    setIncomingCall(null);
+                    stopCallTimer();
+                    setCallDuration(0);
+                    callDurationRef.current = 0;
+                    saveCallStateToStorage(false);
+                  }
+                },
+                (stream) => {
+                  if (remoteAudioRef.current) {
+                    remoteAudioRef.current.srcObject = stream;
+                    remoteAudioRef.current.play().catch(() => {});
+                  }
+                }
+              );
+              rtcRef.current = rtc;
+              rtc.startCall().catch(() => {});
+            }
+          } else {
+            if (sessionKey) sessionStorage.removeItem(sessionKey);
+            sessionStorage.removeItem('active_voice_call_customer');
+          }
+        }
+      } catch (_) {
+        if (sessionKey) sessionStorage.removeItem(sessionKey);
+        sessionStorage.removeItem('active_voice_call_customer');
+      }
+    }
+  }, [guest?.session_id, startCallTimer, stopCallTimer, saveCallStateToStorage]);
 
   const formatCallTime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -235,8 +338,10 @@ export default function CustomerChatPage() {
     if (!guest || !wsRef.current) return;
     setIsCallActive(true);
     setCallStatusText('Đang đổ chuông tới CSKH...');
+    callDurationRef.current = 0;
     setCallDuration(0);
-    clearInterval(callTimerRef.current);
+    stopCallTimer();
+    saveCallStateToStorage(true, Date.now());
 
     const rtc = new WebRTCManager(
       wsRef.current,
@@ -248,8 +353,10 @@ export default function CustomerChatPage() {
         } else if (state === 'ended') {
           setIsCallActive(false);
           setIncomingCall(null);
-          clearInterval(callTimerRef.current);
+          stopCallTimer();
           setCallDuration(0);
+          callDurationRef.current = 0;
+          saveCallStateToStorage(false);
         }
       },
       (stream) => {
@@ -263,12 +370,15 @@ export default function CustomerChatPage() {
     await rtc.startCall();
   };
 
-  const handleEndCall = async (broadcast = true) => {
-    const finalDuration = callDuration;
+  const handleEndCall = async () => {
+    const finalDuration = callDurationRef.current;
     setIsCallActive(false);
     setIncomingCall(null);
-    clearInterval(callTimerRef.current);
+    stopCallTimer();
     setCallDuration(0);
+    callDurationRef.current = 0;
+    saveCallStateToStorage(false);
+
     if (rtcRef.current) {
       try { await rtcRef.current.endCall(false, finalDuration); } catch (_) {}
       rtcRef.current = null;
@@ -284,6 +394,9 @@ export default function CustomerChatPage() {
     if (!incomingCall) return;
     setIsCallActive(true);
     setCallStatusText('Đang đàm thoại');
+    callDurationRef.current = 0;
+    setCallDuration(0);
+    saveCallStateToStorage(true, Date.now());
     startCallTimer();
     const rtc = new WebRTCManager(
       wsRef.current!,
@@ -293,8 +406,10 @@ export default function CustomerChatPage() {
         else if (state === 'ended') {
           setIsCallActive(false);
           setIncomingCall(null);
-          clearInterval(callTimerRef.current);
+          stopCallTimer();
           setCallDuration(0);
+          callDurationRef.current = 0;
+          saveCallStateToStorage(false);
         }
       },
       (stream) => {
@@ -305,7 +420,7 @@ export default function CustomerChatPage() {
       }
     );
     rtcRef.current = rtc;
-    if (incomingCall.offer) await rtc.handleOffer(incomingCall.offer);
+    if (incomingCall.offer) await rtc.handleOffer(incomingCall.offer).catch(() => {});
     setIncomingCall(null);
   };
 

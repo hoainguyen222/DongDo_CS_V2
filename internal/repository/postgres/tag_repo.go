@@ -164,12 +164,16 @@ func (r *ChatTagRepo) DetachTag(ctx context.Context, sessionID string, tagID int
 	}
 
 	// Record history
-	_, _ = r.db.Pool.Exec(ctx,
+	return r.LogTagHistory(ctx, sessionID, tagID, tagName, tagColor, "detach", performedBy)
+}
+
+func (r *ChatTagRepo) LogTagHistory(ctx context.Context, sessionID string, tagID int64, tagName, tagColor, action, performedBy string) error {
+	_, err := r.db.Pool.Exec(ctx,
 		`INSERT INTO case_tag_history (session_id, tag_id, tag_name, tag_color, action, performed_by)
-		 VALUES ($1, $2, $3, $4, 'detach', $5)`,
-		sessionID, tagID, tagName, tagColor, performedBy,
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		sessionID, tagID, tagName, tagColor, action, performedBy,
 	)
-	return nil
+	return err
 }
 
 // ============================================================

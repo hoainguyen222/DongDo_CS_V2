@@ -3,8 +3,6 @@ package postgres
 import (
 	"context"
 	"errors"
-	"fmt"
-	"strings"
 
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
 	voicedb "github.com/hoainguyen222/DongDo_CS_V2/internal/repository/sqlcdb/voice"

@@ -513,6 +513,24 @@ func (r *CaseRepo) DeleteAll(ctx context.Context) error {
 	return err
 }
 
+func (r *CaseRepo) SubmitHelper(ctx context.Context, sessionID, helpContent, requestedBy string) error {
+	now := time.Now().Format(time.RFC3339)
+	_, err := r.db.SQLDB.ExecContext(ctx, `UPDATE chat_cases SET updated_at = ? WHERE session_id = ?`, now, sessionID)
+	return err
+}
+
+func (r *CaseRepo) ListHelperCases(ctx context.Context) ([]*domain.ChatCase, error) {
+	return r.List(ctx, "")
+}
+
+func (r *CaseRepo) ProcessHelper(ctx context.Context, sessionID, action, targetUsername, currentLeader string) error {
+	target := targetUsername
+	if action == "take_over" || target == "" {
+		target = currentLeader
+	}
+	return r.Assign(ctx, sessionID, target)
+}
+
 // ============================================================
 // Learning, Settings, Voice & Analytics Repositories
 // ============================================================
@@ -745,3 +763,28 @@ func (r *AnalyticsRepo) GetStats(ctx context.Context) (*domain.AnalyticsStats, e
 	}
 	return &s, nil
 }
+
+// ChatTag Repository (SQLite Stub)
+type ChatTagRepo struct{ db *DB }
+func NewChatTagRepo(db *DB) *ChatTagRepo { return &ChatTagRepo{db: db} }
+
+func (r *ChatTagRepo) ListTags(ctx context.Context) ([]*domain.ChatTag, error) { return []*domain.ChatTag{}, nil }
+func (r *ChatTagRepo) CreateTag(ctx context.Context, tag *domain.ChatTag) (*domain.ChatTag, error) { return tag, nil }
+func (r *ChatTagRepo) UpdateTag(ctx context.Context, id int64, name, description, color string) error { return nil }
+func (r *ChatTagRepo) DeleteTag(ctx context.Context, id int64) error { return nil }
+
+func (r *ChatTagRepo) GetCaseTags(ctx context.Context, sessionID string) ([]*domain.CaseTag, error) { return []*domain.CaseTag{}, nil }
+func (r *ChatTagRepo) AttachTag(ctx context.Context, sessionID string, tagID int64, assignedBy string) error { return nil }
+func (r *ChatTagRepo) DetachTag(ctx context.Context, sessionID string, tagID int64, performedBy string) error { return nil }
+func (r *ChatTagRepo) LogTagHistory(ctx context.Context, sessionID string, tagID int64, tagName, tagColor, action, performedBy string) error { return nil }
+
+func (r *ChatTagRepo) GetAlertConfig(ctx context.Context) (*domain.AlertConfig, error) {
+	return &domain.AlertConfig{ID: 1, IsEnabled: false, TimeoutSeconds: 60, AlertContent: "⚠️ Có tin nhắn khách hàng chờ trả lời! Vui lòng xử lý ngay.", UpdatedAt: time.Now()}, nil
+}
+func (r *ChatTagRepo) UpsertAlertConfig(ctx context.Context, cfg *domain.AlertConfig) error { return nil }
+
+func (r *ChatTagRepo) CreateAlertEvent(ctx context.Context, sessionID string, timeoutSeconds int) (*domain.AlertEvent, error) {
+	return &domain.AlertEvent{ID: 1, SessionID: sessionID, TimeoutSeconds: timeoutSeconds, TriggeredAt: time.Now()}, nil
+}
+func (r *ChatTagRepo) ResolveAlertEvent(ctx context.Context, sessionID string) error { return nil }
+func (r *ChatTagRepo) ListUnresolvedAlertEvents(ctx context.Context) ([]*domain.AlertEvent, error) { return []*domain.AlertEvent{}, nil }
