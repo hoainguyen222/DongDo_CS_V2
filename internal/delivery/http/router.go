@@ -151,6 +151,10 @@ func SetupRouter(
 		admin.DELETE("/api/admin/cases/:session_id", RequireRoles(RoleAdmin, RoleOwner), handler.HandleDeleteCase)
 		admin.POST("/api/admin/cases/clear-all", RequireRoles(RoleAdmin, RoleOwner), handler.HandleClearAllCases)
 
+		// Chat Alert Config - Staff+ can access
+		admin.GET("/api/admin/chat/alert-config", handler.HandleGetAlertConfig)
+		admin.POST("/api/admin/chat/alert-config", RequireRoles(RoleAdmin, RoleOwner), handler.HandleSaveAlertConfig)
+
 		// Customer Profiles Management - Staff+ can access
 		admin.GET("/api/admin/customers", handler.HandleListCustomers)
 		admin.PUT("/api/admin/customers/:guest_id", handler.HandleUpdateCaseCustomer)
@@ -192,8 +196,6 @@ func SetupRouter(
 		admin.DELETE("/api/admin/cases/:session_id/tags/:tag_id", handler.HandleDetachCaseTag)
 
 		// Alert Config & Events
-		admin.GET("/api/admin/chat/alert-config", handler.HandleGetAlertConfig)
-		admin.POST("/api/admin/chat/alert-config", RequireRoles(RoleAdmin, RoleOwner), handler.HandleSaveAlertConfig)
 		admin.POST("/api/admin/chat/alert-events", handler.HandleCreateAlertEvent)
 		admin.POST("/api/admin/chat/alert-events/:session_id/resolve", handler.HandleResolveAlertEvent)
 

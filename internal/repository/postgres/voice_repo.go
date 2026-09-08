@@ -99,9 +99,9 @@ func (r *VoiceCallRepo) SetTranscript(ctx context.Context, id int64, transcript 
 }
 
 func (r *VoiceCallRepo) ListAll(ctx context.Context) ([]*domain.VoiceCall, error) {
-	rows, err := r.db.Voice.ListAllCalls(ctx)
+	rows, err := r.db.Voice.ListAllCallsLegacy(ctx)
 	if err != nil {
-		r.logger.Error().Err(err).Msg("ListAllCalls failed")
+		r.logger.Error().Err(err).Msg("ListAllCallsLegacy failed")
 		return nil, err
 	}
 	list := make([]*domain.VoiceCall, 0, len(rows))
@@ -109,6 +109,48 @@ func (r *VoiceCallRepo) ListAll(ctx context.Context) ([]*domain.VoiceCall, error
 		list = append(list, voiceCallFromRow(row))
 	}
 	return list, nil
+}
+
+// ListPaged returns paginated voice calls, optionally filtered by sessionID.
+// Returns (calls, totalCount, error).
+func (r *VoiceCallRepo) ListPaged(ctx context.Context, sessionID string, page, limit int) ([]*domain.VoiceCall, int64, error) {
+	offset := (page - 1) * limit
+
+	// Get total count
+	var total int64
+	countRow, err := r.db.Voice.CountCalls(ctx, sessionID)
+	if err != nil {
+		r.logger.Error().Err(err).Msg("CountCalls failed")
+		return nil, 0, err
+	}
+	total = countRow
+
+	// Get paginated results
+	rows, err := r.db.Voice.ListAllCalls(ctx, voicedb.ListAllCallsParams{
+		Column1: sessionID,
+		Limit:   int32(limit),
+		Offset:  int32(offset),
+	})
+	if err != nil {
+		r.logger.Error().Err(err).Msg("ListAllCalls failed")
+		return nil, 0, err
+	}
+
+	list := make([]*domain.VoiceCall, 0, len(rows))
+	for _, row := range rows {
+		list = append(list, voiceCallFromRow(row))
+	}
+	return list, total, nil
+}
+
+// Count returns the total count of voice calls, optionally filtered by sessionID.
+func (r *VoiceCallRepo) Count(ctx context.Context, sessionID string) (int64, error) {
+	countRow, err := r.db.Voice.CountCalls(ctx, sessionID)
+	if err != nil {
+		r.logger.Error().Err(err).Msg("CountCalls failed")
+		return 0, err
+	}
+	return countRow, nil
 }
 
 func (r *VoiceCallRepo) GetBySession(ctx context.Context, sessionID string) ([]*domain.VoiceCall, error) {

@@ -65,6 +65,11 @@ export default function AdminLayout({
 
   // Setup WebSocket connection (only for authenticated users on protected paths).
   // MUST be declared before any early `return` to satisfy Rules of Hooks.
+  //
+  // This is the SINGLE source of truth for the `admin_inbox` channel — every
+  // authenticated admin page (inbox, cases/[sessionId], …) relies on this
+  // hook rather than opening its own WSClient. Duplicating `admin_inbox`
+  // connections produced 3× duplicate sockets per admin page.
   useEffect(() => {
     if (!hasHydrated) return;
     if (publicPath) return;
@@ -83,11 +88,40 @@ export default function AdminLayout({
       queryClient.invalidateQueries({ queryKey: ['analytics'] });
       queryClient.invalidateQueries({ queryKey: ['voiceCalls'] });
     });
+
+    // Optimistic update for incoming chat messages: mirror the last-message
+    // preview + last_sender_type into every cached ['cases'] query so the
+    // inbox / sidebar counters update instantly without waiting for the
+    // invalidated refetch to land.
+    ws.on('message', (event: any) => {
+      const payload = event?.payload || event;
+      const sid = payload?.session_id || event?.session_id;
+      const senderType = payload?.sender_type || event?.sender_type || 'guest';
+      const content = payload?.content || event?.content;
+      if (!sid) return;
+
+      const nowISO = new Date().toISOString();
+      queryClient.setQueriesData({ queryKey: ['cases'] }, (oldData: any) => {
+        if (!oldData || !Array.isArray(oldData.cases)) return oldData;
+        const updated = oldData.cases.map((c: any) =>
+          c.session_id === sid
+            ? {
+                ...c,
+                last_message: content ?? c.last_message,
+                last_sender_type: senderType,
+                updated_at: nowISO,
+              }
+            : c
+        );
+        return { ...oldData, cases: updated };
+      });
+      queryClient.invalidateQueries({ queryKey: ['cases'] });
+    });
+
     ws.on('learning_update', () => {
       queryClient.invalidateQueries({ queryKey: ['pendingLearning'] });
       queryClient.invalidateQueries({ queryKey: ['knowledge'] });
     });
-    ws.on('message', () => {});
     ws.on('call_end', () => {
       queryClient.invalidateQueries({ queryKey: ['voiceCalls'] });
     });

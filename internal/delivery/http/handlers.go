@@ -73,16 +73,14 @@ func NewHandler(
 	analyticsUC *usecase.AnalyticsUseCase,
 	partnerUC *usecase.PartnerUseCase,
 	ragUC *usecase.RAGUseCase,
+	tagUC *usecase.ChatTagUseCase,
 	vectorStore domain.VectorStore,
 	embedder domain.Embedder,
 	docsDir string,
 	eventBus domain.EventBus,
-	tagUC ...*usecase.ChatTagUseCase,
 ) *Handler {
 	var tUC *usecase.ChatTagUseCase
-	if len(tagUC) > 0 {
-		tUC = tagUC[0]
-	}
+
 	return &Handler{
 		authUC:      authUC,
 		chatUC:      chatUC,
@@ -401,44 +399,18 @@ func (h *Handler) HandleListCases(c *gin.Context) {
 		limit = 10
 	}
 
-	allCases, err := h.caseUC.ListCases(c.Request.Context(), statusFilter)
+	// Pagination performed in SQL — only the requested page slice + totalCount
+	// are loaded into RAM. Search runs as a parameterized LIKE inside the query.
+	pagedCases, total, err := h.caseUC.ListCasesPaged(c.Request.Context(), statusFilter, search, page, limit)
 	if err != nil {
 		Logger.Error().Err(err).Msg("Failed to list cases")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
 
-	var filtered []*domain.ChatCase
-	if search != "" {
-		sLower := strings.ToLower(search)
-		for _, cs := range allCases {
-			if strings.Contains(strings.ToLower(cs.CustomerName), sLower) ||
-				strings.Contains(strings.ToLower(cs.CustomerPhone), sLower) ||
-				strings.Contains(strings.ToLower(cs.SessionID), sLower) ||
-				strings.Contains(strings.ToLower(cs.LastMessage), sLower) {
-				filtered = append(filtered, cs)
-			}
-		}
-	} else {
-		filtered = allCases
-	}
-
-	total := int64(len(filtered))
 	totalPages := int(math.Ceil(float64(total) / float64(limit)))
 	if totalPages < 1 {
 		totalPages = 1
-	}
-
-	startIndex := (page - 1) * limit
-	var pagedCases []*domain.ChatCase
-	if startIndex < len(filtered) {
-		endIndex := startIndex + limit
-		if endIndex > len(filtered) {
-			endIndex = len(filtered)
-		}
-		pagedCases = filtered[startIndex:endIndex]
-	} else {
-		pagedCases = []*domain.ChatCase{}
 	}
 
 	var aiActiveCount, needsHumanCount, humanActiveCount, resolvedCount int64
@@ -701,44 +673,18 @@ func (h *Handler) HandleListCustomers(c *gin.Context) {
 		limit = 10
 	}
 
-	allCustomers, err := h.caseUC.ListCustomers(c.Request.Context())
+	// Pagination + search done entirely in SQL (COUNT + LIMIT/OFFSET). No
+	// full-table scan on the Go side.
+	pagedCustomers, total, err := h.caseUC.ListCustomersPaged(c.Request.Context(), search, page, limit)
 	if err != nil {
 		Logger.Error().Err(err).Msg("Failed to list customers")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
 
-	var filtered []*domain.CustomerProfile
-	if search != "" {
-		sLower := strings.ToLower(search)
-		for _, cust := range allCustomers {
-			if strings.Contains(strings.ToLower(cust.DisplayName), sLower) ||
-				strings.Contains(strings.ToLower(cust.Phone), sLower) ||
-				strings.Contains(strings.ToLower(cust.GuestID), sLower) ||
-				strings.Contains(strings.ToLower(cust.LastMessage), sLower) {
-				filtered = append(filtered, cust)
-			}
-		}
-	} else {
-		filtered = allCustomers
-	}
-
-	total := int64(len(filtered))
 	totalPages := int(math.Ceil(float64(total) / float64(limit)))
 	if totalPages < 1 {
 		totalPages = 1
-	}
-
-	startIndex := (page - 1) * limit
-	var pagedCustomers []*domain.CustomerProfile
-	if startIndex < len(filtered) {
-		endIndex := startIndex + limit
-		if endIndex > len(filtered) {
-			endIndex = len(filtered)
-		}
-		pagedCustomers = filtered[startIndex:endIndex]
-	} else {
-		pagedCustomers = []*domain.CustomerProfile{}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -795,29 +741,16 @@ func (h *Handler) HandleListPendingLearning(c *gin.Context) {
 		limit = 10
 	}
 
-	items, err := h.learningUC.ListPending(c.Request.Context())
+	pagedItems, total, err := h.learningUC.ListPendingPaged(c.Request.Context(), page, limit)
 	if err != nil {
 		Logger.Error().Err(err).Msg("Failed to list pending learning items")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
 
-	total := int64(len(items))
 	totalPages := int(math.Ceil(float64(total) / float64(limit)))
 	if totalPages < 1 {
 		totalPages = 1
-	}
-
-	startIndex := (page - 1) * limit
-	var pagedItems []*domain.LearningItem
-	if startIndex < len(items) {
-		endIndex := startIndex + limit
-		if endIndex > len(items) {
-			endIndex = len(items)
-		}
-		pagedItems = items[startIndex:endIndex]
-	} else {
-		pagedItems = []*domain.LearningItem{}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -1284,40 +1217,61 @@ func (h *Handler) HandleGetCalls(c *gin.Context) {
 		limit = 10
 	}
 
-	var allCalls []*domain.VoiceCall
+	// When sessionID is provided, fall back to the per-session non-paginated
+	// getter (small result set, bounded by call events for a single session).
+	// Otherwise use the paginated SQL query with COUNT + LIMIT/OFFSET.
+	var pagedCalls []*domain.VoiceCall
+	var total int64
 	var err error
 
 	if sessionID != "" {
-		allCalls, err = h.voiceUC.GetCallsBySession(c.Request.Context(), sessionID)
-	} else {
-		allCalls, err = h.voiceUC.ListAllCalls(c.Request.Context())
+		calls, gErr := h.voiceUC.GetCallsBySession(c.Request.Context(), sessionID)
+		if gErr != nil {
+			Logger.Error().Err(gErr).Msg("Failed to get calls by session")
+			c.JSON(http.StatusInternalServerError, gin.H{"detail": gErr.Error()})
+			return
+		}
+		if calls == nil {
+			calls = []*domain.VoiceCall{}
+		}
+		total = int64(len(calls))
+		totalPages := int(math.Ceil(float64(total) / float64(limit)))
+		if totalPages < 1 {
+			totalPages = 1
+		}
+		startIndex := (page - 1) * limit
+		if startIndex < len(calls) {
+			endIndex := startIndex + limit
+			if endIndex > len(calls) {
+				endIndex = len(calls)
+			}
+			pagedCalls = calls[startIndex:endIndex]
+		} else {
+			pagedCalls = []*domain.VoiceCall{}
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"calls":       pagedCalls,
+			"total":       total,
+			"page":        page,
+			"limit":       limit,
+			"total_pages": totalPages,
+		})
+		return
 	}
 
+	pagedCalls, total, err = h.voiceUC.ListCallsPaged(c.Request.Context(), "", page, limit)
 	if err != nil {
 		Logger.Error().Err(err).Msg("Failed to get calls")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
-	if allCalls == nil {
-		allCalls = []*domain.VoiceCall{}
+	if pagedCalls == nil {
+		pagedCalls = []*domain.VoiceCall{}
 	}
 
-	total := int64(len(allCalls))
 	totalPages := int(math.Ceil(float64(total) / float64(limit)))
 	if totalPages < 1 {
 		totalPages = 1
-	}
-
-	startIndex := (page - 1) * limit
-	var pagedCalls []*domain.VoiceCall
-	if startIndex < len(allCalls) {
-		endIndex := startIndex + limit
-		if endIndex > len(allCalls) {
-			endIndex = len(allCalls)
-		}
-		pagedCalls = allCalls[startIndex:endIndex]
-	} else {
-		pagedCalls = []*domain.VoiceCall{}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -1397,13 +1351,37 @@ func (h *Handler) HandleSendTyping(c *gin.Context) {
 // ============================================================
 
 func (h *Handler) HandleListSystemErrors(c *gin.Context) {
-	errors, err := h.partnerUC.ListSystemErrors(c.Request.Context())
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 50
+	}
+
+	errors, total, err := h.partnerUC.ListSystemErrorsPaged(c.Request.Context(), page, limit)
 	if err != nil {
 		Logger.Error().Err(err).Msg("Failed to list system errors")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"errors": errors})
+	if errors == nil {
+		errors = []*domain.SystemErrorRecord{}
+	}
+
+	totalPages := int(math.Ceil(float64(total) / float64(limit)))
+	if totalPages < 1 {
+		totalPages = 1
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"errors":      errors,
+		"total":       total,
+		"page":        page,
+		"limit":       limit,
+		"total_pages": totalPages,
+	})
 }
 
 func (h *Handler) HandleCreateSystemError(c *gin.Context) {

@@ -40,7 +40,34 @@ LEFT JOIN LATERAL (
     ORDER BY updated_at DESC
     LIMIT 1
 ) c ON true
-ORDER BY g.created_at DESC;
+WHERE (
+    $1::text IS NULL
+    OR LOWER(g.display_name) LIKE '%' || LOWER($1::text) || '%'
+    OR LOWER(g.phone) LIKE '%' || LOWER($1::text) || '%'
+    OR LOWER(g.guest_id::text) LIKE '%' || LOWER($1::text) || '%'
+    OR LOWER(c.last_message) LIKE '%' || LOWER($1::text) || '%'
+)
+ORDER BY g.created_at DESC
+LIMIT $2 OFFSET $3;
+
+-- name: CountGuests :one
+SELECT COUNT(*)
+FROM guests g
+LEFT JOIN LATERAL (
+    SELECT session_id, last_message, status, updated_at
+    FROM chat_cases
+    WHERE guest_id = g.guest_id
+       OR (g.display_name <> '' AND customer_name = g.display_name)
+    ORDER BY updated_at DESC
+    LIMIT 1
+) c ON true
+WHERE (
+    $1::text IS NULL
+    OR LOWER(g.display_name) LIKE '%' || LOWER($1::text) || '%'
+    OR LOWER(g.phone) LIKE '%' || LOWER($1::text) || '%'
+    OR LOWER(g.guest_id::text) LIKE '%' || LOWER($1::text) || '%'
+    OR LOWER(c.last_message) LIKE '%' || LOWER($1::text) || '%'
+);
 
 -- name: SyncActiveCasesForGuest :exec
 UPDATE chat_cases

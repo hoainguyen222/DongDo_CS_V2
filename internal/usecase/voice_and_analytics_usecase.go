@@ -142,6 +142,18 @@ func (uc *VoiceUseCase) ListAllCalls(ctx context.Context) ([]*domain.VoiceCall, 
 	return calls, nil
 }
 
+// ListCallsPaged returns paginated voice calls with optional sessionID filter.
+// Returns (calls, total, error).
+func (uc *VoiceUseCase) ListCallsPaged(ctx context.Context, sessionID string, page, limit int) ([]*domain.VoiceCall, int64, error) {
+	calls, total, err := uc.voiceRepo.ListPaged(ctx, sessionID, page, limit)
+	if err != nil {
+		uc.logger.Error().Err(err).Str("session_id", sessionID).
+			Msg("failed to list voice calls paged")
+		return nil, 0, err
+	}
+	return calls, total, nil
+}
+
 func (uc *VoiceUseCase) SetTranscript(ctx context.Context, id int64, transcript string) error {
 	if err := uc.voiceRepo.SetTranscript(ctx, id, transcript); err != nil {
 		uc.logger.Error().Err(err).Int64("call_id", id).

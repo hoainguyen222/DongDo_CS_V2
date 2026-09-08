@@ -32,6 +32,8 @@ type GuestRepository interface {
 	Create(ctx context.Context, guestID uuid.UUID, displayName, phone string) (*Guest, error)
 	GetByID(ctx context.Context, guestID uuid.UUID) (*Guest, error)
 	List(ctx context.Context) ([]*CustomerProfile, error)
+	ListPaged(ctx context.Context, search string, page, limit int) ([]*CustomerProfile, int64, error)
+	Count(ctx context.Context, search string) (int64, error)
 	Update(ctx context.Context, guestID uuid.UUID, displayName, phone string) error
 	Delete(ctx context.Context, guestID uuid.UUID) error
 }
@@ -50,6 +52,8 @@ type MessageRepository interface {
 type CaseRepository interface {
 	Upsert(ctx context.Context, sessionID string, guestID *uuid.UUID, customerName, customerPhone string, status CaseStatus, assignedCS, lastMessage string) (*ChatCase, error)
 	List(ctx context.Context, statusFilter CaseStatus) ([]*ChatCase, error)
+	ListPaged(ctx context.Context, statusFilter CaseStatus, search string, page, limit int) ([]*ChatCase, int64, error)
+	Count(ctx context.Context, statusFilter CaseStatus, search string) (int64, error)
 	Get(ctx context.Context, sessionID string) (*ChatCase, error)
 	Assign(ctx context.Context, sessionID, csUsername string) error
 	Resolve(ctx context.Context, sessionID, csUsername, resolutionNote string) error
@@ -63,6 +67,8 @@ type CaseRepository interface {
 type LearningRepository interface {
 	Add(ctx context.Context, sessionID, question, answer string, status LearnStatus, createdBy string) (*LearningItem, error)
 	ListByStatus(ctx context.Context, status LearnStatus) ([]*LearningItem, error)
+	ListPaged(ctx context.Context, status LearnStatus, page, limit int) ([]*LearningItem, int64, error)
+	CountByStatus(ctx context.Context, status LearnStatus) (int64, error)
 	Get(ctx context.Context, id int64) (*LearningItem, error)
 	UpdateContent(ctx context.Context, id int64, question, answer string) error
 	MarkStatus(ctx context.Context, id int64, status LearnStatus, approvedBy string) error
@@ -81,6 +87,8 @@ type VoiceCallRepository interface {
 	End(ctx context.Context, id int64, durationSeconds int, recordingURL string) error
 	SetTranscript(ctx context.Context, id int64, transcript string) error
 	GetBySession(ctx context.Context, sessionID string) ([]*VoiceCall, error)
+	ListPaged(ctx context.Context, sessionID string, page, limit int) ([]*VoiceCall, int64, error)
+	Count(ctx context.Context, sessionID string) (int64, error)
 	ListAll(ctx context.Context) ([]*VoiceCall, error)
 	GetByID(ctx context.Context, id int64) (*VoiceCall, error)
 	Delete(ctx context.Context, id int64) error
@@ -95,11 +103,11 @@ type AnalyticsRepository interface {
 // ============================================================
 
 type KnowledgeDocument struct {
-	ID        string                 `json:"id"`
-	Content   string                 `json:"content"`
-	Score     float32                `json:"score"`
-	Source    string                 `json:"source"`
-	Metadata  map[string]interface{} `json:"metadata"`
+	ID       string                 `json:"id"`
+	Content  string                 `json:"content"`
+	Score    float32                `json:"score"`
+	Source   string                 `json:"source"`
+	Metadata map[string]interface{} `json:"metadata"`
 }
 
 type VectorStore interface {
@@ -160,7 +168,7 @@ type PartnerRepository interface {
 	GetDashboardKpi(ctx context.Context, startDate, endDate time.Time) (*DashboardKpiSummary, error)
 	GetDashboardAutomationTrend(ctx context.Context, startDate, endDate time.Time) ([]*DashboardAutomationTrendDaily, error)
 	GetRecentCompletedChats(ctx context.Context, limit, offset int) ([]*ChatCase, error)
-	
+
 	// Quick Templates
 	ListQuickTemplates(ctx context.Context) ([]*QuickTemplate, error)
 	CreateQuickTemplate(ctx context.Context, t *QuickTemplate) (*QuickTemplate, error)
@@ -189,7 +197,8 @@ type PartnerRepository interface {
 
 	// System Errors (Auto-cleanup > 30 days)
 	CreateSystemError(ctx context.Context, errRecord *SystemErrorRecord) (*SystemErrorRecord, error)
-	ListSystemErrors(ctx context.Context) ([]*SystemErrorRecord, error)
+	ListSystemErrors(ctx context.Context, page, limit int) ([]*SystemErrorRecord, int64, error)
+	CountSystemErrors(ctx context.Context) (int64, error)
 	MarkSystemErrorHandled(ctx context.Context, id string) error
 }
 
@@ -211,4 +220,3 @@ type ChatTagRepository interface {
 	ResolveAlertEvent(ctx context.Context, sessionID string) error
 	ListUnresolvedAlertEvents(ctx context.Context) ([]*AlertEvent, error)
 }
-

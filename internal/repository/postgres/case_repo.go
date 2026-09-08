@@ -176,7 +176,94 @@ func (r *CaseRepo) List(ctx context.Context, statusFilter domain.CaseStatus) ([]
 	return out, nil
 }
 
-// Assign moves the case to HUMAN_CS_ACTIVE, sets active_assigned_cs, and appends to assigned_cs_history.
+// ListPaged returns paginated chat cases with optional status filter and search.
+// Returns (items, totalCount, error).
+func (r *CaseRepo) ListPaged(ctx context.Context, statusFilter domain.CaseStatus, search string, page, limit int) ([]*domain.ChatCase, int64, error) {
+	offset := (page - 1) * limit
+
+	// Convert statusFilter to string for SQL query (empty string = no filter)
+	statusStr := ""
+	if statusFilter != "" {
+		statusStr = string(statusFilter)
+	}
+
+	// Empty search is treated as a no-filter (the SQL handles '' via LIKE).
+	// Get total count
+	total, err := r.db.Chat.CountCases(ctx, chatdb.CountCasesParams{
+		Column1: statusStr,
+		Column2: search,
+	})
+	if err != nil {
+		r.logger.Error().Err(err).Msg("CountCases failed")
+		return nil, 0, err
+	}
+
+	// Get paginated results
+	rows, err := r.db.Chat.ListCasesPaged(ctx, chatdb.ListCasesPagedParams{
+		Column1: statusStr,
+		Column2: search,
+		Limit:   int32(limit),
+		Offset:  int32(offset),
+	})
+	if err != nil {
+		r.logger.Error().Err(err).Msg("ListCasesPaged failed")
+		return nil, 0, err
+	}
+
+	out := make([]*domain.ChatCase, 0, len(rows))
+	for i := range rows {
+		out = append(out, listCasesPagedRowToDomain(&rows[i]))
+	}
+	return out, total, nil
+}
+
+// Count returns the total count of cases matching the given filters.
+func (r *CaseRepo) Count(ctx context.Context, statusFilter domain.CaseStatus, search string) (int64, error) {
+	// Convert statusFilter to string for SQL query (empty string = no filter)
+	statusStr := ""
+	if statusFilter != "" {
+		statusStr = string(statusFilter)
+	}
+
+	countRow, err := r.db.Chat.CountCases(ctx, chatdb.CountCasesParams{
+		Column1: statusStr,
+		Column2: search,
+	})
+	if err != nil {
+		r.logger.Error().Err(err).Msg("CountCases failed")
+		return 0, err
+	}
+	return countRow, nil
+}
+
+// listCasesPagedRowToDomain converts a ListCasesPagedRow to domain entity.
+func listCasesPagedRowToDomain(c *chatdb.ListCasesPagedRow) *domain.ChatCase {
+	out := &domain.ChatCase{
+		ID:            c.ID,
+		SessionID:     c.SessionID,
+		CustomerName:  c.CustomerName,
+		CustomerPhone: c.CustomerPhone,
+		Status:        c.Status,
+		CreatedAt:     c.CreatedAt,
+		UpdatedAt:     c.UpdatedAt,
+	}
+	if c.GuestID.Valid {
+		id := uuid.UUID(c.GuestID.Bytes)
+		out.GuestID = &id
+	}
+	if c.AssignedCs.Valid {
+		out.AssignedCS = c.AssignedCs.String
+	}
+	if c.LastMessage.Valid {
+		out.LastMessage = c.LastMessage.String
+	}
+	if c.ResolutionNote.Valid {
+		out.ResolutionNote = c.ResolutionNote.String
+	}
+	return out
+}
+
+// Assign moves the case to HUMAN_CS_ACTIVE and records the assigned CS username.
 func (r *CaseRepo) Assign(ctx context.Context, sessionID, csUsername string) error {
 	query := `
 		UPDATE chat_cases

@@ -93,13 +93,69 @@ File `config.agents.json` chứa thông tin các agent users để test với be
   "agent_users": [
     {
       "id": "agent_001",
-      "username": "cskh_agent_1",
-      "password": "AgentPass123!",
-      "full_name": "Nguyễn Văn Agent 1",
+      "username": "cskh01",
+      "password": "DongDo@123",
+      "full_name": "CSKH Agent 01",
       "role": "cs_agent",
+      "enabled": true
+    },
+    {
+      "id": "agent_002",
+      "username": "cskh02",
+      "password": "DongDo@123",
+      "full_name": "CSKH Agent 02",
+      "role": "cs_agent",
+      "enabled": true
+    },
+    {
+      "id": "agent_003",
+      "username": "cskh03",
+      "password": "DongDo@123",
+      "full_name": "CSKH Agent 03",
+      "role": "cs_agent",
+      "enabled": true
+    },
+    {
+      "id": "agent_004",
+      "username": "cskh04",
+      "password": "DongDo@123",
+      "full_name": "CSKH Agent 04",
+      "role": "cs_agent",
+      "enabled": true
+    },
+    {
+      "id": "agent_005",
+      "username": "cskh05",
+      "password": "DongDo@123",
+      "full_name": "CSKH Agent 05",
+      "role": "cs_agent",
+      "enabled": true
+    },
+    {
+      "id": "admin_001",
+      "username": "admin",
+      "password": "DongDo@2026",
+      "full_name": "System Admin",
+      "role": "owner",
       "enabled": true
     }
   ]
+}
+```
+
+### Test với Guest Users (Không cần đăng nhập)
+
+Guest users có thể chat trực tiếp mà không cần đăng ký tài khoản:
+- Chỉ cần nhập **Tên** + **SĐT** (tùy chọn)
+- Hệ thống sẽ tạo session tạm thời
+- Có thể test nhiều chatbox cùng lúc để đo độ chịu tải
+
+```typescript
+// Ví dụ: Đăng ký guest nhanh
+POST /guest/register
+{
+  "display_name": "Khách hàng A",
+  "phone": "0909123456"  // optional
 }
 ```
 
@@ -247,28 +303,84 @@ export REQUEST_TIMEOUT=30000
 export AI_RESPONSE_TIMEOUT=60000
 ```
 
-## 📊 Kết Quả Test
+## 📊 Kết Quả Test Thực Tế
 
-Sau khi chạy test, kết quả sẽ được hiển thị trên console:
-
+### Quick Limit Test (5-10 phút)
 ```
-🔷🔷🔷  CSKH Automation Test Suite  🔷🔷🔷
-
-[TEST INFO] Starting automation tests...
-[TEST INFO] API Base: http://localhost:8080
-
-============================================================
-  Guest Concurrency
-============================================================
-  Status: ✅ PASSED
-  Duration: 12.34s
-  Metrics:
-    - Total: 10
-    - Success: 10
-    - Failed: 0
+✅ 7/7 tests passed
+- Concurrent Connections: 500 users OK
+- Message Throughput: 50/50 OK
+- Burst Traffic: 100/100 OK
+- AI Response: 3031ms OK
+- Sustained Load: 100/100 OK
+- Database Load: 1ms avg OK
 ```
 
-Báo cáo JSON sẽ được lưu vào folder `reports/`.
+### Realistic Load Test (3 phút)
+```
+Users: 10
+Duration: 3.1 minutes
+Messages: 289 (100% success)
+Errors: 0
+Throughput: 1.54 msg/sec
+✅ PASS - System ready
+```
+
+### Production Load Test Scenarios
+
+| Scenario | Users | Duration | Use Case |
+|----------|-------|----------|----------|
+| `smoke` | 5 | 2 min | Quick validation |
+| `light` | 20 | 5 min | Development testing |
+| `medium` | 50 | 10 min | Staging deployment |
+| `heavy` | 100 | 15 min | Pre-production |
+| `stress` | 200 | 20 min | Find limits |
+| `peak_hours` | 80 | 30 min | Simulate peak traffic |
+| `rush_hour` | 150 | 5 min | Sudden spike |
+| `full` | 200 | 60 min | Full production simulation |
+
+### Production Readiness Checklist
+
+Trước khi deploy, đảm bảo:
+
+- [x] Quick limit test passed
+- [x] Realistic load test passed (10 users, 3 min)
+- [ ] Medium load test passed (50 users, 10 min)
+- [ ] Stress test find limits known
+- [ ] AI response time < 5s (P95)
+- [ ] Error rate < 1%
+- [ ] No memory leaks after 30 phút
+- [ ] Database connections stable
+
+### Report Output
+
+```json
+{
+  "test_run": {
+    "scenario": "Medium Load",
+    "duration_minutes": 10
+  },
+  "results": {
+    "connections": {
+      "successful": 50,
+      "avg_time_ms": 245
+    },
+    "messages": {
+      "sent": 500,
+      "failed": 2
+    },
+    "ai": {
+      "avg_response_ms": 2500,
+      "p95_response_ms": 4500
+    },
+    "api": {
+      "avg_response_ms": 120,
+      "p95_response_ms": 350
+    }
+  },
+  "verdict": "PASS"
+}
+```
 
 ## 🎨 Ví Dụ Output
 
@@ -336,6 +448,125 @@ Các metrics được thu thập:
 - Nên chạy test trong môi trường development/staging trước
 - Monitoring server resources khi chạy load test
 - Test reports được lưu tự động vào folder `reports/`
+
+## 📝 Production Load Test (Trước Khi Deploy)
+
+### Quick Limit Test - Test Nhanh Giới Hạn (5-10 phút)
+
+```bash
+# Chạy test nhanh để check giới hạn hệ thống
+npx ts-node quick-limit-test.ts
+```
+
+**Các bài test bao gồm:**
+- Concurrent connections (50 users đồng thời)
+- Message throughput (50 messages)
+- Burst traffic (100 messages liên tục)
+- AI response time
+- Sustained load (20 users × 5 messages)
+- Database load (50 queries)
+- Find max connections
+
+### Production Load Test - Test Toàn Diện
+
+```bash
+# Smoke test (2 phút)
+npx ts-node production-load-test.ts --scenario smoke
+
+# Light load (5 phút)
+npx ts-node production-load-test.ts --scenario light
+
+# Medium load (10 phút) - Khuyến nghị
+npx ts-node production-load-test.ts --scenario medium --verbose
+
+# Heavy load (15 phút)
+npx ts-node production-load-test.ts --scenario heavy
+
+# Peak hours simulation (30 phút)
+npx ts-node production-load-test.ts --scenario peak_hours
+
+# Rush hour spike (5 phút)
+npx ts-node production-load-test.ts --scenario rush_hour
+
+# Stress test - Tìm giới hạn (20-30 phút)
+npx ts-node production-load-test.ts --scenario stress --progressive
+
+# Full production (60 phút)
+npx ts-node production-load-test.ts --scenario full --report
+```
+
+### Tùy Chỉnh Test
+
+```bash
+# Custom số users và thời gian
+npx ts-node production-load-test.ts --users 100 --duration 15m
+
+# Custom ramp-up time
+npx ts-node production-load-test.ts --users 50 --ramp 60s
+
+# Custom messages per user
+npx ts-node production-load-test.ts --users 30 --messages 20
+
+# Tạo report JSON
+npx ts-node production-load-test.ts --scenario medium --report
+```
+
+### Kịch Bản Test Thực Tế
+
+| Scenario | Users | Duration | Use Case |
+|----------|-------|----------|----------|
+| `smoke` | 5 | 2 min | Quick validation |
+| `light` | 20 | 5 min | Development testing |
+| `medium` | 50 | 10 min | Staging deployment |
+| `heavy` | 100 | 15 min | Pre-production |
+| `stress` | 200 | 20 min | Find limits |
+| `peak_hours` | 80 | 30 min | Simulate peak traffic |
+| `rush_hour` | 150 | 5 min | Sudden spike |
+| `full` | 200 | 60 min | Full production simulation |
+
+### Production Readiness Checklist
+
+Trước khi deploy, đảm bảo:
+
+- [ ] Smoke test passed (2 phút)
+- [ ] Medium load test passed (10-15 phút)
+- [ ] Stress test find limits known
+- [ ] AI response time < 5s (P95)
+- [ ] Error rate < 1%
+- [ ] No memory leaks after 30 phút
+- [ ] Database connections stable
+
+### Report Output
+
+```json
+{
+  "test_run": {
+    "scenario": "Medium Load",
+    "duration_minutes": 10
+  },
+  "results": {
+    "connections": {
+      "successful": 50,
+      "avg_time_ms": 245
+    },
+    "messages": {
+      "sent": 500,
+      "failed": 2
+    },
+    "ai": {
+      "avg_response_ms": 2500,
+      "p95_response_ms": 4500
+    },
+    "api": {
+      "avg_response_ms": 120,
+      "p95_response_ms": 350
+    }
+  },
+  "verdict": "PASS"
+}
+```
+
+---
 
 ## 📧 Liên Hệ
 
