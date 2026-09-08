@@ -76,6 +76,7 @@ export const api = {
   submitCaseHelper: casesApi.submitHelper,
   getHelperCases: casesApi.getHelperCases,
   processHelperCase: casesApi.processHelper,
+  updateHelperStatus: casesApi.updateHelperStatus,
 
   // Customers
   getCustomers: (

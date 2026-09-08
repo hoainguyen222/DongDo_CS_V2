@@ -79,13 +79,11 @@ func NewHandler(
 	docsDir string,
 	eventBus domain.EventBus,
 ) *Handler {
-	var tUC *usecase.ChatTagUseCase
-
 	return &Handler{
 		authUC:      authUC,
 		chatUC:      chatUC,
 		caseUC:      caseUC,
-		tagUC:       tUC,
+		tagUC:       tagUC,
 		learningUC:  learningUC,
 		voiceUC:     voiceUC,
 		analyticsUC: analyticsUC,
@@ -573,7 +571,8 @@ func (h *Handler) HandleSubmitCaseHelper(c *gin.Context) {
 }
 
 func (h *Handler) HandleListHelperCases(c *gin.Context) {
-	cases, err := h.caseUC.ListHelperCases(c.Request.Context())
+	statusFilter := c.Query("status")
+	cases, err := h.caseUC.ListHelperCases(c.Request.Context(), statusFilter)
 	if err != nil {
 		Logger.Error().Err(err).Msg("Failed to list helper cases")
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
@@ -609,6 +608,30 @@ func (h *Handler) HandleProcessHelperCase(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Đã xử lý yêu cầu hỗ trợ thành công"})
+}
+
+type UpdateHelperStatusRequest struct {
+	Status string `json:"status" binding:"required"`
+}
+
+func (h *Handler) HandleUpdateHelperStatus(c *gin.Context) {
+	sessionID := c.Param("session_id")
+	user := c.MustGet("user").(*domain.SessionUser)
+
+	var req UpdateHelperStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "Trạng thái không hợp lệ"})
+		return
+	}
+
+	err := h.caseUC.UpdateHelperStatus(c.Request.Context(), sessionID, req.Status, user.Username)
+	if err != nil {
+		Logger.Error().Str("session_id", sessionID).Err(err).Msg("Failed to update helper status")
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Đã cập nhật trạng thái hỗ trợ thành công"})
 }
 
 func (h *Handler) HandleDeleteCase(c *gin.Context) {

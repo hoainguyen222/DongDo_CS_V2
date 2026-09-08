@@ -60,8 +60,9 @@ type CaseRepository interface {
 	Delete(ctx context.Context, sessionID string) error
 	DeleteAll(ctx context.Context) error
 	SubmitHelper(ctx context.Context, sessionID, helpContent, requestedBy string) error
-	ListHelperCases(ctx context.Context) ([]*ChatCase, error)
+	ListHelperCases(ctx context.Context, helperStatusFilter string) ([]*ChatCase, error)
 	ProcessHelper(ctx context.Context, sessionID, action, targetUsername, currentLeader string) error
+	UpdateHelperStatus(ctx context.Context, sessionID, status string) error
 }
 
 type LearningRepository interface {

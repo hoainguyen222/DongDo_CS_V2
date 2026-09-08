@@ -133,6 +133,7 @@ type ChatCase struct {
 	HelpContent       string     `json:"help_content"`
 	HelpRequestedBy   string     `json:"help_requested_by"`
 	HelpRequestedAt   *time.Time `json:"help_requested_at,omitempty"`
+	HelperStatus      string     `json:"helper_status"`
 	LastMessage       string     `json:"last_message"`
 	LastSenderType    SenderType `json:"last_sender_type"`
 	ResolutionNote    string     `json:"resolution_note"`

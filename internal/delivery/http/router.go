@@ -171,6 +171,7 @@ func SetupRouter(
 		admin.POST("/api/admin/cases/:session_id/helper", handler.HandleSubmitCaseHelper)
 		admin.GET("/api/admin/cases/helper-cases", handler.HandleListHelperCases)
 		admin.POST("/api/admin/cases/:session_id/process-helper", RequireRoles(RoleLeader, RoleAdmin, RoleOwner), handler.HandleProcessHelperCase)
+		admin.PUT("/api/admin/cases/:session_id/helper-status", handler.HandleUpdateHelperStatus)
 		admin.PUT("/api/admin/cases/:session_id/customer", handler.HandleUpdateCaseCustomer)
 		admin.DELETE("/api/admin/cases/:session_id", RequireRoles(RoleAdmin, RoleOwner), handler.HandleDeleteCase)
 		admin.POST("/api/admin/cases/clear-all", RequireRoles(RoleAdmin, RoleOwner), handler.HandleClearAllCases)

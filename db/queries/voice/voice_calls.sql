@@ -33,14 +33,14 @@ ORDER BY created_at DESC;
 SELECT id, session_id, caller_type, caller_id, callee_type, callee_id,
        status, duration_seconds, recording_url, transcript, created_at, ended_at
 FROM voice_calls
-WHERE ($1::text IS NULL OR session_id = $1::text)
+WHERE ($1::text IS NULL OR $1::text = '' OR session_id = $1::text)
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
 
 -- name: CountCalls :one
 SELECT COUNT(*)
 FROM voice_calls
-WHERE ($1::text IS NULL OR session_id = $1::text);
+WHERE ($1::text IS NULL OR $1::text = '' OR session_id = $1::text);
 
 -- name: ListAllCallsLegacy :many
 SELECT id, session_id, caller_type, caller_id, callee_type, callee_id,

@@ -87,6 +87,7 @@ export default function AdminLayout({
       queryClient.invalidateQueries({ queryKey: ['customers'] });
       queryClient.invalidateQueries({ queryKey: ['analytics'] });
       queryClient.invalidateQueries({ queryKey: ['voiceCalls'] });
+      queryClient.invalidateQueries({ queryKey: ['helperCases'] });
     });
 
     // Optimistic update for incoming chat messages: mirror the last-message

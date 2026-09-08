@@ -265,9 +265,10 @@ export default function CaseDetailPage() {
   const isStaff = user?.role === 'cskh';
   const activeCS = currentCase?.active_assigned_cs || currentCase?.assigned_cs || '';
   const historyCS = currentCase?.assigned_cs_history || [];
+  const isClosed = currentCase?.status === 'RESOLVED';
 
   // Single Active Handler Restriction
-  const isActiveHandler = !isStaff || !activeCS || activeCS === user?.username || activeCS === user?.full_name;
+  const isActiveHandler = !isClosed && (!isStaff || !activeCS || activeCS === user?.username || activeCS === user?.full_name);
 
   // Close Case Permission Restriction
   const canCloseCase =
@@ -332,7 +333,7 @@ export default function CaseDetailPage() {
 
   const handleSendReply = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!replyText.trim() || !currentCase || isSendingReply) return;
+    if (isClosed || !replyText.trim() || !currentCase || isSendingReply) return;
     const content = replyText.trim();
     setReplyText('');
     setIsSendingReply(true);
@@ -397,6 +398,10 @@ export default function CaseDetailPage() {
 
   const handleDeleteCase = () => {
     if (!currentCase) return;
+    if (isStaff) {
+      addToast({ title: 'Không có quyền', message: 'Tài khoản Staff không có quyền xóa hội thoại.', variant: 'error' });
+      return;
+    }
     openConfirm({
       title: 'Xóa case?',
       message: 'Xóa ca hỗ trợ này khỏi Live CS Inbox?',
@@ -618,168 +623,194 @@ export default function CaseDetailPage() {
             </div>
 
             <div className={styles.actionBtnGroup}>
-              <div style={{ position: 'relative' }}>
-                <button
-                  onClick={() => setShowTagPicker(!showTagPicker)}
-                  className={styles.secondaryBtn}
+              {isClosed ? (
+                <div
                   style={{
-                    background: showTagPicker ? 'rgba(99,102,241,0.2)' : undefined,
-                    borderColor: showTagPicker ? '#6366f1' : undefined,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '6px 14px',
+                    background: 'rgba(16, 185, 129, 0.15)',
+                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                    borderRadius: '20px',
+                    color: '#34d399',
+                    fontSize: '12px',
+                    fontWeight: 600,
                   }}
                 >
-                  <TagIcon size={14} />
-                  <span>Tag ({attachedTags.length})</span>
-                </button>
-
-                {showTagPicker && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: '100%',
-                      right: 0,
-                      marginTop: '6px',
-                      background: '#0f172a',
-                      border: '1px solid rgba(255,255,255,0.15)',
-                      borderRadius: '10px',
-                      padding: '10px',
-                      width: '220px',
-                      zIndex: 100,
-                      boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
-                    }}
-                  >
-                    <div
+                  <CheckCircle2 size={14} />
+                  <span>Hội thoại đã đóng</span>
+                </div>
+              ) : (
+                <>
+                  <div style={{ position: 'relative' }}>
+                    <button
+                      onClick={() => setShowTagPicker(!showTagPicker)}
+                      className={styles.secondaryBtn}
                       style={{
-                        fontSize: '12px',
-                        fontWeight: 700,
-                        color: '#94a3b8',
-                        marginBottom: '8px',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
+                        background: showTagPicker ? 'rgba(99,102,241,0.2)' : undefined,
+                        borderColor: showTagPicker ? '#6366f1' : undefined,
                       }}
                     >
-                      <span>Gắn / Gỡ Tag</span>
-                      <X
-                        size={14}
-                        style={{ cursor: 'pointer' }}
-                        onClick={() => setShowTagPicker(false)}
-                      />
-                    </div>
+                      <TagIcon size={14} />
+                      <span>Tag ({attachedTags.length})</span>
+                    </button>
 
-                    {allTags.length === 0 ? (
-                      <div style={{ fontSize: '12px', color: '#64748b', textAlign: 'center', padding: '12px 0' }}>
-                        Chưa có tag nào.
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto' }}>
-                        {allTags.map((tag) => {
-                          const isAttached = attachedTags.some((at) => at.tag_id === tag.id);
-                          return (
-                            <button
-                              key={tag.id}
-                              onClick={async () => {
-                                try {
-                                  if (isAttached) {
-                                    await detachTagMutation.mutateAsync({
-                                      sessionId: sessionId,
-                                      tagId: tag.id,
-                                    });
-                                    addToast({ title: `Đã gỡ tag [${tag.name}]`, variant: 'success' });
-                                  } else {
-                                    await attachTagMutation.mutateAsync({
-                                      sessionId: sessionId,
-                                      tagId: tag.id,
-                                    });
-                                    addToast({ title: `Đã gắn tag [${tag.name}]`, variant: 'success' });
-                                  }
-                                } catch (err: any) {
-                                  addToast({ title: err.message || 'Thao tác tag thất bại', variant: 'error' });
-                                }
-                              }}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                padding: '6px 10px',
-                                borderRadius: '6px',
-                                border: '1px solid rgba(255,255,255,0.06)',
-                                background: isAttached ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.03)',
-                                cursor: 'pointer',
-                                fontSize: '12px',
-                                color: '#fff',
-                                transition: 'all 0.15s',
-                              }}
-                            >
-                              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span
-                                  style={{
-                                    width: '8px',
-                                    height: '8px',
-                                    borderRadius: '50%',
-                                    background: tag.color,
-                                    display: 'inline-block',
+                    {showTagPicker && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: '100%',
+                          right: 0,
+                          marginTop: '6px',
+                          background: '#0f172a',
+                          border: '1px solid rgba(255,255,255,0.15)',
+                          borderRadius: '10px',
+                          padding: '10px',
+                          width: '220px',
+                          zIndex: 100,
+                          boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            color: '#94a3b8',
+                            marginBottom: '8px',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <span>Gắn / Gỡ Tag</span>
+                          <X
+                            size={14}
+                            style={{ cursor: 'pointer' }}
+                            onClick={() => setShowTagPicker(false)}
+                          />
+                        </div>
+
+                        {allTags.length === 0 ? (
+                          <div style={{ fontSize: '12px', color: '#64748b', textAlign: 'center', padding: '12px 0' }}>
+                            Chưa có tag nào.
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto' }}>
+                            {allTags.map((tag) => {
+                              const isAttached = attachedTags.some((at) => at.tag_id === tag.id);
+                              return (
+                                <button
+                                  key={tag.id}
+                                  onClick={async () => {
+                                    try {
+                                      if (isAttached) {
+                                        await detachTagMutation.mutateAsync({
+                                          sessionId: sessionId,
+                                          tagId: tag.id,
+                                        });
+                                        addToast({ title: `Đã gỡ tag [${tag.name}]`, variant: 'success' });
+                                      } else {
+                                        await attachTagMutation.mutateAsync({
+                                          sessionId: sessionId,
+                                          tagId: tag.id,
+                                        });
+                                        addToast({ title: `Đã gắn tag [${tag.name}]`, variant: 'success' });
+                                      }
+                                    } catch (err: any) {
+                                      addToast({ title: err.message || 'Thao tác tag thất bại', variant: 'error' });
+                                    }
                                   }}
-                                />
-                                {tag.name}
-                              </span>
-                              {isAttached && <span style={{ color: '#6366f1', fontWeight: 700 }}>✓</span>}
-                            </button>
-                          );
-                        })}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    padding: '6px 10px',
+                                    borderRadius: '6px',
+                                    border: '1px solid rgba(255,255,255,0.06)',
+                                    background: isAttached ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.03)',
+                                    cursor: 'pointer',
+                                    fontSize: '12px',
+                                    color: '#fff',
+                                    transition: 'all 0.15s',
+                                  }}
+                                >
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span
+                                      style={{
+                                        width: '8px',
+                                        height: '8px',
+                                        borderRadius: '50%',
+                                        background: tag.color,
+                                        display: 'inline-block',
+                                      }}
+                                    />
+                                    {tag.name}
+                                  </span>
+                                  {isAttached && <span style={{ color: '#6366f1', fontWeight: 700 }}>✓</span>}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
-                )}
-              </div>
 
-              <button
-                onClick={() => {
-                  setHelperNote('');
-                  setShowHelperModal(true);
-                }}
-                className={styles.secondaryBtn}
-                style={{ borderColor: '#f59e0b', color: '#f59e0b' }}
-                title="Yêu cầu Cấp Quản Lý hỗ trợ hội thoại này"
-              >
-                <LifeBuoy size={14} />
-                <span>Helper</span>
-              </button>
+                  <button
+                    onClick={() => {
+                      setHelperNote('');
+                      setShowHelperModal(true);
+                    }}
+                    className={styles.secondaryBtn}
+                    style={{ borderColor: '#f59e0b', color: '#f59e0b' }}
+                    title="Yêu cầu Cấp Quản Lý hỗ trợ hội thoại này"
+                  >
+                    <LifeBuoy size={14} />
+                    <span>Helper</span>
+                  </button>
 
-              {currentCase?.status !== 'HUMAN_CS_ACTIVE' && (
-                <button
-                  onClick={handleTakeCase}
-                  disabled={takeCaseMutation.isPending}
-                  className={styles.primaryBtn}
-                >
-                  <UserCheck size={14} />
-                  <span>Tiếp Nhận</span>
-                </button>
+                  {currentCase?.status !== 'HUMAN_CS_ACTIVE' && (
+                    <button
+                      onClick={handleTakeCase}
+                      disabled={takeCaseMutation.isPending}
+                      className={styles.primaryBtn}
+                    >
+                      <UserCheck size={14} />
+                      <span>Tiếp Nhận</span>
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => {
+                      if (!canCloseCase) {
+                        addToast({
+                          title: 'Không có quyền đóng case',
+                          message: 'Chỉ tài khoản tiếp nhận hội thoại mới được quyền đóng case này.',
+                          variant: 'error',
+                        });
+                        return;
+                      }
+                      openResolveModal();
+                    }}
+                    className={styles.secondaryBtn}
+                    style={{
+                      opacity: canCloseCase ? 1 : 0.5,
+                      cursor: canCloseCase ? 'pointer' : 'not-allowed',
+                    }}
+                    title={canCloseCase ? 'Giải quyết & Đóng case' : 'Chỉ tài khoản tiếp nhận mới được quyền đóng case'}
+                  >
+                    <CheckCircle2 size={14} />
+                    <span>Đóng Case</span>
+                  </button>
+
+                  {!isStaff && (
+                    <button onClick={handleDeleteCase} className={styles.deleteBtn} title="Xóa case">
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </>
               )}
-              <button
-                onClick={() => {
-                  if (!canCloseCase) {
-                    addToast({
-                      title: 'Không có quyền đóng case',
-                      message: 'Chỉ tài khoản tiếp nhận hội thoại mới được quyền đóng case này.',
-                      variant: 'error',
-                    });
-                    return;
-                  }
-                  openResolveModal();
-                }}
-                className={styles.secondaryBtn}
-                style={{
-                  opacity: canCloseCase ? 1 : 0.5,
-                  cursor: canCloseCase ? 'pointer' : 'not-allowed',
-                }}
-                title={canCloseCase ? 'Giải quyết & Đóng case' : 'Chỉ tài khoản tiếp nhận mới được quyền đóng case'}
-              >
-                <CheckCircle2 size={14} />
-                <span>Đóng Case</span>
-              </button>
-              <button onClick={handleDeleteCase} className={styles.deleteBtn}>
-                <Trash2 size={14} />
-              </button>
             </div>
           </div>
 
@@ -828,8 +859,28 @@ export default function CaseDetailPage() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Single Active Handler Warning Banner */}
-          {!isActiveHandler && (
+          {/* Warning Banner: Closed Case OR Single Active Handler */}
+          {isClosed ? (
+            <div
+              style={{
+                margin: '0 16px 8px 16px',
+                padding: '10px 14px',
+                background: 'rgba(148, 163, 184, 0.12)',
+                border: '1px solid rgba(148, 163, 184, 0.25)',
+                borderRadius: '8px',
+                color: '#94a3b8',
+                fontSize: '13px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}
+            >
+              <Lock size={16} />
+              <span>
+                Hội thoại này đã được đóng. Khung chat đã khóa ở chế độ chỉ xem (Read-only).
+              </span>
+            </div>
+          ) : !isActiveHandler ? (
             <div
               style={{
                 margin: '0 16px 8px 16px',
@@ -849,7 +900,7 @@ export default function CaseDetailPage() {
                 Đoạn chat đang do <strong>{activeCS}</strong> xử lý. Bạn chỉ có quyền xem.
               </span>
             </div>
-          )}
+          ) : null}
 
           {/* Reply Box */}
           <form onSubmit={handleSendReply} className={styles.replyForm}>
@@ -857,28 +908,30 @@ export default function CaseDetailPage() {
               <textarea
                 rows={2}
                 value={replyText}
-                disabled={!isActiveHandler}
+                disabled={isClosed || !isActiveHandler}
                 onChange={(e) => setReplyText(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey && isActiveHandler) {
+                  if (e.key === 'Enter' && !e.shiftKey && !isClosed && isActiveHandler) {
                     e.preventDefault();
                     handleSendReply(e);
                   }
                 }}
                 placeholder={
-                  isActiveHandler
-                    ? 'Nhập tin nhắn phản hồi... (Enter để gửi)'
-                    : `Đoạn chat đang do ${activeCS} xử lý (Read-only)`
+                  isClosed
+                    ? 'Hội thoại đã đóng (Read-only)'
+                    : isActiveHandler
+                      ? 'Nhập tin nhắn phản hồi... (Enter để gửi)'
+                      : `Đoạn chat đang do ${activeCS} xử lý (Read-only)`
                 }
                 className={styles.replyInput}
                 style={{
-                  opacity: isActiveHandler ? 1 : 0.6,
-                  cursor: isActiveHandler ? 'text' : 'not-allowed',
+                  opacity: isClosed || !isActiveHandler ? 0.6 : 1,
+                  cursor: isClosed || !isActiveHandler ? 'not-allowed' : 'text',
                 }}
               />
               <button
                 type="submit"
-                disabled={!isActiveHandler || !replyText.trim() || isSendingReply}
+                disabled={isClosed || !isActiveHandler || !replyText.trim() || isSendingReply}
                 className={styles.replySend}
               >
                 <Send size={16} />

@@ -61,6 +61,8 @@ export default function CustomerChatPage() {
   const [inputText, setInputText] = useState('');
   const [isAiTyping, setIsAiTyping] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [caseStatus, setCaseStatus] = useState<string>('AI_ACTIVE');
+  const isClosed = caseStatus === 'RESOLVED';
 
   const [isCallActive, setIsCallActive] = useState(false);
   const [incomingCall, setIncomingCall] = useState<{ sender_id: string; offer: any } | null>(null);
@@ -86,8 +88,16 @@ export default function CustomerChatPage() {
       .then(({ api }) => api.getHistory(guest.session_id))
       .then((data) => {
         if (data?.messages) setMessages(data.messages);
+        if (data?.status) setCaseStatus(data.status);
       })
       .catch(() => {});
+
+    ws.on('case_update', (event: any) => {
+      const payload = event?.payload || event;
+      if (payload?.status) {
+        setCaseStatus(payload.status);
+      }
+    });
 
     ws.on('message', (event: any) => {
       setIsAiTyping(false);
@@ -183,6 +193,7 @@ export default function CustomerChatPage() {
 
   const handleSendMessage = useCallback(
     async (textToSend?: string) => {
+      if (isClosed) return;
       const content = (textToSend || inputText).trim();
       if (!content || !guest || isSending) return;
 
@@ -212,7 +223,7 @@ export default function CustomerChatPage() {
         setIsSending(false);
       }
     },
-    [inputText, guest, isSending, addToast]
+    [isClosed, inputText, guest, isSending, addToast]
   );
 
   const handleNewChat = () => {
@@ -683,18 +694,44 @@ export default function CustomerChatPage() {
       </main>
 
       <footer className={styles.footer}>
+        {isClosed && (
+          <div
+            style={{
+              margin: '0 auto 8px auto',
+              padding: '8px 14px',
+              maxWidth: '600px',
+              background: 'rgba(148, 163, 184, 0.12)',
+              border: '1px solid rgba(148, 163, 184, 0.25)',
+              borderRadius: '8px',
+              color: '#94a3b8',
+              fontSize: '12px',
+              textAlign: 'center',
+            }}
+          >
+            🔒 Phiên hỗ trợ này đã được đóng. Bạn chỉ có quyền xem lại lịch sử trò chuyện.
+          </div>
+        )}
         <form
-          onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }}
+          onSubmit={(e) => { e.preventDefault(); if (!isClosed) handleSendMessage(); }}
           className={styles.inputRow}
         >
           <input
             type="text"
             value={inputText}
+            disabled={isClosed}
             onChange={(e) => setInputText(e.target.value)}
-            placeholder="Nhập câu hỏi của bạn về Hàng hóa phái sinh, DDP Invest..."
+            placeholder={
+              isClosed
+                ? 'Hội thoại đã đóng. Cảm ơn bạn đã liên hệ!'
+                : 'Nhập câu hỏi của bạn về Hàng hóa phái sinh, DDP Invest...'
+            }
             className={styles.chatInput}
+            style={{
+              opacity: isClosed ? 0.6 : 1,
+              cursor: isClosed ? 'not-allowed' : 'text',
+            }}
           />
-          <button type="submit" disabled={!inputText.trim() || isSending} className={styles.sendBtn}>
+          <button type="submit" disabled={isClosed || !inputText.trim() || isSending} className={styles.sendBtn}>
             <Send style={{ width: 16, height: 16 }} />
           </button>
         </form>
