@@ -54,11 +54,14 @@ type Config struct {
 	// Worker Configuration
 	Worker WorkerConfig
 
+	// Observability (Prometheus, pprof, business metrics)
+	Observability ObservabilityConfig
+
 	// Backward compatibility aliases (deprecated, use Worker.* instead)
-	DBBatchSize      int // deprecated: use Worker.DB.BatchSize
-	DBBatchInterval  int // deprecated: use Worker.DB.FlushInterval (ms)
-	RetryMaxCount    int // deprecated: use Worker.Retry.MaxRetries
-	RetryClaimAfter  int // deprecated: use Worker.Retry.ClaimAfter (seconds)
+	DBBatchSize     int // deprecated: use Worker.DB.BatchSize
+	DBBatchInterval int // deprecated: use Worker.DB.FlushInterval (ms)
+	RetryMaxCount   int // deprecated: use Worker.Retry.MaxRetries
+	RetryClaimAfter int // deprecated: use Worker.Retry.ClaimAfter (seconds)
 }
 
 // WorkerConfig holds all worker-related configuration for Redis Streams consumers.
@@ -85,14 +88,30 @@ type WorkerConfig struct {
 	RedisPool RedisPoolConfig
 }
 
+// ObservabilityConfig wires the optional metrics/pprof sidecars.
+//
+// All three servers bind to dedicated internal addresses so they never have to
+// share the public Gin router. Defaults are intentionally on a non-public
+// address (127.0.0.1) so a misconfigured production deploy will not expose
+// pprof to the internet unless the operator explicitly opts in via env.
+type ObservabilityConfig struct {
+	MetricsEnabled        bool
+	MetricsAddr           string // e.g. "127.0.0.1:9090" — Prometheus scrape target
+	PprofEnabled          bool
+	PprofAddr             string        // e.g. "127.0.0.1:6060" — go tool pprof target
+	BusinessEnabled       bool          // poll DB + Redis for business gauges
+	BusinessPollInterval  time.Duration // how often to refresh gauges
+	RedisPoolStatsEnabled bool          // export go-redis pool gauges
+}
+
 // WorkerDBConfig holds database batch worker configuration.
 type WorkerDBConfig struct {
-	BatchSize      int           // Number of messages to batch before flushing to DB
-	FlushInterval  time.Duration // How often to flush the batch regardless of size
-	MaxBufferSize  int           // Safety cap to prevent memory issues
-	ReadCount      int64         // Messages to read from stream per iteration
-	BlockTimeout   time.Duration // How long to block on XREADGROUP
-	RetryDelay     time.Duration // Delay before retrying after error
+	BatchSize     int           // Number of messages to batch before flushing to DB
+	FlushInterval time.Duration // How often to flush the batch regardless of size
+	MaxBufferSize int           // Safety cap to prevent memory issues
+	ReadCount     int64         // Messages to read from stream per iteration
+	BlockTimeout  time.Duration // How long to block on XREADGROUP
+	RetryDelay    time.Duration // Delay before retrying after error
 }
 
 // WorkerWSConfig holds WebSocket worker configuration.
@@ -119,8 +138,8 @@ type WorkerRetryConfig struct {
 
 // StreamsConfig holds Redis Streams configuration.
 type StreamsConfig struct {
-	MaxLen     int64  // Maximum stream length (approximate trimming)
-	ApproxTrim bool   // Use approximate trimming (faster)
+	MaxLen     int64 // Maximum stream length (approximate trimming)
+	ApproxTrim bool  // Use approximate trimming (faster)
 }
 
 // HTTPConfig holds HTTP server timeouts.
@@ -132,12 +151,12 @@ type HTTPConfig struct {
 
 // RedisPoolConfig holds Redis connection pool configuration.
 type RedisPoolConfig struct {
-	PoolSize     int
-	MinIdleConns int
-	DialTimeout  time.Duration
-	ReadTimeout  time.Duration
-	WriteTimeout time.Duration
-	PoolTimeout  time.Duration
+	PoolSize        int
+	MinIdleConns    int
+	DialTimeout     time.Duration
+	ReadTimeout     time.Duration
+	WriteTimeout    time.Duration
+	PoolTimeout     time.Duration
 	ConnMaxLifetime time.Duration
 }
 
@@ -152,8 +171,8 @@ type WebSocketConfig struct {
 
 // StateConfig holds Redis state TTL configuration.
 type StateConfig struct {
-	TypingTTL      time.Duration // Typing indicator TTL
-	AIExecTTL      time.Duration // AI execution lock TTL
+	TypingTTL time.Duration // Typing indicator TTL
+	AIExecTTL time.Duration // AI execution lock TTL
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -244,8 +263,18 @@ func Load() *Config {
 			ReadTimeout:     time.Duration(getEnvInt("REDIS_READ_TIMEOUT_SEC", 3)) * time.Second,
 			WriteTimeout:    time.Duration(getEnvInt("REDIS_WRITE_TIMEOUT_SEC", 3)) * time.Second,
 			PoolTimeout:     time.Duration(getEnvInt("REDIS_POOL_TIMEOUT_SEC", 5)) * time.Second,
-			ConnMaxLifetime: time.Duration(getEnvInt("REDIS_CONN_MAX_LIFETIME_SEC", 3600)) * time.Second,
+			ConnMaxLifetime: time.Duration(getEnvInt("REDIS_CONN_LIFETIME_SEC", 3600)) * time.Second,
 		},
+	}
+
+	cfg.Observability = ObservabilityConfig{
+		MetricsEnabled:        getEnvBool("METRICS_ENABLED", true),
+		MetricsAddr:           getEnv("METRICS_ADDR", "127.0.0.1:9090"),
+		PprofEnabled:          getEnvBool("PPROF_ENABLED", true),
+		PprofAddr:             getEnv("PPROF_ADDR", "127.0.0.1:6060"),
+		BusinessEnabled:       getEnvBool("BUSINESS_METRICS_ENABLED", true),
+		BusinessPollInterval:  time.Duration(getEnvInt("BUSINESS_METRICS_POLL_SEC", 15)) * time.Second,
+		RedisPoolStatsEnabled: getEnvBool("REDIS_POOL_METRICS_ENABLED", true),
 	}
 
 	// Backward compatibility aliases for existing code

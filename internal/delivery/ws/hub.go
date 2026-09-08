@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
+	"github.com/hoainguyen222/DongDo_CS_V2/internal/observability"
 	"github.com/rs/zerolog"
 )
 
@@ -52,6 +53,12 @@ func (h *Hub) Run() {
 			h.sessions[client.sessionID][client] = true
 			h.mu.Unlock()
 
+			// Counter increments are goroutine-safe (atomic) so calling
+			// them outside the lock is fine.
+			if ws := observability.WS(); ws != nil {
+				ws.OnConnect(client.userRole)
+			}
+
 		case client := <-h.unregister:
 			h.mu.Lock()
 			if clients, ok := h.sessions[client.sessionID]; ok {
@@ -74,10 +81,40 @@ func (h *Hub) Run() {
 			}
 			h.mu.Unlock()
 
+			if ws := observability.WS(); ws != nil {
+				ws.OnDisconnect(client.userRole)
+			}
+
 		case event := <-h.broadcast:
 			h.BroadcastToSession(event.SessionID, event)
 		}
 	}
+}
+
+// OnlineStaffCount returns the number of currently connected WebSocket
+// clients with a staff-equivalent role (cskh/admin/leader/owner). Excludes
+// guests and unknown roles so the gauge does not include customers.
+//
+// The implementation walks the sessions map under RLock; the cost is
+// proportional to the number of currently connected clients, which is
+// bounded and small (thousands at worst).
+func (h *Hub) OnlineStaffCount() int {
+	if h == nil {
+		return 0
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	seen := make(map[string]struct{})
+	for _, clients := range h.sessions {
+		for client := range clients {
+			r := client.userRole
+			if r == "cskh" || r == "admin" || r == "leader" || r == "owner" {
+				seen[client.userID] = struct{}{}
+			}
+		}
+	}
+	return len(seen)
 }
 
 // BroadcastToSession sends an event to all clients connected to a given session ID or channel.
@@ -101,11 +138,17 @@ func (h *Hub) BroadcastToSessionExcept(sessionID string, event *domain.WSEvent, 
 			}
 			select {
 			case client.send <- event:
+				if ws := observability.WS(); ws != nil {
+					ws.OnMessageSent(string(event.Type), sessionID)
+				}
 			default:
 				h.logger.Warn().
 					Str("event_type", string(event.Type)).
 					Str("session_id", sessionID).
 					Msg("WS hub: client buffer full, dropping event")
+				if ws := observability.WS(); ws != nil {
+					ws.OnBufferedDrop(sessionID)
+				}
 			}
 		}
 	}
@@ -127,11 +170,17 @@ func (h *Hub) BroadcastToSessionExcept(sessionID string, event *domain.WSEvent, 
 					}
 					select {
 					case adminClient.send <- event:
+						if ws := observability.WS(); ws != nil {
+							ws.OnMessageSent(string(event.Type), "admin_inbox")
+						}
 					default:
 						h.logger.Warn().
 							Str("event_type", string(event.Type)).
 							Str("target", "admin_inbox").
 							Msg("WS hub: admin_inbox buffer full, dropping event")
+						if ws := observability.WS(); ws != nil {
+							ws.OnBufferedDrop("admin_inbox")
+						}
 					}
 				}
 			}

@@ -1,0 +1,19 @@
+# Grafana dashboard provider configuration.
+#
+# All dashboards shipped under /var/lib/grafana/dashboards are picked up
+# automatically. The actual JSON files live in
+# monitoring/grafana/dashboards/*.json and are mounted into the container.
+
+apiVersion: 1
+
+providers:
+  - name: 'dongdo-cs'
+    orgId: 1
+    folder: 'DongDo CS'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 60
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

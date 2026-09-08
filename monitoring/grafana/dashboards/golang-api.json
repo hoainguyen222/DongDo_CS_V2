@@ -1,0 +1,119 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}},
+      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 0},
+      "id": 1,
+      "title": "Request Rate (req/s)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum by(route) (rate(http_requests_total[1m]))",
+          "legendFormat": "{{route}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percent"}},
+      "gridPos": {"h": 6, "w": 8, "x": 8, "y": 0},
+      "id": 2,
+      "title": "Error Rate (5xx %)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum by(route) (rate(http_requests_total{status=~\"5..\"}[5m])) / sum by(route) (rate(http_requests_total[5m])) * 100",
+          "legendFormat": "{{route}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}},
+      "gridPos": {"h": 6, "w": 8, "x": 16, "y": 0},
+      "id": 3,
+      "title": "Latency P50 / P95 / P99",
+      "type": "timeseries",
+      "targets": [
+        {"expr": "histogram_quantile(0.5, sum by(le) (rate(http_request_duration_seconds_bucket[5m])))", "legendFormat": "p50", "refId": "A"},
+        {"expr": "histogram_quantile(0.95, sum by(le) (rate(http_request_duration_seconds_bucket[5m])))", "legendFormat": "p95", "refId": "B"},
+        {"expr": "histogram_quantile(0.99, sum by(le) (rate(http_request_duration_seconds_bucket[5m])))", "legendFormat": "p99", "refId": "C"}
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 6},
+      "id": 4,
+      "title": "Goroutines",
+      "type": "timeseries",
+      "targets": [
+        {"expr": "go_goroutines", "legendFormat": "goroutines", "refId": "A"}
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "bytes"}},
+      "gridPos": {"h": 6, "w": 8, "x": 8, "y": 6},
+      "id": 5,
+      "title": "Heap In-Use / Allocated",
+      "type": "timeseries",
+      "targets": [
+        {"expr": "go_memstats_heap_inuse_bytes", "legendFormat": "heap inuse", "refId": "A"},
+        {"expr": "go_memstats_heap_alloc_bytes", "legendFormat": "heap alloc", "refId": "B"},
+        {"expr": "go_memstats_sys_bytes", "legendFormat": "sys", "refId": "C"}
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}},
+      "gridPos": {"h": 6, "w": 8, "x": 16, "y": 6},
+      "id": 6,
+      "title": "GC Duration (P99)",
+      "type": "timeseries",
+      "targets": [
+        {"expr": "histogram_quantile(0.99, sum by(le) (rate(go_gc_duration_seconds_bucket[5m])))", "legendFormat": "p99 gc", "refId": "A"},
+        {"expr": "rate(go_gc_duration_seconds_sum[5m])", "legendFormat": "gc time/s", "refId": "B"}
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 12},
+      "id": 7,
+      "title": "Process CPU / Memory",
+      "type": "timeseries",
+      "targets": [
+        {"expr": "rate(process_cpu_seconds_total[5m])", "legendFormat": "cpu (cores/s)", "refId": "A"},
+        {"expr": "process_resident_memory_bytes", "legendFormat": "rss", "refId": "B"}
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 12},
+      "id": 8,
+      "title": "In-Flight Requests",
+      "type": "timeseries",
+      "targets": [
+        {"expr": "http_requests_in_flight", "legendFormat": "inflight", "refId": "A"}
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "tags": ["golang", "api", "dongdo-cs"],
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
+  "title": "DongDo CS — Golang API",
+  "uid": "dongdo-golang",
+  "version": 1
+}

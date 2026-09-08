@@ -1,0 +1,83 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 0},
+      "id": 1,
+      "title": "DB Connections (acquired / idle / total)",
+      "type": "timeseries",
+      "targets": [
+        {"expr": "db_pool_acquired", "legendFormat": "acquired", "refId": "A"},
+        {"expr": "db_pool_idle", "legendFormat": "idle", "refId": "B"},
+        {"expr": "db_pool_total", "legendFormat": "total", "refId": "C"}
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "gridPos": {"h": 6, "w": 6, "x": 6, "y": 0},
+      "id": 2,
+      "title": "Postgres Active Connections (pg_stat_activity)",
+      "type": "timeseries",
+      "targets": [
+        {"expr": "pg_stat_activity_count", "legendFormat": "{{datname}}", "refId": "A"},
+        {"expr": "pg_settings_max_connections", "legendFormat": "max_connections", "refId": "B"}
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}},
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 0},
+      "id": 3,
+      "title": "Top Queries — Mean Exec Time (s)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "topk(10, pg_stat_statements_mean_exec_time_seconds / 1000)",
+          "legendFormat": "{{queryid}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 6},
+      "id": 4,
+      "title": "Top Queries — Calls/sec",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "topk(10, rate(pg_stat_statements_calls_total[1m]))",
+          "legendFormat": "{{queryid}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 6},
+      "id": 5,
+      "title": "Locks — Waiting Queries",
+      "type": "timeseries",
+      "targets": [
+        {"expr": "pg_locks_count", "legendFormat": "{{mode}}", "refId": "A"}
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "tags": ["postgres", "database", "dongdo-cs"],
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
+  "title": "DongDo CS — Database (Postgres)",
+  "uid": "dongdo-database",
+  "version": 1
+}

@@ -1,0 +1,228 @@
+# Prometheus alerting rules for DongDo CS.
+#
+# These rules are deliberately conservative — they only fire on conditions
+# that need a human's attention in production. Slack/Telegram integrations
+# are NOT wired by default; Alertmanager is configured but ships with a
+# stub webhook that just logs alerts. Operators can extend the
+# `alertmanager.yml` route block to add a real receiver.
+
+groups:
+  # -----------------------------------------------------------------
+  # 1. Infrastructure (host)
+  # -----------------------------------------------------------------
+  - name: infrastructure
+    interval: 30s
+    rules:
+      - alert: HostHighCPU
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 5m
+        labels:
+          severity: warning
+          component: host
+        annotations:
+          summary: "Host CPU > 85% for 5m"
+          description: "CPU usage on {{ $labels.instance }} is {{ $value | printf \"%.1f\" }}%."
+
+      - alert: HostHighMemory
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+          component: host
+        annotations:
+          summary: "Host memory > 90%"
+          description: "Memory pressure on {{ $labels.instance }}: {{ $value | printf \"%.1f\" }}% used."
+
+      - alert: HostDiskFillingUp
+        expr: (1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes)) * 100 > 85
+        for: 10m
+        labels:
+          severity: warning
+          component: host
+        annotations:
+          summary: "Disk > 85% full on {{ $labels.instance }}:{{ $labels.mountpoint }}"
+          description: "Run `df -h {{ $labels.mountpoint }}` to investigate."
+
+      - alert: HostDiskWillFillIn4h
+        expr: predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"}[6h], 4 * 3600) < 0
+        for: 30m
+        labels:
+          severity: critical
+          component: host
+        annotations:
+          summary: "Disk on {{ $labels.instance }}:{{ $labels.mountpoint }} will fill in 4h"
+
+  # -----------------------------------------------------------------
+  # 2. Go application runtime
+  # -----------------------------------------------------------------
+  - name: golang_runtime
+    interval: 30s
+    rules:
+      - alert: GoGoroutineLeak
+        # 10k goroutines is way more than this workload should have in steady
+        # state; sustained growth suggests a leak.
+        expr: go_goroutines > 10000
+        for: 10m
+        labels:
+          severity: warning
+          component: server
+        annotations:
+          summary: "Goroutine count > 10000"
+          description: "Investigate via `go tool pprof http://localhost:6060/debug/pprof/goroutine`."
+
+      - alert: GoHeapGrowing
+        expr: process_resident_memory_bytes > 1.5 * 1024 * 1024 * 1024
+        for: 15m
+        labels:
+          severity: warning
+          component: server
+        annotations:
+          summary: "Process RSS > 1.5 GB"
+          description: "Heap dump: `curl localhost:6060/debug/pprof/heap > heap.out` then `go tool pprof heap.out`."
+
+      - alert: GoGCPauseLong
+        expr: histogram_quantile(0.99, sum by(le) (rate(go_gc_duration_seconds_bucket[5m]))) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          component: server
+        annotations:
+          summary: "P99 GC pause > 100ms"
+
+  # -----------------------------------------------------------------
+  # 3. HTTP API
+  # -----------------------------------------------------------------
+  - name: http_api
+    interval: 30s
+    rules:
+      - alert: HTTPErrorRateHigh
+        expr: |
+          sum by(route) (rate(http_requests_total{status=~"5.."}[5m]))
+            /
+          sum by(route) (rate(http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: server
+        annotations:
+          summary: "5xx rate > 5% on route {{ $labels.route }}"
+
+      - alert: HTTPLatencyP95High
+        expr: |
+          histogram_quantile(0.95,
+            sum by(le, route) (rate(http_request_duration_seconds_bucket[5m]))
+          ) > 1
+        for: 10m
+        labels:
+          severity: warning
+          component: server
+        annotations:
+          summary: "P95 latency > 1s on route {{ $labels.route }}"
+
+  # -----------------------------------------------------------------
+  # 4. WebSocket / Chat
+  # -----------------------------------------------------------------
+  - name: websocket
+    interval: 30s
+    rules:
+      - alert: WSConnectionsDroppingFast
+        # Compare active connections now to 5m ago.
+        expr: |
+          (ws_connected_clients - avg_over_time(ws_connected_clients[5m] offset 5m)) < -50
+        for: 5m
+        labels:
+          severity: warning
+          component: server
+        annotations:
+          summary: "WebSocket connections dropped by > 50 in 5m"
+
+      - alert: WSBufferDrops
+        expr: rate(ws_buffered_dropped_total[5m]) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          component: server
+        annotations:
+          summary: "WS events dropped at > 0.5/s (channel={{ $labels.channel }})"
+          description: "Client send buffer is full; check client-side backpressure."
+
+      - alert: WSErrorsSpike
+        expr: rate(ws_errors_total[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: server
+        annotations:
+          summary: "WS error rate > 1/s (phase={{ $labels.phase }})"
+
+      - alert: CustomersWaitingLong
+        expr: chat_customer_waiting > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: business
+        annotations:
+          summary: "> 5 customers waiting to be picked up by CSKH"
+
+  # -----------------------------------------------------------------
+  # 5. Database
+  # -----------------------------------------------------------------
+  - name: postgres
+    interval: 30s
+    rules:
+      - alert: PostgresConnectionsHigh
+        expr: |
+          (pg_stat_activity_count / pg_settings_max_connections) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: postgres
+        annotations:
+          summary: "Postgres connections > 80% of max_connections"
+
+      - alert: PostgresSlowQuery
+        # pg_stat_statements exposes total_exec_time / calls as mean_exec_time
+        # in seconds; > 2s is "slow" for an OLTP workload.
+        expr: |
+          (pg_stat_statements_mean_exec_time_seconds / 1000) > 2
+        for: 10m
+        labels:
+          severity: warning
+          component: postgres
+        annotations:
+          summary: "A query averages > 2s (calls={{ $labels.calls }}, queryid={{ $labels.queryid }})"
+
+  # -----------------------------------------------------------------
+  # 6. Redis
+  # -----------------------------------------------------------------
+  - name: redis
+    interval: 30s
+    rules:
+      - alert: RedisMemoryHigh
+        expr: (redis_memory_used_bytes / redis_memory_max_bytes) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: redis
+        annotations:
+          summary: "Redis memory > 80% of maxmemory"
+
+      - alert: RedisStreamLag
+        # If pending messages grow beyond 1000, the consumers are falling
+        # behind. This catches AI worker outages quickly.
+        expr: redis_stream_pending > 1000
+        for: 5m
+        labels:
+          severity: warning
+          component: redis
+        annotations:
+          summary: "Redis stream {{ $labels.stream }} (group {{ $labels.group }}) pending > 1000"
+
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: redis
+        annotations:
+          summary: "Redis exporter cannot reach Redis"

@@ -1,0 +1,118 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 0},
+      "id": 1,
+      "title": "Active WS Connections (by role)",
+      "type": "timeseries",
+      "targets": [
+        {"expr": "ws_active_connections", "legendFormat": "{{role}}", "refId": "A"}
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "gridPos": {"h": 6, "w": 6, "x": 6, "y": 0},
+      "id": 2,
+      "title": "Connected Clients (total)",
+      "type": "timeseries",
+      "targets": [
+        {"expr": "ws_connected_clients", "legendFormat": "total", "refId": "A"}
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "gridPos": {"h": 6, "w": 6, "x": 12, "y": 0},
+      "id": 3,
+      "title": "Customers Waiting",
+      "type": "timeseries",
+      "targets": [
+        {"expr": "chat_customer_waiting", "legendFormat": "waiting", "refId": "A"}
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "gridPos": {"h": 6, "w": 6, "x": 18, "y": 0},
+      "id": 4,
+      "title": "Agent States (online / available / busy)",
+      "type": "timeseries",
+      "targets": [
+        {"expr": "agent_online", "legendFormat": "online", "refId": "A"},
+        {"expr": "agent_available", "legendFormat": "available", "refId": "B"},
+        {"expr": "agent_busy", "legendFormat": "busy", "refId": "C"}
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}},
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 6},
+      "id": 5,
+      "title": "Messages Received (per type)",
+      "type": "timeseries",
+      "targets": [
+        {"expr": "sum by(event_type) (rate(ws_messages_received_total[1m]))", "legendFormat": "rx {{event_type}}", "refId": "A"}
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}},
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 6},
+      "id": 6,
+      "title": "Messages Sent (per type)",
+      "type": "timeseries",
+      "targets": [
+        {"expr": "sum by(event_type) (rate(ws_messages_sent_total[1m]))", "legendFormat": "tx {{event_type}}", "refId": "A"}
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}},
+      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 12},
+      "id": 7,
+      "title": "WS Errors",
+      "type": "timeseries",
+      "targets": [
+        {"expr": "sum by(phase) (rate(ws_errors_total[5m]))", "legendFormat": "{{phase}}", "refId": "A"}
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}},
+      "gridPos": {"h": 6, "w": 8, "x": 8, "y": 12},
+      "id": 8,
+      "title": "Buffered Drops",
+      "type": "timeseries",
+      "targets": [
+        {"expr": "sum by(channel) (rate(ws_buffered_dropped_total[5m]))", "legendFormat": "{{channel}}", "refId": "A"}
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "gridPos": {"h": 6, "w": 8, "x": 16, "y": 12},
+      "id": 9,
+      "title": "Active Conversations (by status)",
+      "type": "timeseries",
+      "targets": [
+        {"expr": "chat_active_conversations", "legendFormat": "{{status}}", "refId": "A"}
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "tags": ["websocket", "chat", "dongdo-cs"],
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
+  "title": "DongDo CS — Chat / WebSocket",
+  "uid": "dongdo-chat",
+  "version": 1
+}

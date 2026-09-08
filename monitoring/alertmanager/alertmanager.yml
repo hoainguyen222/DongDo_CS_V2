@@ -1,0 +1,42 @@
+# Alertmanager configuration for DongDo CS.
+#
+# This is a deliberately minimal starting point. It ships with one route and
+# one receiver (`null`) so the stack is valid out of the box. To wire Slack,
+# Telegram, PagerDuty or OpsGenie, add a receiver block and reference it from
+# the route's `receiver` field.
+#
+# SECURITY: Alertmanager's web UI is bound to the monitoring network only.
+# Do NOT publish port 9093 to the public internet.
+
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: 'null'
+  group_by: ['alertname', 'component', 'severity']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    # Critical alerts get repeated every 1h so they don't fall off the radar.
+    - matchers:
+        - severity = "critical"
+      receiver: 'null'
+      repeat_interval: 1h
+
+receivers:
+  - name: 'null'
+    webhook_configs:
+      # Replace with a real Slack/PagerDuty/Telegram webhook URL when ready.
+      # The empty URL makes Alertmanager drop the alert after resolve_timeout
+      # but still surfaces it in the Alertmanager UI (port 9093).
+      - url: 'http://localhost:5001/null'
+        send_resolved: true
+
+# inhibit_rules let a higher-severity alert suppress related noise.
+inhibit_rules:
+  - source_matchers:
+      - alertname = "HostDown"
+    target_matchers:
+      - severity = "warning"
+    equal: ['instance']

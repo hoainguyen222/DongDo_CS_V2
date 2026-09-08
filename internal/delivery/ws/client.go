@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
+	"github.com/hoainguyen222/DongDo_CS_V2/internal/observability"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/usecase"
 	"github.com/rs/zerolog"
 )
@@ -89,8 +90,16 @@ func (c *Client) ReadPump() {
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				c.logger.Warn().Err(err).Msg("WS read error - unexpected close")
+				if ws := observability.WS(); ws != nil {
+					ws.OnError("read")
+				}
 			}
 			break
+		}
+
+		if ws := observability.WS(); ws != nil {
+			// We don't know the event type until we unmarshal, so we defer
+			// the OnMessageReceived call until the switch below.
 		}
 
 		var incoming struct {
@@ -103,7 +112,14 @@ func (c *Client) ReadPump() {
 
 		if err := json.Unmarshal(message, &incoming); err != nil {
 			c.logger.Warn().Err(err).Msg("Invalid WS JSON message")
+			if ws := observability.WS(); ws != nil {
+				ws.OnError("json")
+			}
 			continue
+		}
+
+		if ws := observability.WS(); ws != nil {
+			ws.OnMessageReceived(string(incoming.Type))
 		}
 
 		// Message sending has been migrated to REST API.
@@ -227,9 +243,13 @@ func (c *Client) WritePump() {
 				return
 			}
 
+			writeStart := time.Now()
 			w, err := c.conn.NextWriter(websocket.TextMessage)
 			if err != nil {
 				c.logger.Error().Err(err).Msg("WS NextWriter error")
+				if ws := observability.WS(); ws != nil {
+					ws.OnError("write")
+				}
 				return
 			}
 
@@ -245,13 +265,22 @@ func (c *Client) WritePump() {
 
 			if err := w.Close(); err != nil {
 				c.logger.Error().Err(err).Msg("WS write batch close error")
+				if ws := observability.WS(); ws != nil {
+					ws.OnError("write")
+				}
 				return
+			}
+			if ws := observability.WS(); ws != nil {
+				ws.ObserveWriteDuration(string(event.Type), time.Since(writeStart).Seconds())
 			}
 
 		case <-ticker.C:
 			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				c.logger.Error().Err(err).Msg("WS Ping failed")
+				if ws := observability.WS(); ws != nil {
+					ws.OnError("write")
+				}
 				return
 			}
 		}
@@ -288,6 +317,9 @@ func ServeWS(
 		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
 			logger.Error().Err(err).Str("session_id", sessionID).Msg("WS upgrade error")
+			if ws := observability.WS(); ws != nil {
+				ws.OnError("upgrade")
+			}
 			return
 		}
 

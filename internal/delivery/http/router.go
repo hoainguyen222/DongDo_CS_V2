@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/delivery/ws"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
+	"github.com/hoainguyen222/DongDo_CS_V2/internal/observability"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/usecase"
 	"github.com/rs/zerolog"
 )
@@ -61,6 +62,10 @@ func RecoveryLogMiddleware() gin.HandlerFunc {
 }
 
 // SetupRouter initializes Gin engine with middlewares and routes.
+//
+// httpMetrics may be nil (the chain stays metric-less, e.g. tests).
+// wsMetrics may be nil — SetupRouter only wires WS metrics into the
+// websocket package via package-level setters.
 func SetupRouter(
 	handler *Handler,
 	hub *ws.Hub,
@@ -69,6 +74,8 @@ func SetupRouter(
 	stateMgr domain.StateManager,
 	eventBus domain.EventBus,
 	authUC *usecase.AuthUseCase,
+	httpMetrics *observability.HTTPMetrics,
+	wsMetrics *observability.WSMetrics,
 ) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
@@ -78,11 +85,28 @@ func SetupRouter(
 		InitLogger("info")
 	}
 
-	// Apply logging and recovery middlewares
+	// Order matters:
+	//   1. Recovery first so panics in any later middleware/handler are caught.
+	//   2. RequestID early so it is available to every later step.
+	//   3. CORS so preflight requests are answered before logging/metrics.
+	//   4. Structured access log (one line per request, all statuses).
+	//   5. Prometheus HTTP metrics.
+	//   6. Project-specific log for warn/error (legacy shape).
 	r.Use(RecoveryLogMiddleware())
-	r.Use(RequestLogMiddleware())
-	r.Use(gin.Logger())
+	r.Use(observability.RequestIDMiddleware())
 	r.Use(CORSMiddleware())
+	r.Use(observability.AccessLogMiddleware())
+	if httpMetrics != nil {
+		r.Use(httpMetrics.GinMiddleware())
+	}
+	r.Use(RequestLogMiddleware())
+
+	// Install the WS metrics on the hub/client packages so we don't have to
+	// thread an extra parameter through every constructor. Nil-safe: the
+	// package-level hooks no-op when nil.
+	if wsMetrics != nil {
+		observability.SetWSMetrics(wsMetrics)
+	}
 
 	// Health check
 	r.GET("/health", func(c *gin.Context) {
