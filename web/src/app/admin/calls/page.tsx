@@ -28,7 +28,7 @@ export default function CallsPage() {
   });
   const [playingAudio, setPlayingAudio] = useState<string | null>(null);
 
-  const { data, isLoading, refetch } = useVoiceCalls();
+  const { data, isLoading, refetch } = useVoiceCalls(undefined, page, pageSize);
   const deleteVoiceMutation = useDeleteVoiceCall();
 
   const calls = data?.calls ?? [];
@@ -46,6 +46,9 @@ export default function CallsPage() {
       agentName.toLowerCase().includes(term)
     );
   });
+
+  const totalFiltered = filteredCalls.length;
+  const paginatedCalls = filteredCalls.slice((page - 1) * pageSize, page * pageSize);
 
   const handleDelete = async (id: number | string) => {
     try {
@@ -105,7 +108,10 @@ export default function CallsPage() {
             type="text"
             placeholder="Tìm kiếm theo tên khách hàng, Agent, mã phiên..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setPage(1);
+            }}
             className={`${styles.searchInput} ${styles.searchInputPadded}`}
           />
         </div>
@@ -133,12 +139,12 @@ export default function CallsPage() {
                     <RefreshCw className={styles.spinIcon} /> Đang tải danh sách cuộc gọi...
                   </td>
                 </tr>
-              ) : filteredCalls.length === 0 ? (
+              ) : paginatedCalls.length === 0 ? (
                 <tr>
                   <td colSpan={8} className={styles.emptyRow}>Chưa có cuộc gọi nào trong hệ thống.</td>
                 </tr>
               ) : (
-                filteredCalls.map((call: any) => {
+                paginatedCalls.map((call: any) => {
                   const callerName = call.customer_id || call.caller_id || 'Khách vãng lai';
                   const agentName = call.agent_id || call.callee_id || 'Chưa phân công';
                   const recURL = call.recording?.recording_url || call.recording_url;
@@ -220,12 +226,12 @@ export default function CallsPage() {
           </table>
         </div>
 
-        {total > pageSize && (
+        {totalFiltered > 0 && (
           <div className={styles.paginationFooter}>
             <Pagination
               currentPage={page}
               pageSize={pageSize}
-              totalItems={total}
+              totalItems={totalFiltered}
               onPageChange={setPage}
               onPageSizeChange={setPageSize}
             />

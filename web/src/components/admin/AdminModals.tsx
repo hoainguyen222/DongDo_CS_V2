@@ -137,6 +137,8 @@ export function EditCustomerModal({
 }
 
 // ── Voice History Modal ──────────────────────────────────────
+import { useVoiceCalls } from '@/lib/hooks/useApi';
+
 export function VoiceHistoryModal({
   isOpen,
   calls,
@@ -144,11 +146,18 @@ export function VoiceHistoryModal({
   onClose,
 }: {
   isOpen: boolean;
-  calls: any[];
-  isLoading: boolean;
+  calls?: any[];
+  isLoading?: boolean;
   onClose: () => void;
 }) {
+  const { data: voiceData, isLoading: queryLoading } = useVoiceCalls(undefined, 1, 20, {
+    enabled: isOpen && !calls,
+  });
+
   if (!isOpen) return null;
+
+  const displayCalls = calls || voiceData?.calls || [];
+  const displayLoading = isLoading !== undefined ? isLoading : queryLoading;
 
   return (
     <div className={styles.backdrop}>
@@ -169,19 +178,19 @@ export function VoiceHistoryModal({
         </div>
 
         <div className={styles.body}>
-          {isLoading ? (
+          {displayLoading ? (
             <div className={styles.loadingState}>
               <RefreshCw style={{ width: 24, height: 24, color: '#34d399' }} />
               <span>Đang tải...</span>
             </div>
-          ) : calls.length === 0 ? (
+          ) : displayCalls.length === 0 ? (
             <div className={styles.emptyState}>
               <Headphones />
               <div>Chưa có dữ liệu cuộc gọi.</div>
             </div>
           ) : (
             <div className={styles.voiceList}>
-              {calls.map((call: any) => (
+              {displayCalls.map((call: any) => (
                 <div key={call.id} className={styles.voiceItem}>
                   <div className={styles.voiceItemHeader}>
                     <div className={styles.voiceItemCaller}>

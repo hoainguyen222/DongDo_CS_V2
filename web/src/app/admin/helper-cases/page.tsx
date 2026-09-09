@@ -10,6 +10,8 @@ import { useUIStore } from '@/lib/stores/uiStore';
 import type { ChatCase } from '@/lib/types';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { Pagination } from '@/components/admin/AdminSidebar';
+import { useListUrlParams } from '@/lib/hooks/useListUrlParams';
 import styles from './page.module.scss';
 
 type HelperStatusTab = 'open' | 'new' | 'processing' | 'done' | 'all';
@@ -23,6 +25,16 @@ export default function HelperCasesPage() {
     user?.role === 'owner' || user?.role === 'admin' || user?.role === 'leader';
 
   const [activeTab, setActiveTab] = useState<HelperStatusTab>('open');
+  const {
+    page,
+    limit: pageSize,
+    setPage,
+    setLimit: setPageSize,
+  } = useListUrlParams({
+    defaultPage: 1,
+    defaultLimit: 10,
+    paramNames: { page: 'page', limit: 'limit' },
+  });
 
   const { data: helperData, isLoading, refetch } = useHelperCases(activeTab === 'open' ? '' : activeTab);
   const processMutation = useProcessHelperCase();
@@ -38,6 +50,9 @@ export default function HelperCasesPage() {
   const [selectedTargetUser, setSelectedTargetUser] = useState<string>('');
 
   const cases = helperData?.cases || [];
+  const totalCases = cases.length;
+  const paginatedCases = cases.slice((page - 1) * pageSize, page * pageSize);
+
   const staffUsers = (usersData || []).filter(
     (u: any) => u.isActive && (u.rawRole === 'cskh' || u.rawRole === '' || u.role?.includes('Staff CS'))
   );
@@ -177,7 +192,7 @@ export default function HelperCasesPage() {
               </tr>
             </thead>
             <tbody>
-              {cases.map((c) => {
+              {paginatedCases.map((c) => {
                 const isDone = c.status === 'RESOLVED' || (c.helper_status || '').toLowerCase() === 'done';
                 const currentStatus = isDone ? 'done' : (c.helper_status || 'new').toLowerCase();
                 const statusClass = getStatusClass(currentStatus);
@@ -265,6 +280,18 @@ export default function HelperCasesPage() {
               })}
             </tbody>
           </table>
+        )}
+
+        {totalCases > 0 && (
+          <div style={{ padding: '12px 16px', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
+            <Pagination
+              currentPage={page}
+              pageSize={pageSize}
+              totalItems={totalCases}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
+          </div>
         )}
       </div>
 
