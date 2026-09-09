@@ -1,0 +1,264 @@
+# =============================================================================
+# DongDo CS — public-facing nginx server block (template)
+# =============================================================================
+#
+# This file is rendered at container start by /docker-entrypoint.sh via
+# `envsubst`. The following variables are interpolated:
+#
+#   ${NGINX_SERVER_NAME}   - virtual host, e.g. "cskh.dongdo.vn" or "_"
+#   ${UPLOAD_LIMIT}        - client_max_body_size, e.g. "50M"
+#   ${NGINX_ENABLE_SSL}    - "true" to also listen on :443
+#   ${SSL_CERT_PATH}       - absolute path inside the container, e.g. /etc/nginx/ssl/fullchain.pem
+#   ${SSL_KEY_PATH}        - absolute path inside the container, e.g. /etc/nginx/ssl/privkey.pem
+#
+# Default values (used if the env var is unset) are given with the bash-style
+# `${VAR:-default}` fallback syntax — `envsubst` will leave those untouched.
+#
+# Layout:
+#   - Port :80  → always present (ACME challenges, healthcheck, redirects,
+#                 and the full proxy routing when SSL is disabled).
+#   - Port :443 → present only when NGINX_ENABLE_SSL=true (the SSL block is
+#                 wrapped in marker comments and stripped by the entrypoint).
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Plain HTTP server (always present)
+# -----------------------------------------------------------------------------
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${NGINX_SERVER_NAME:-_};
+
+    server_tokens off;
+    access_log /var/log/nginx/access.log;
+    error_log /var/log/nginx/error.log;
+
+    client_max_body_size ${UPLOAD_LIMIT:-50M};
+    limit_conn conn_per_ip 50;
+
+    # ----- ACME http-01 challenge path for Let's Encrypt -----
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    # ----- Liveness / readiness -----
+    location = /nginx-health {
+        access_log off;
+        add_header Content-Type text/plain;
+        return 200 "ok\n";
+    }
+
+    location = /health {
+        access_log off;
+        proxy_pass http://dongdo_backend/health;
+    }
+
+    # ----- Security: hide internal monitoring endpoints -----
+    # Allow them only from RFC1918 private subnets (so internal
+    # Prometheus still works when bound to the dongdo-monitoring
+    # network) and explicitly deny the public.
+    location ~ ^/(metrics|debug/pprof)(/|$) {
+        allow 127.0.0.1;
+        allow 10.0.0.0/8;
+        allow 172.16.0.0/12;
+        allow 192.168.0.0/16;
+        deny  all;
+        proxy_pass http://dongdo_backend;
+    }
+
+    # =====================================================================
+    # BACKEND ROUTES — go straight to the Go server (skip Next.js hop).
+    # Doing this in nginx instead of the Next.js rewrites is more efficient
+    # for high-volume endpoints like /api/* and /chat.
+    # =====================================================================
+
+    # Public auth (login, register, refresh)
+    location ~* ^/auth/ {
+        proxy_pass http://dongdo_backend;
+        limit_req zone=auth_rl burst=20 nodelay;
+    }
+
+    # Guest / public endpoints
+    location ~* ^/guest/ {
+        proxy_pass http://dongdo_backend;
+    }
+
+    # Authenticated API
+    location ~* ^/api/ {
+        proxy_pass http://dongdo_backend;
+        limit_req zone=api_rl burst=60 nodelay;
+    }
+
+    # Chat (SSE / streaming LLM responses)
+    location = /chat {
+        proxy_pass http://dongdo_backend;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+
+    # History / logs
+    location ~* ^/history/ {
+        proxy_pass http://dongdo_backend;
+    }
+
+    # Static assets served by the Go server (recordings, exports, etc.)
+    location ~* ^/static/ {
+        proxy_pass http://dongdo_backend;
+        expires 7d;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # WebSocket endpoint(s)
+    location = /ws {
+        proxy_pass http://dongdo_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    location = /wss {
+        proxy_pass http://dongdo_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    location ~* ^/socket\.io/ {
+        proxy_pass http://dongdo_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 3600s;
+    }
+
+    # Voice / call-service direct (for browser-to-call_service WS, optional)
+    location ~* ^/call/ {
+        proxy_pass http://dongdo_call;
+    }
+
+    # =====================================================================
+    # FRONTEND — Next.js handles everything else, including the page tree.
+    # =====================================================================
+
+    # Long-lived cache for Next.js hashed bundles
+    location ~* ^/_next/static/ {
+        proxy_pass http://dongdo_web;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
+    # Public folder assets (favicon, robots.txt, manifests, etc.)
+    location ~* ^/(favicon\.ico|robots\.txt|manifest\.json|sitemap\.xml|browserconfig\.xml) {
+        proxy_pass http://dongdo_web;
+        expires 1h;
+        add_header Cache-Control "public";
+    }
+
+    # Everything else: the Next.js app.
+    # (The 80->443 redirect is handled by 00-ssl-redirect.conf, generated
+    # by the entrypoint when NGINX_ENABLE_SSL=true.)
+    location / {
+        proxy_pass http://dongdo_web;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+}
+
+# =============================================================================
+# Optional HTTPS server block (rendered when NGINX_ENABLE_SSL=true)
+# =============================================================================
+# This block is wrapped in marker comments so the entrypoint can strip it
+# out with a single sed pass when SSL is disabled. To re-enable it, set
+# NGINX_ENABLE_SSL=true and provide SSL_CERT_PATH / SSL_KEY_PATH env vars
+# (or rely on the defaults which point at /etc/nginx/ssl/).
+# >>> SSL_BLOCK_START
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name ${NGINX_SERVER_NAME:-_};
+
+    server_tokens off;
+    access_log /var/log/nginx/access.log;
+    error_log /var/log/nginx/error.log;
+
+    client_max_body_size ${UPLOAD_LIMIT:-50M};
+    limit_conn conn_per_ip 50;
+
+    ssl_certificate     ${SSL_CERT_PATH:-/etc/nginx/ssl/fullchain.pem};
+    ssl_certificate_key ${SSL_KEY_PATH:-/etc/nginx/ssl/privkey.pem};
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+    ssl_stapling on;
+    ssl_stapling_verify on;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    # Mirror the :80 server block routing (no ACME / redirect logic on :443).
+    location / {
+        # /api, /auth, /guest, /history, /chat, /static, /ws, /wss, /socket.io
+        # all match their respective `location` blocks below before this
+        # catch-all is reached. Anything else goes to Next.js.
+        proxy_pass http://dongdo_web;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;
+    }
+
+    location ~* ^/_next/static/ {
+        proxy_pass http://dongdo_web;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    location ~* ^/auth/    { proxy_pass http://dongdo_backend; limit_req zone=auth_rl burst=20 nodelay; }
+    location ~* ^/guest/   { proxy_pass http://dongdo_backend; }
+    location ~* ^/api/     { proxy_pass http://dongdo_backend; limit_req zone=api_rl burst=60 nodelay; }
+    location = /chat       { proxy_pass http://dongdo_backend; proxy_buffering off; proxy_cache off; }
+    location ~* ^/history/ { proxy_pass http://dongdo_backend; }
+    location ~* ^/static/  { proxy_pass http://dongdo_backend; expires 7d; add_header Cache-Control "public, immutable"; }
+    location = /ws         { proxy_pass http://dongdo_backend; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade"; proxy_read_timeout 3600s; }
+    location = /wss        { proxy_pass http://dongdo_backend; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade"; proxy_read_timeout 3600s; }
+    location ~* ^/socket\.io/ { proxy_pass http://dongdo_backend; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade"; }
+    location ~* ^/call/    { proxy_pass http://dongdo_call; }
+
+    location ~ ^/(metrics|debug/pprof)(/|$) {
+        allow 127.0.0.1;
+        allow 10.0.0.0/8;
+        allow 172.16.0.0/12;
+        allow 192.168.0.0/16;
+        deny  all;
+        proxy_pass http://dongdo_backend;
+    }
+
+    location = /nginx-health { access_log off; return 200 "ok\n"; }
+    location = /health       { access_log off; proxy_pass http://dongdo_backend/health; }
+}
+# <<< SSL_BLOCK_END

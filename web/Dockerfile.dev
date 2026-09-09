@@ -1,0 +1,53 @@
+# =============================================================================
+# Web (Next.js) — Development Dockerfile
+# -----------------------------------------------------------------------------
+# Single-stage image used for local `docker compose` development with hot
+# reload. Source code is mounted from the host so `npm run dev` (next dev)
+# can pick up changes instantly via inotify / file watchers.
+#
+# Volume mount points (compose snippet):
+#
+#   services:
+#     web:
+#       build:
+#         context: ./web
+#         dockerfile: Dockerfile.dev
+#       command: npm run dev
+#       volumes:
+#         - ./web:/app              # source: hot reload
+#         - /app/node_modules       # anonymous: keep container's modules
+#         - /app/.next              # anonymous: keep container's build cache
+#       ports:
+#         - "3000:3000"
+#       environment:
+#         BACKEND_URL: http://server:8080
+#         NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
+#         NEXT_PUBLIC_WS_URL: ws://localhost:8080
+#
+# When this image is used WITHOUT a bind mount it still works — `npm run dev`
+# runs directly from the in-image source. That's the use case for ephemeral
+# CI / preview environments.
+# =============================================================================
+
+FROM node:20-alpine
+
+# libc6-compat is required by sharp / sass native binaries used by next build.
+RUN apk add --no-cache libc6-compat
+
+WORKDIR /app
+
+# Install deps first for better layer caching.
+COPY package.json package-lock.json* ./
+RUN npm ci --no-audit --no-fund
+
+# Copy the rest of the source (overwritten by bind mount in dev).
+COPY . .
+
+# next dev binds to 0.0.0.0 inside the container so the host can reach it.
+ENV NODE_ENV=development
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV HOSTNAME=0.0.0.0
+
+EXPOSE 3000
+
+CMD ["npm", "run", "dev"]

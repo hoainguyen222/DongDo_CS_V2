@@ -131,8 +131,78 @@ services:
       asterisk:
         condition: service_healthy
 
+  # 7. Next.js Frontend (Production) — reverse-proxied by nginx in production.
+  # In development you run `make web-dev` (hot-reload) or `make web-run` (Docker).
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: dongdo_web
+    restart: unless-stopped
+    # Port 3000 is for direct access without nginx (e.g. `make web-docker-run`).
+    # When nginx is in front, it routes traffic to this container via the
+    # Docker internal network — no host port mapping is needed.
+    ports:
+      - "3000:3000"
+    environment:
+      # Back-end URL inside the Docker network — used by Next.js rewrites to
+      # proxy /api/*, /auth/* etc. to the Go server without CORS.
+      BACKEND_URL: "http://server:8080"
+      NODE_ENV: "production"
+      NEXT_TELEMETRY_DISABLED: "1"
+    depends_on:
+      server:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:3000/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # 8. Nginx Reverse Proxy & SSL Terminator — public entry point for all services.
+  # - HTTP → HTTPS redirect (when NGINX_ENABLE_SSL=true)
+  # - Static assets (/_next/static/*) cached 1 year
+  # - /api/*, /auth/*, /guest/*, /history/*, /chat → Go server (server:8080)
+  # - /call/* → Call service (call_service:8081)
+  # - /ws, /socket.io/*, /wss → Go server WebSocket upgrade
+  # - /nginx-health → health check endpoint (200 OK)
+  # - /metrics, /debug/pprof/* → denied (internal monitoring only)
+  nginx:
+    build:
+      context: ./docker/nginx
+      dockerfile: Dockerfile
+    container_name: dongdo_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      # - "443:443"  # Uncomment and set NGINX_ENABLE_SSL=true for HTTPS
+    environment:
+      # Domain served by this nginx. Change to your real domain in production.
+      NGINX_SERVER_NAME: "${NGINX_SERVER_NAME:-localhost}"
+      # Set to "true" to enable HTTPS. Also uncomment the 443 port above.
+      NGINX_ENABLE_SSL: "${NGINX_ENABLE_SSL:-false}"
+      # Paths to SSL certificate and key (mounted from host or secrets manager).
+      SSL_CERT_PATH: "${SSL_CERT_PATH:-/etc/nginx/ssl/cert.pem}"
+      SSL_KEY_PATH: "${SSL_KEY_PATH:-/etc/nginx/ssl/key.pem}"
+      # Max upload size (audio files for ASR).
+      UPLOAD_LIMIT: "${UPLOAD_LIMIT:-50M}"
+    depends_on:
+      - web
+      - server
+      - call_service
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost/nginx-health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
 volumes:
   pgdata:
   redisdata:
   qdrantdata:
+
+networks:
+  default:
+    name: dongdo_cs_v2_default
 

@@ -74,6 +74,13 @@ services:
       dongdo-monitoring:
         aliases:
           - prometheus
+      # Joined to the app network so it can reach the Go server's
+      # /metrics endpoint directly via DNS (`server:9090`). No need
+      # for `host.docker.internal` here — that was the workaround when
+      # /metrics lived on the host loopback.
+      dongdo_cs_v2_default:
+        aliases:
+          - prometheus
     # Port 9090 is the Prometheus UI + scrape API. Same TCP port number as
     # the Go server's /metrics, but they live on different addresses (the
     # host's loopback vs the container's published port). No collision.
@@ -91,9 +98,9 @@ services:
       - "--web.console.libraries=/usr/share/prometheus/console_libraries"
       - "--web.console.templates=/usr/share/prometheus/consoles"
       - "--web.enable-lifecycle"
-    # Extra hosts lets Prometheus reach the host's loopback where the CSKH
-    # Go server binds its /metrics and /debug/pprof endpoints. Required
-    # because the server binds METRICS_ADDR=127.0.0.1:9090.
+    # `host.docker.internal` mapping kept for backwards-compat in case
+    # any exporter still binds on the host loopback. New exporters
+    # should bind inside their containers and be reached via DNS.
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -163,7 +170,31 @@ services:
       # Pulled into Prometheus via the `redis_stream_length` etc. names.
 
   # ---------------------------------------------------------------------------
-  # 6. Grafana — dashboards
+  # 6. nginx Exporter — connection / request metrics for the nginx proxy
+  # ---------------------------------------------------------------------------
+  # Reads nginx's stub_status endpoint (served on :9091 inside the nginx
+  # container — see docker/nginx/conf.d/metrics.conf) and exposes
+  # Prometheus metrics on :9113. The exporter joins both networks so it
+  # can resolve `nginx:9091` on the app network while Prometheus scrapes
+  # it as `nginx-exporter:9113` on the monitoring network.
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:1.4
+    container_name: dongdo_nginx_exporter
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    networks:
+      dongdo-monitoring:
+        aliases:
+          - nginx-exporter
+      dongdo_cs_v2_default:
+        aliases:
+          - nginx-exporter
+    environment:
+      SCRAPE_URI: "http://nginx:9091/stub_status"
+    # No host ports — only Prometheus inside the monitoring network reaches it.
+
+  # ---------------------------------------------------------------------------
+  # 7. Grafana — dashboards
   # ---------------------------------------------------------------------------
   grafana:
     image: grafana/grafana:11.3.0
