@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Headphones, Phone, RefreshCw, XCircle, Search, Play, UserCheck } from 'lucide-react';
 import { useVoiceCalls, useDeleteVoiceCall } from '@/lib/hooks/useApi';
+import { useAuthStore } from '@/lib/stores/authStore';
 import { Pagination } from '@/components/admin/AdminSidebar';
 import { useUIStore } from '@/lib/stores/uiStore';
 import { useListUrlParams } from '@/lib/hooks/useListUrlParams';
@@ -10,6 +11,8 @@ import styles from '@/components/admin/AdminPage.module.scss';
 
 export default function CallsPage() {
   const { addToast } = useUIStore();
+  const { user } = useAuthStore();
+  const isStaff = user?.role === 'cskh';
   const {
     page,
     limit: pageSize,
@@ -198,14 +201,16 @@ export default function CallsPage() {
                         {new Date(call.created_at || call.requested_at).toLocaleString('vi-VN')}
                       </td>
                       <td className={styles.dataTableRight}>
-                        <button
-                          onClick={() => handleDelete(call.id)}
-                          className={styles.iconBtn}
-                          aria-label="Xóa"
-                          title="Xóa bản ghi"
-                        >
-                          <XCircle style={{ width: 16, height: 16 }} />
-                        </button>
+                        {!isStaff && (
+                          <button
+                            onClick={() => handleDelete(call.id)}
+                            className={styles.iconBtn}
+                            aria-label="Xóa"
+                            title="Xóa bản ghi"
+                          >
+                            <XCircle style={{ width: 16, height: 16 }} />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );

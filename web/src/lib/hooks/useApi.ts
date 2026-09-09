@@ -209,10 +209,10 @@ export function useSubmitCaseHelper() {
   });
 }
 
-export function useHelperCases(options?: QueryOpts<{ cases: ChatCase[]; total: number }>) {
+export function useHelperCases(status?: string, options?: QueryOpts<{ cases: ChatCase[]; total: number }>) {
   return useQuery({
-    queryKey: ['helperCases'],
-    queryFn: () => api.getHelperCases(),
+    queryKey: ['helperCases', status || 'open'],
+    queryFn: () => api.getHelperCases(status),
     staleTime: 5000,
     ...options,
   });
@@ -230,6 +230,19 @@ export function useProcessHelperCase() {
       action: 'take_over' | 'transfer';
       targetUsername?: string;
     }) => api.processHelperCase(sessionId, action, targetUsername),
+    onSuccess: (_data, { sessionId }) => {
+      qc.invalidateQueries({ queryKey: ['cases'] });
+      qc.invalidateQueries({ queryKey: queryKeys.caseDetail(sessionId) });
+      qc.invalidateQueries({ queryKey: ['helperCases'] });
+    },
+  });
+}
+
+export function useUpdateHelperStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sessionId, status }: { sessionId: string; status: string }) =>
+      api.updateHelperStatus(sessionId, status),
     onSuccess: (_data, { sessionId }) => {
       qc.invalidateQueries({ queryKey: ['cases'] });
       qc.invalidateQueries({ queryKey: queryKeys.caseDetail(sessionId) });

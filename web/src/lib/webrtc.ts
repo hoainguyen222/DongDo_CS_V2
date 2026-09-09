@@ -186,6 +186,10 @@ export class WebRTCVoiceManager {
 
   public async handleOffer(offer: RTCSessionDescriptionInit): Promise<void> {
     try {
+      if (!offer || !offer.type || !offer.sdp) {
+        console.warn('Ignoring invalid WebRTC offer (missing type or sdp):', offer);
+        return;
+      }
       const pc = await this.createPeerConnection();
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
       const answer = await pc.createAnswer();

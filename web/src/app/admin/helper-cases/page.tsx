@@ -3,14 +3,16 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Bell, RefreshCw, CheckCircle2, UserCheck, X, ExternalLink, Clock, MessageSquare } from 'lucide-react';
+import { Bell, RefreshCw, CheckCircle2, UserCheck, X, ExternalLink, Clock, MessageSquare, Filter } from 'lucide-react';
 import { useHelperCases, useProcessHelperCase } from '@/lib/hooks/useApi';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { useUIStore } from '@/lib/stores/uiStore';
-import type { ChatCase, User } from '@/lib/types';
+import type { ChatCase } from '@/lib/types';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import styles from './page.module.scss';
+
+type HelperStatusTab = 'open' | 'new' | 'processing' | 'done' | 'all';
 
 export default function HelperCasesPage() {
   const router = useRouter();
@@ -20,7 +22,9 @@ export default function HelperCasesPage() {
   const isLeaderOrAbove =
     user?.role === 'owner' || user?.role === 'admin' || user?.role === 'leader';
 
-  const { data: helperData, isLoading, refetch } = useHelperCases();
+  const [activeTab, setActiveTab] = useState<HelperStatusTab>('open');
+
+  const { data: helperData, isLoading, refetch } = useHelperCases(activeTab === 'open' ? '' : activeTab);
   const processMutation = useProcessHelperCase();
 
   // Fetch list of staff users for transfer modal
@@ -83,6 +87,17 @@ export default function HelperCasesPage() {
     }
   };
 
+  const getStatusClass = (st?: string) => {
+    switch (st?.toLowerCase()) {
+      case 'processing':
+        return styles.statusProcessing;
+      case 'done':
+        return styles.statusDone;
+      default:
+        return styles.statusNew;
+    }
+  };
+
   return (
     <div className={styles.container}>
       <header className={styles.header}>
@@ -102,6 +117,45 @@ export default function HelperCasesPage() {
         </button>
       </header>
 
+      {/* Filter Tabs Bar */}
+      <div className={styles.filterRow}>
+        <button
+          onClick={() => setActiveTab('open')}
+          className={`${styles.filterTab} ${activeTab === 'open' ? styles.filterTabActive : ''}`}
+        >
+          <Filter style={{ width: 14, height: 14 }} />
+          <span>Đang mở (New + Processing)</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('new')}
+          className={`${styles.filterTab} ${activeTab === 'new' ? styles.filterTabActive : ''}`}
+        >
+          <span>🔵 Mới (New)</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('processing')}
+          className={`${styles.filterTab} ${activeTab === 'processing' ? styles.filterTabActive : ''}`}
+        >
+          <span>🟡 Đang xử lý (Processing)</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('done')}
+          className={`${styles.filterTab} ${activeTab === 'done' ? styles.filterTabActive : ''}`}
+        >
+          <span>🟢 Đã xong (Done)</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('all')}
+          className={`${styles.filterTab} ${activeTab === 'all' ? styles.filterTabActive : ''}`}
+        >
+          <span>🌐 Tất cả</span>
+        </button>
+      </div>
+
       <div className={styles.card}>
         {isLoading ? (
           <div className={styles.emptyState}>
@@ -110,88 +164,105 @@ export default function HelperCasesPage() {
         ) : cases.length === 0 ? (
           <div className={styles.emptyState}>
             <Bell style={{ width: 40, height: 40, color: '#475569', margin: '0 auto' }} />
-            <p>Hiện tại không có cuộc hội thoại nào yêu cầu hỗ trợ.</p>
+            <p>Hiện tại không có cuộc hội thoại nào trong danh mục này.</p>
           </div>
         ) : (
           <table className={styles.table}>
             <thead>
               <tr>
-                <th style={{ width: '30%' }}>Đoạn Hội Thoại</th>
-                <th style={{ width: '45%' }}>Nội Dung Cần Hỗ Trợ</th>
-                <th style={{ width: '25%' }}>Hành Động</th>
+                <th style={{ width: '26%' }}>Đoạn Hội Thoại</th>
+                <th style={{ width: '38%' }}>Nội Dung Cần Hỗ Trợ</th>
+                <th style={{ width: '18%' }}>Trạng Thái (Status)</th>
+                <th style={{ width: '18%' }}>Hành Động</th>
               </tr>
             </thead>
             <tbody>
-              {cases.map((c) => (
-                <tr key={c.session_id}>
-                  <td>
-                    <Link href={`/admin/cases/${c.session_id}`} className={styles.conversationLink}>
-                      <div className={styles.customerName}>
-                        <MessageSquare style={{ width: 16, height: 16, color: '#38bdf8' }} />
-                        <span>{c.customer_name}</span>
-                        <ExternalLink style={{ width: 12, height: 12, opacity: 0.6 }} />
-                      </div>
-                      <div className={styles.sessionMeta}>
-                        Phiên: {c.session_id} {c.customer_phone ? `• SĐT: ${c.customer_phone}` : ''}
-                      </div>
-                      {c.help_requested_at && (
-                        <div className={styles.timeMeta}>
-                          <Clock style={{ width: 12, height: 12 }} />
-                          <span>
-                            {new Date(c.help_requested_at).toLocaleString('vi-VN')}
-                          </span>
+              {cases.map((c) => {
+                const isDone = c.status === 'RESOLVED' || (c.helper_status || '').toLowerCase() === 'done';
+                const currentStatus = isDone ? 'done' : (c.helper_status || 'new').toLowerCase();
+                const statusClass = getStatusClass(currentStatus);
+
+                return (
+                  <tr key={c.session_id}>
+                    <td>
+                      <Link href={`/admin/cases/${c.session_id}`} className={styles.conversationLink}>
+                        <div className={styles.customerName}>
+                          <MessageSquare style={{ width: 16, height: 16, color: '#38bdf8' }} />
+                          <span>{c.customer_name}</span>
+                          <ExternalLink style={{ width: 12, height: 12, opacity: 0.6 }} />
                         </div>
-                      )}
-                    </Link>
-                  </td>
+                        <div className={styles.sessionMeta}>
+                          Phiên: {c.session_id} {c.customer_phone ? `• SĐT: ${c.customer_phone}` : ''}
+                        </div>
+                        {c.help_requested_at && (
+                          <div className={styles.timeMeta}>
+                            <Clock style={{ width: 12, height: 12 }} />
+                            <span>
+                              {new Date(c.help_requested_at).toLocaleString('vi-VN')}
+                            </span>
+                          </div>
+                        )}
+                      </Link>
+                    </td>
 
-                  <td>
-                    <div className={styles.helpContentBox}>
-                      <div className={styles.helpText}>
-                        {c.help_content || 'Không có ghi chú chi tiết'}
+                    <td>
+                      <div className={styles.helpContentBox}>
+                        <div className={styles.helpText}>
+                          {c.help_content || 'Không có ghi chú chi tiết'}
+                        </div>
+                        <div className={styles.requestingBadge}>
+                          <span>Yêu cầu bởi:</span>
+                          <strong>{c.help_requested_by || c.assigned_cs || 'Staff'}</strong>
+                        </div>
                       </div>
-                      <div className={styles.requestingBadge}>
-                        <span>Yêu cầu bởi:</span>
-                        <strong>{c.help_requested_by || c.assigned_cs || 'Staff'}</strong>
-                      </div>
-                    </div>
-                  </td>
+                    </td>
 
-                  <td>
-                    <div className={styles.actionCell}>
-                      {isLeaderOrAbove ? (
-                        <>
-                          <button
-                            onClick={() => handleTakeOver(c)}
-                            disabled={processMutation.isPending}
-                            className={styles.btnTakeOver}
-                            title="Xử lý trực tiếp hội thoại này"
-                          >
-                            <CheckCircle2 style={{ width: 14, height: 14 }} />
-                            <span>Xử lý</span>
-                          </button>
-                          <button
-                            onClick={() => {
-                              setTransferCase(c);
-                              if (staffUsers.length > 0) {
-                                setSelectedTargetUser(staffUsers[0].email);
-                              }
-                            }}
-                            disabled={processMutation.isPending}
-                            className={styles.btnTransfer}
-                            title="Chuyển giao cho Chuyên viên khác"
-                          >
-                            <UserCheck style={{ width: 14, height: 14 }} />
-                            <span>Chuyển giao</span>
-                          </button>
-                        </>
-                      ) : (
-                        <span className={styles.readOnlyBadge}>Chỉ xem</span>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    <td>
+                      <span className={`${styles.statusBadge} ${statusClass}`}>
+                        {currentStatus === 'new' && '🔵 New (Mới)'}
+                        {currentStatus === 'processing' && '🟡 Processing (Đang xử lý)'}
+                        {currentStatus === 'done' && '🟢 Done (Đã đóng)'}
+                      </span>
+                    </td>
+
+                    <td>
+                      <div className={styles.actionCell}>
+                        {isDone ? (
+                          <span className={styles.readOnlyBadge}>Đã hoàn thành</span>
+                        ) : isLeaderOrAbove ? (
+                          <>
+                            <button
+                              onClick={() => handleTakeOver(c)}
+                              disabled={processMutation.isPending}
+                              className={styles.btnTakeOver}
+                              title="Xử lý trực tiếp hội thoại này"
+                            >
+                              <CheckCircle2 style={{ width: 14, height: 14 }} />
+                              <span>Xử lý</span>
+                            </button>
+                            <button
+                              onClick={() => {
+                                setTransferCase(c);
+                                if (staffUsers.length > 0) {
+                                  setSelectedTargetUser(staffUsers[0].email);
+                                }
+                              }}
+                              disabled={processMutation.isPending}
+                              className={styles.btnTransfer}
+                              title="Chuyển giao cho Chuyên viên khác"
+                            >
+                              <UserCheck style={{ width: 14, height: 14 }} />
+                              <span>Chuyển giao</span>
+                            </button>
+                          </>
+                        ) : (
+                          <span className={styles.readOnlyBadge}>Chỉ xem</span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

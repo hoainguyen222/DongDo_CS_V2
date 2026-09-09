@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/hoainguyen222/DongDo_CS_V2/internal/domain"
@@ -198,22 +200,75 @@ func (r *CaseRepo) ListPaged(ctx context.Context, statusFilter domain.CaseStatus
 		return nil, 0, err
 	}
 
-	// Get paginated results
-	rows, err := r.db.Chat.ListCasesPaged(ctx, chatdb.ListCasesPagedParams{
-		Column1: statusStr,
-		Column2: search,
-		Limit:   int32(limit),
-		Offset:  int32(offset),
-	})
+	// Get paginated results with full fields including last_sender_type
+	query := `
+		SELECT c.id, c.session_id, c.guest_id, c.customer_name, c.customer_phone,
+		       c.status, COALESCE(c.assigned_cs, ''), COALESCE(c.active_assigned_cs, ''),
+		       COALESCE(c.assigned_cs_history, '[]'::jsonb),
+		       COALESCE(c.requires_help, false), COALESCE(c.help_content, ''),
+		       COALESCE(c.help_requested_by, ''), c.help_requested_at,
+		       COALESCE(c.last_message, ''), COALESCE(c.resolution_note, ''), c.created_at, c.updated_at,
+		       COALESCE((SELECT sender_type FROM chat_messages WHERE session_id = c.session_id ORDER BY created_at DESC, id DESC LIMIT 1), 'guest') AS last_sender_type
+		FROM chat_cases c
+		WHERE (
+			($1::text IS NULL OR $1 = '' OR c.status::text = $1::text)
+			AND (
+				$2::text IS NULL OR $2 = ''
+				OR LOWER(c.customer_name) LIKE '%' || LOWER($2::text) || '%'
+				OR LOWER(c.customer_phone) LIKE '%' || LOWER($2::text) || '%'
+				OR LOWER(c.session_id) LIKE '%' || LOWER($2::text) || '%'
+				OR LOWER(c.last_message) LIKE '%' || LOWER($2::text) || '%'
+			)
+		)
+		ORDER BY c.updated_at DESC, c.id DESC
+		LIMIT $3 OFFSET $4
+	`
+
+	rows, err := r.db.Pool.Query(ctx, query, statusStr, search, limit, offset)
 	if err != nil {
-		r.logger.Error().Err(err).Msg("ListCasesPaged failed")
+		r.logger.Error().Err(err).Msg("ListPaged query failed")
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	out := make([]*domain.ChatCase, 0, limit)
+	for rows.Next() {
+		var c domain.ChatCase
+		var guestUUID pgtype.UUID
+		var historyBytes []byte
+		var helpReqAt sql.NullTime
+
+		err := rows.Scan(
+			&c.ID, &c.SessionID, &guestUUID, &c.CustomerName, &c.CustomerPhone,
+			&c.Status, &c.AssignedCS, &c.ActiveAssignedCS,
+			&historyBytes,
+			&c.RequiresHelp, &c.HelpContent,
+			&c.HelpRequestedBy, &helpReqAt,
+			&c.LastMessage, &c.ResolutionNote, &c.CreatedAt, &c.UpdatedAt,
+			&c.LastSenderType,
+		)
+		if err != nil {
+			r.logger.Error().Err(err).Msg("ListPaged scan failed")
+			return nil, 0, err
+		}
+
+		if guestUUID.Valid {
+			id := uuid.UUID(guestUUID.Bytes)
+			c.GuestID = &id
+		}
+		c.AssignedCSHistory = parseAssignedHistory(historyBytes)
+		if helpReqAt.Valid {
+			c.HelpRequestedAt = &helpReqAt.Time
+		}
+
+		out = append(out, &c)
+	}
+
+	if err := rows.Err(); err != nil {
+		r.logger.Error().Err(err).Msg("ListPaged rows error")
 		return nil, 0, err
 	}
 
-	out := make([]*domain.ChatCase, 0, len(rows))
-	for i := range rows {
-		out = append(out, listCasesPagedRowToDomain(&rows[i]))
-	}
 	return out, total, nil
 }
 
@@ -285,13 +340,19 @@ func (r *CaseRepo) Assign(ctx context.Context, sessionID, csUsername string) err
 	return nil
 }
 
-// Resolve marks the case as RESOLVED with a resolution note.
+// Resolve marks the case as RESOLVED with a resolution note and automatically updates helper_status to 'done'.
 func (r *CaseRepo) Resolve(ctx context.Context, sessionID, csUsername, resolutionNote string) error {
-	if err := r.db.Chat.ResolveCase(ctx, chatdb.ResolveCaseParams{
-		AssignedCs:     pgtype.Text{String: csUsername, Valid: csUsername != ""},
-		ResolutionNote: pgtype.Text{String: resolutionNote, Valid: resolutionNote != ""},
-		SessionID:      sessionID,
-	}); err != nil {
+	query := `
+		UPDATE chat_cases
+		SET status = 'RESOLVED'::case_status,
+		    helper_status = 'done',
+		    assigned_cs = CASE WHEN $1 <> '' THEN $1 ELSE assigned_cs END,
+		    resolution_note = CASE WHEN $2 <> '' THEN $2 ELSE resolution_note END,
+		    updated_at = NOW()
+		WHERE session_id = $3
+	`
+	_, err := r.db.Pool.Exec(ctx, query, csUsername, resolutionNote, sessionID)
+	if err != nil {
 		r.logger.Error().Err(err).Str("session_id", sessionID).Msg("ResolveCase failed")
 		return err
 	}
@@ -303,6 +364,7 @@ func (r *CaseRepo) SubmitHelper(ctx context.Context, sessionID, helpContent, req
 	query := `
 		UPDATE chat_cases
 		SET requires_help = true,
+		    helper_status = 'new',
 		    help_content = $2,
 		    help_requested_by = $3,
 		    help_requested_at = NOW(),
@@ -317,22 +379,41 @@ func (r *CaseRepo) SubmitHelper(ctx context.Context, sessionID, helpContent, req
 	return nil
 }
 
-// ListHelperCases returns all cases where requires_help = true or tag "Cần Hỗ Trợ" is attached.
-func (r *CaseRepo) ListHelperCases(ctx context.Context) ([]*domain.ChatCase, error) {
-	query := `
+// ListHelperCases returns cases based on helper_status filter (new, processing, done, open, all).
+// Normal cases without requires_help = true or tag 'Cần Hỗ Trợ' will NEVER be returned.
+func (r *CaseRepo) ListHelperCases(ctx context.Context, helperStatusFilter string) ([]*domain.ChatCase, error) {
+	baseHelperCond := `(c.requires_help = true OR c.session_id IN (
+		SELECT ct.session_id FROM case_tags ct JOIN chat_tags t ON ct.tag_id = t.id WHERE t.name = 'Cần Hỗ Trợ'
+	))`
+
+	var whereClause string
+	switch strings.ToLower(helperStatusFilter) {
+	case "new":
+		whereClause = fmt.Sprintf(`%s AND COALESCE(c.helper_status, 'new') = 'new' AND c.status <> 'RESOLVED'`, baseHelperCond)
+	case "processing":
+		whereClause = fmt.Sprintf(`%s AND COALESCE(c.helper_status, 'new') = 'processing' AND c.status <> 'RESOLVED'`, baseHelperCond)
+	case "done":
+		whereClause = fmt.Sprintf(`%s AND (COALESCE(c.helper_status, 'new') = 'done' OR c.status = 'RESOLVED')`, baseHelperCond)
+	case "all":
+		whereClause = baseHelperCond
+	default: // "open" / ""
+		whereClause = fmt.Sprintf(`%s AND COALESCE(c.helper_status, 'new') IN ('new', 'processing') AND c.status <> 'RESOLVED'`, baseHelperCond)
+	}
+
+	query := fmt.Sprintf(`
 		SELECT c.id, c.session_id, c.guest_id, c.customer_name, c.customer_phone,
 		       c.status, COALESCE(c.assigned_cs, ''), COALESCE(c.active_assigned_cs, ''),
 		       COALESCE(c.assigned_cs_history, '[]'::jsonb),
 		       COALESCE(c.requires_help, false), COALESCE(c.help_content, ''),
 		       COALESCE(c.help_requested_by, ''), c.help_requested_at,
+		       COALESCE(c.helper_status, 'new'),
 		       COALESCE(c.last_message, ''), COALESCE(c.resolution_note, ''), c.created_at, c.updated_at,
 		       COALESCE((SELECT sender_type FROM chat_messages WHERE session_id = c.session_id ORDER BY created_at DESC, id DESC LIMIT 1), 'guest') AS last_sender_type
 		FROM chat_cases c
-		WHERE c.requires_help = true OR c.session_id IN (
-		    SELECT ct.session_id FROM case_tags ct JOIN chat_tags t ON ct.tag_id = t.id WHERE t.name = 'Cần Hỗ Trợ'
-		)
+		WHERE %s
 		ORDER BY COALESCE(c.help_requested_at, c.updated_at) DESC
-	`
+	`, whereClause)
+
 	rows, err := r.db.Pool.Query(ctx, query)
 	if err != nil {
 		r.logger.Error().Err(err).Msg("ListHelperCases failed")
@@ -353,6 +434,7 @@ func (r *CaseRepo) ListHelperCases(ctx context.Context) ([]*domain.ChatCase, err
 			&historyBytes,
 			&c.RequiresHelp, &c.HelpContent,
 			&c.HelpRequestedBy, &helpReqAt,
+			&c.HelperStatus,
 			&c.LastMessage, &c.ResolutionNote, &c.CreatedAt, &c.UpdatedAt,
 			&c.LastSenderType,
 		); err != nil {
@@ -381,7 +463,7 @@ func (r *CaseRepo) ProcessHelper(ctx context.Context, sessionID, action, targetU
 
 	query := `
 		UPDATE chat_cases
-		SET requires_help = false,
+		SET helper_status = 'processing',
 		    status = 'HUMAN_CS_ACTIVE'::case_status,
 		    active_assigned_cs = $2,
 		    assigned_cs = $2,
@@ -395,6 +477,46 @@ func (r *CaseRepo) ProcessHelper(ctx context.Context, sessionID, action, targetU
 	_, err := r.db.Pool.Exec(ctx, query, sessionID, finalTarget)
 	if err != nil {
 		r.logger.Error().Err(err).Str("session_id", sessionID).Msg("ProcessHelper failed")
+		return err
+	}
+	return nil
+}
+
+// UpdateHelperStatus updates the helper_status (new, processing, done).
+// When status is 'done', it automatically sets requires_help = false and detaches tag "Cần Hỗ Trợ".
+func (r *CaseRepo) UpdateHelperStatus(ctx context.Context, sessionID string, status string) error {
+	cleanStatus := strings.ToLower(strings.TrimSpace(status))
+	if cleanStatus == "done" {
+		query := `
+			UPDATE chat_cases
+			SET helper_status = 'done',
+			    requires_help = false,
+			    updated_at = NOW()
+			WHERE session_id = $1
+		`
+		if _, err := r.db.Pool.Exec(ctx, query, sessionID); err != nil {
+			r.logger.Error().Err(err).Str("session_id", sessionID).Msg("UpdateHelperStatus done failed")
+			return err
+		}
+
+		// Detach tag "Cần Hỗ Trợ"
+		detachQuery := `
+			DELETE FROM case_tags
+			WHERE session_id = $1 AND tag_id IN (SELECT id FROM chat_tags WHERE name = 'Cần Hỗ Trợ')
+		`
+		_, _ = r.db.Pool.Exec(ctx, detachQuery, sessionID)
+		return nil
+	}
+
+	query := `
+		UPDATE chat_cases
+		SET helper_status = $2,
+		    updated_at = NOW()
+		WHERE session_id = $1
+	`
+	_, err := r.db.Pool.Exec(ctx, query, sessionID, cleanStatus)
+	if err != nil {
+		r.logger.Error().Err(err).Str("session_id", sessionID).Msg("UpdateHelperStatus failed")
 		return err
 	}
 	return nil

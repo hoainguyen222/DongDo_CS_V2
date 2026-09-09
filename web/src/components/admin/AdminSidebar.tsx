@@ -742,17 +742,25 @@ export function useAdminWebRTC(wsRef: React.RefObject<WSClient | null>, sessionI
       }
     });
     rtcRef.current = rtc;
-    if (targetCall.offer) await rtc.handleOffer(targetCall.offer);
+    if (targetCall.offer && targetCall.offer.type && targetCall.offer.sdp) {
+      await rtc.handleOffer(targetCall.offer);
+    }
   }, [incomingCall, wsRef, startCallTimer, stopCallTimer]);
 
   const handleDeclineCall = useCallback(() => {
+    const targetSession = incomingCall?.session_id || sessionId;
     const { voiceApi } = require('@/lib/api');
-    voiceApi.declineCall(incomingCall?.session_id || '').catch(() => {});
+    if (targetSession) {
+      voiceApi.declineCall(targetSession).catch(() => {});
+    }
     setIncomingCall(null);
-  }, [incomingCall]);
+  }, [incomingCall, sessionId]);
 
   const handleEndCall = useCallback(async () => {
     const finalDuration = callDurationRef.current;
+    const targetSession = activeCallInfo?.session_id || incomingCall?.session_id || sessionId;
+    const targetCallID = activeCallInfo?.call_id || incomingCall?.call_id;
+
     setIsCallActive(false);
     setIsCallMinimized(false);
     setActiveCallInfo(null);
@@ -764,10 +772,12 @@ export function useAdminWebRTC(wsRef: React.RefObject<WSClient | null>, sessionI
       await rtcRef.current.endCall(false, finalDuration).catch(() => {}); // local cleanup only
       rtcRef.current = null;
     }
-    const { voiceApi } = require('@/lib/api');
-    await voiceApi.endCall(sessionId, finalDuration).catch(() => {});
+    if (targetSession) {
+      const { voiceApi } = require('@/lib/api');
+      await voiceApi.endCall(targetSession, finalDuration, targetCallID).catch(() => {});
+    }
     onCallEndRef.current?.();
-  }, [sessionId, stopCallTimer]);
+  }, [sessionId, activeCallInfo, incomingCall, stopCallTimer]);
 
   const toggleMute = useCallback(() => {
     if (rtcRef.current) {
@@ -804,7 +814,7 @@ export function useAdminWebRTC(wsRef: React.RefObject<WSClient | null>, sessionI
           call_id: payload.call_id,
           session_id: payload.session_id || payload.call_id,
           caller_id: payload.customer_id || payload.caller_id || 'Khách hàng',
-          offer: payload.offer,
+          offer: (payload.offer && payload.offer.type && payload.offer.sdp) ? payload.offer : undefined,
         };
         setIncomingCall(callData);
         addCallToPending(callData);
@@ -813,7 +823,7 @@ export function useAdminWebRTC(wsRef: React.RefObject<WSClient | null>, sessionI
       ws.on('call_ring', (event: any) => {
         const sID = event.payload?.session_id || event.session_id;
         const cID = event.payload?.caller_id || event.sender_id || 'Khách hàng';
-        const offerData = event.payload?.offer || event.payload;
+        const offerData = (event.payload?.offer && event.payload?.offer.type && event.payload?.offer.sdp) ? event.payload.offer : undefined;
         const callData = { session_id: sID, caller_id: cID, offer: offerData, call_id: event.payload?.call_id };
         if (sID) {
           setIncomingCall(callData);
