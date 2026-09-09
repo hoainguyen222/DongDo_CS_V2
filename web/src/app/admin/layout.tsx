@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState, useCallback, Suspense } from 'react
 import { useRouter, usePathname } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/lib/stores/authStore';
-import { useRolePermissions, useVoiceCalls, usePendingLearning, useCases } from '@/lib/hooks/useApi';
+import { useRolePermissions, useCases } from '@/lib/hooks/useApi';
 import { WSClient } from '@/lib/ws';
 import { AdminSidebar, useAdminWebRTC } from '@/components/admin/AdminSidebar';
 import { MessageAlertBanner } from '@/components/admin/MessageAlertBanner';
@@ -53,12 +53,6 @@ export default function AdminLayout({
   const { data: casesData } = useCases('', 1, 10, undefined, {
     enabled: hasHydrated && isAuthenticated && !publicPath,
   });
-  const { data: voiceCallsData } = useVoiceCalls(undefined, 1, 10, {
-    enabled: hasHydrated && isAuthenticated && !publicPath,
-  });
-  const { data: learningData } = usePendingLearning(1, 10, {
-    enabled: hasHydrated && isAuthenticated && !publicPath,
-  });
   const { data: permissionsData } = useRolePermissions({
     enabled: hasHydrated && isAuthenticated && !publicPath,
   });
@@ -86,7 +80,6 @@ export default function AdminLayout({
       queryClient.invalidateQueries({ queryKey: ['cases'] });
       queryClient.invalidateQueries({ queryKey: ['customers'] });
       queryClient.invalidateQueries({ queryKey: ['analytics'] });
-      queryClient.invalidateQueries({ queryKey: ['voiceCalls'] });
       queryClient.invalidateQueries({ queryKey: ['helperCases'] });
     });
 
@@ -116,7 +109,6 @@ export default function AdminLayout({
         );
         return { ...oldData, cases: updated };
       });
-      queryClient.invalidateQueries({ queryKey: ['cases'] });
     });
 
     ws.on('learning_update', () => {
@@ -149,8 +141,6 @@ export default function AdminLayout({
   }
 
   const cases = casesData?.cases ?? [];
-  const voiceCalls = voiceCallsData?.calls ?? [];
-  const pendingLearning = learningData?.pending_items ?? [];
   const permissions = permissionsData ?? [];
 
   const waitingCasesCount = cases.filter((c: any) => c.status === 'NEEDS_HUMAN_CS').length;
@@ -173,8 +163,8 @@ export default function AdminLayout({
         permissions={permissions}
         waitingCasesCount={waitingCasesCount}
         customersCount={0}
-        voiceCallsCount={voiceCalls.length}
-        pendingLearningCount={pendingLearning.length}
+        voiceCallsCount={0}
+        pendingLearningCount={0}
         pendingCalls={webRtc.pendingCalls}
         onAcceptPendingCall={webRtc.handleAnswerCall}
         onLogout={handleLogout}
@@ -189,8 +179,6 @@ export default function AdminLayout({
 
       <VoiceHistoryModal
         isOpen={showVoiceHistoryModal}
-        calls={voiceCalls}
-        isLoading={false}
         onClose={() => setShowVoiceHistoryModal(false)}
       />
 

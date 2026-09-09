@@ -223,7 +223,7 @@ export default function CaseDetailPage() {
     (async () => {
       try {
         const { api } = await import('@/lib/api');
-        const result = await api.listCases('', 1, 100);
+        const result = await api.listCases('', 1, 20);
         if (cancelled) return;
         const found = result.cases.find((c: any) => c.session_id === sessionId);
         if (found) {
