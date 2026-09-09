@@ -350,7 +350,7 @@ make monitoring-up
 
 # 3. Mở các UI (chờ ~15s để Prometheus scrape xong):
 #    Grafana       → http://localhost:3050  (admin / admin — đổi ngay!)
-#    Prometheus    → http://localhost:9090
+#    Prometheus    → http://localhost:9091  (đổi từ 9090 sang 9091 để tránh trùng với /metrics của Go server)
 #    Alertmanager  → http://localhost:9093
 ```
 
@@ -378,7 +378,7 @@ make down                # Stop app stack
 | App `/metrics`   | `http://localhost:9090/metrics`        | Loopback only         |
 | App `/debug/pprof` | `http://localhost:6060/debug/pprof/` | Loopback only         |
 | Grafana          | `http://localhost:3050`                | admin / admin (đổi!); **3050** để không trùng với `npm run dev` |
-| Prometheus       | `http://localhost:9090`                | Expose nội bộ        |
+| Prometheus       | `http://localhost:9091`                | Expose nội bộ (loopback only); 9091 để tránh xung đột với `/metrics` 9090 của Go server |
 | Alertmanager     | `http://localhost:9093`                | Expose nội bộ        |
 
 > ⚠️ **`/metrics` và `/debug/pprof` mặc định bind `127.0.0.1`** — an toàn cho production. Muốn truy cập từ xa, dùng `ssh -L 9090:127.0.0.1:9090 user@host` rồi mở `http://localhost:9090`.

@@ -44,14 +44,15 @@ scrape_configs:
   - job_name: server
     metrics_path: /metrics
     static_configs:
-      # The Go server binds METRICS_ADDR (default 127.0.0.1:9090) on the host.
-      # Prometheus reaches it via `host.docker.internal` — works out of the
-      # box on macOS/Windows Docker Desktop. On Linux Docker, the default
-      # gateway's IP is used instead (see `extra_hosts` below).
-      # If the server has been moved to a container (not the case here), point
-      # this at the service name `server:<port>` directly.
+      # The Go server binds METRICS_ADDR=0.0.0.0:9090 INSIDE its container.
+      # Prometheus reaches it via the `server` service name on the shared
+      # app network (`dongdo_cs_v2_default`). This is the same pattern the
+      # Grafana stack and the Prometheus official Compose file use, and
+      # it's the one that survives a migration to Kubernetes unchanged
+      # (where the equivalent would be a ClusterIP service + Pod annotation
+      # `prometheus.io/scrape: "true"`).
       - targets:
-          - host.docker.internal:9090
+          - server:9090
         labels:
           component: cskh-server
           service: dongdo-cs-server

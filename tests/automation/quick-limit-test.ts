@@ -42,13 +42,26 @@ async function registerGuest(name: string): Promise<{ success: boolean; sessionI
       }),
     });
 
-    if (!response.ok) {
-      return { success: false, error: `HTTP ${response.status}` };
+    // Log response details for debugging
+    const responseText = await response.text();
+    let responseData: any;
+    try {
+      responseData = JSON.parse(responseText);
+    } catch {
+      responseData = { raw: responseText };
     }
 
-    const data: any = await response.json();
+    if (!response.ok) {
+      console.log(`[DEBUG] registerGuest FAILED: HTTP ${response.status}`);
+      console.log(`[DEBUG] Response body: ${JSON.stringify(responseData)}`);
+      return { success: false, error: `HTTP ${response.status}: ${JSON.stringify(responseData)}` };
+    }
+
+    const data: any = responseData;
+    console.log(`[DEBUG] registerGuest SUCCESS: session_id=${data.session_id}`);
     return { success: true, sessionId: data.session_id };
   } catch (error: any) {
+    console.log(`[DEBUG] registerGuest EXCEPTION: ${error.message}`);
     return { success: false, error: error.message };
   }
 }
@@ -65,8 +78,15 @@ async function sendMessage(sessionId: string, message: string): Promise<{ succes
         message,
       }),
     });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.log(`[DEBUG] sendMessage FAILED: HTTP ${response.status} - ${errorText.substring(0, 200)}`);
+    }
+    
     return { success: response.ok, duration: Date.now() - start };
-  } catch {
+  } catch (error: any) {
+    console.log(`[DEBUG] sendMessage EXCEPTION: ${error.message}`);
     return { success: false, duration: Date.now() - start };
   }
 }
@@ -105,6 +125,16 @@ async function testConcurrentConnections(target: number): Promise<TestResult> {
   const duration = Date.now() - start;
   
   const successful = results.filter(r => r.success).length;
+  const failed = results.filter(r => !r.success);
+  
+  // Log first few errors for debugging
+  if (failed.length > 0) {
+    console.log(`[DEBUG] First ${Math.min(3, failed.length)} errors:`);
+    failed.slice(0, 3).forEach((r, i) => {
+      console.log(`  [${i + 1}] ${r.error}`);
+    });
+  }
+  
   const rate = (successful / (duration / 1000)).toFixed(1);
   
   log(successful === target ? 'green' : 'yellow', 
@@ -360,11 +390,40 @@ async function findMaxConnections(): Promise<number> {
 
 // ============== MAIN ==============
 
+async function checkServerHealth(): Promise<boolean> {
+  console.log('\n🔍 Checking server health...');
+  try {
+    const response = await fetch(`${API_BASE}/health`, {
+      method: 'GET',
+    });
+    if (response.ok) {
+      console.log('✅ Server is healthy');
+      return true;
+    }
+    console.log(`⚠️  Server responded with status ${response.status}`);
+    const text = await response.text();
+    console.log(`   Response: ${text}`);
+    return false;
+  } catch (error: any) {
+    console.log(`❌ Cannot connect to server: ${error.message}`);
+    console.log('   Make sure the server is running on port 8080');
+    return false;
+  }
+}
+
 async function main() {
   console.log('\n' + '🔷'.repeat(30));
   console.log('  QUICK SYSTEM LIMITS TEST');
   console.log('🔷'.repeat(30));
   console.log(`\n🌐 API: ${API_BASE}\n`);
+  
+  // Pre-flight check
+  const isHealthy = await checkServerHealth();
+  if (!isHealthy) {
+    console.log('\n❌ Server health check failed. Please ensure the server is running.');
+    console.log('   Run: docker compose up -d');
+    process.exit(1);
+  }
   
   const results: TestResult[] = [];
   

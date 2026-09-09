@@ -29,6 +29,8 @@ MONITORING_PROJECT := dongdo_cs_v2
 # Bring up the monitoring stack on top of the app stack. Auto-creates the
 # app network if it doesn't exist yet (so you can `make monitoring-up`
 # before `make up` without a hard error).
+# Uses --env-file .env.monitoring so Grafana credentials and Prometheus port
+# are read from the monitoring-specific env file (not the app's .env).
 monitoring-up:
 	@echo "🔌 Ensuring dongdo_cs_v2_default network exists..."
 	@docker network inspect dongdo_cs_v2_default >/dev/null 2>&1 || \
@@ -37,31 +39,36 @@ monitoring-up:
 	   docker network create dongdo_cs_v2_default >/dev/null)
 	@echo "🚀 Starting monitoring stack..."
 	docker compose -p $(MONITORING_PROJECT) \
+	  --env-file .env.monitoring \
 	  -f docker-compose.yml \
 	  -f monitoring/docker-compose.monitoring.yml \
 	  --profile monitoring up -d
-	@echo "✅ Monitoring stack up. Open: Grafana → http://localhost:$${GRAFANA_PORT:-3050}  Prometheus → http://localhost:9090  Alertmanager → http://localhost:9093"
+	@echo "✅ Monitoring stack up. Open: Grafana → http://localhost:$${GRAFANA_PORT:-3050}  Prometheus → http://localhost:$${PROMETHEUS_PORT:-9091}  Alertmanager → http://localhost:9093"
 
 monitoring-down:
 	docker compose -p $(MONITORING_PROJECT) \
+	  --env-file .env.monitoring \
 	  -f docker-compose.yml \
 	  -f monitoring/docker-compose.monitoring.yml \
 	  --profile monitoring down
 
 monitoring-logs:
 	docker compose -p $(MONITORING_PROJECT) \
+	  --env-file .env.monitoring \
 	  -f docker-compose.yml \
 	  -f monitoring/docker-compose.monitoring.yml \
 	  --profile monitoring logs -f
 
 monitoring-status:
 	docker compose -p $(MONITORING_PROJECT) \
+	  --env-file .env.monitoring \
 	  -f docker-compose.yml \
 	  -f monitoring/docker-compose.monitoring.yml \
 	  --profile monitoring ps
 
 monitoring-config:
 	docker compose -p $(MONITORING_PROJECT) \
+	  --env-file .env.monitoring \
 	  -f docker-compose.yml \
 	  -f monitoring/docker-compose.monitoring.yml \
 	  --profile monitoring config

@@ -54,6 +54,44 @@ Mặc định `make up` **không** khởi động chúng.
 
 ## Xử lý lỗi thường gặp
 
+### `Bind for 0.0.0.0:9090 failed: port is already allocated` khi `make up`
+
+Docker từ chối start `dongdo_server` vì **đã có container cũ (thường là
+prometheus hoặc postgres-exporter)** đang nắm port 9090 trên host. Dù
+`make monitoring-up` bind 127.0.0.1:9091 (không xung đột trực tiếp), nhưng
+**một số container orphan** (vd. chạy lệnh cũ với `--profile` khác, hoặc
+`tắt máy giữa chừng`) vẫn chiếm host port 9090.
+
+Triệu chứng:
+
+```
+Error response from daemon: failed to set up container networking: ...
+Bind for 0.0.0.0:9090 failed: port is already allocated
+WARN[0038] Found orphan containers (dongdo_prometheus, ...)
+```
+
+Cách xử lý:
+
+```bash
+# Bước 1: tìm ai đang giữ 9090.
+lsof -nP -iTCP:9090 -sTCP:LISTEN
+
+# Bước 2: dừng toàn bộ monitoring stack (kể cả orphan).
+docker compose -p dongdo_cs_v2 \
+  --env-file .env.monitoring \
+  -f docker-compose.yml \
+  -f monitoring/docker-compose.monitoring.yml \
+  --profile monitoring --remove-orphans down
+
+# Bước 3: nếu vẫn còn listener lạ, restart Docker Desktop hoặc kill PID đó.
+
+# Bước 4: thử lại.
+make up
+```
+
+Nếu hay gặp tình trạng này, thêm `--remove-orphans` vào Makefile
+target `up`/`monitoring-up`.
+
 ### `network dongdo_cs_v2_default declared as external, but could not be found`
 
 Bạn chạy `make monitoring-up` mà chưa chạy `make up` trước, nên network của app
@@ -74,7 +112,7 @@ make monitoring-up
 # Chỉ Prometheus + Grafana + node-exporter sẽ healthy.
 ```
 
-### `localhost:9090` / `localhost:9093` refused to connect
+### `localhost:9091` / `localhost:9093` refused to connect
 
 File compose chưa publish port. Đảm bảo bạn đang dùng phiên bản mới nhất:
 
@@ -84,7 +122,7 @@ docker compose -p dongdo_cs_v2 \
   -f monitoring/docker-compose.monitoring.yml \
   --profile monitoring ps
 # Cả prometheus và alertmanager phải show
-# 0.0.0.0:9090->9090 và 0.0.0.0:9093->9093 trong cột PORTS.
+# 127.0.0.1:9091->9090 (Prometheus, bound to loopback) và 0.0.0.0:9093->9093 trong cột PORTS.
 ```
 
 Nếu port bị thiếu, rebuild từ `main` mới nhất (hoặc kiểm tra không chạy
@@ -108,13 +146,13 @@ make up
 make monitoring-up
 
 # 3. Kiểm tra toàn bộ scrape target đã UP (chờ ~15 giây).
-curl -s http://localhost:9090/api/v1/targets \
+curl -s http://localhost:9091/api/v1/targets \
   | python3 -c "import json,sys; t=json.load(sys.stdin)['data']['activeTargets']; \
      [print(f\"{'✅' if x['health']=='up' else '❌'} {x['labels']['job']} ({x['health']})\") for x in t]"
 
 # 4. Mở dashboard.
 open http://localhost:3050      # Grafana — admin / admin (đổi mật khẩu!)  [3050 ≠ 3000 tránh trùng npm run dev]
-open http://localhost:9090      # Prometheus — query ad-hoc metrics
+open http://localhost:9091      # Prometheus — query ad-hoc metrics
 open http://localhost:9093      # Alertmanager — lịch sử alert
 ```
 
@@ -184,25 +222,22 @@ Instrumentation của Go nằm trong `internal/observability/`:
 | App /metrics       | `http://localhost:9090/metrics`  | loopback only — xem security          |
 | App /debug/pprof   | `http://localhost:6060/debug/pprof/` | loopback only — xem security     |
 | Grafana            | `http://localhost:3050`          | admin / admin (đổi mật khẩu!). **3050 không phải 3000** — tránh trùng `npm run dev`. |
-| Prometheus         | `http://localhost:9090`          | UI để query ad-hoc. **Cùng port với `/metrics`** — bên trong container, cả hai đều reachable vì Prometheus publish 9090 từ trong container ra host, và Go server chạy trên chính host. |
+| Prometheus         | `http://localhost:9091`          | UI để query ad-hoc. **9091 tránh trùng với Go server /metrics trên 9090**. Prometheus bind loopback (127.0.0.1) nên chỉ accessible từ host. |
 | Alertmanager       | `http://localhost:9093`           | UI để xem lịch sử alert              |
 | Node exporter      | (không publish port ra host)     | chỉ Prometheus scrape                |
 | PG exporter        | (không publish port ra host)     | chỉ Prometheus scrape                |
 | Redis exporter     | (không publish port ra host)     | chỉ Prometheus scrape                |
 
-### Ghi chú về port trùng nhau
+### Ghi chú về port
 
 - **Grafana trên 3000** trùng với Next.js `npm run dev`. Map sang
   `3050:3000` để chạy cả hai cùng lúc. Ghi đè bằng
   `GRAFANA_PORT=<port-tự-chọn> make monitoring-up`.
-- **Prometheus trên 9090** cùng số port với `METRICS_ADDR` của Go app.
-  Đây là cố ý — Prometheus scrape `host.docker.internal:9090`
-  (tức 9090 trên host = Go server's `/metrics`), còn Prometheus UI
-  publish container port 9090 ra host 9090. Cùng port number nhưng ở
-  địa chỉ khác nhau (localhost vs container bridge) nên không conflict
-  thực sự — nhưng có thể gây nhầm. Nếu muốn, đặt
-  `METRICS_ADDR=127.0.0.1:9091` trong `.env` và update `targets`
-  trong `prometheus.yml` sang `:9091`.
+- **Prometheus UI đã đổi sang 9091** (loopback only). Go server vẫn giữ
+  `/metrics` trên host:9090. Hai service không còn cùng port number nên
+  không có cách nào nhầm lẫn. Prometheus scrape `server:9090` qua Docker
+  network (container name, không phải host port). Ghi đè bằng
+  `PROMETHEUS_PORT=<port-tự-chọn> make monitoring-up`.
 
 ---
 
@@ -260,7 +295,7 @@ make pprof-goroutine
 
 ### Tìm SQL query chậm
 
-Mở Prometheus (`http://localhost:9090`) và query:
+Mở Prometheus (`http://localhost:9091`) và query:
 
 ```promql
 # Top 10 query chậm nhất theo mean execution time
@@ -279,7 +314,7 @@ Dashboard `Database` trong Grafana có sẵn các panel này.
 
 ```bash
 # Qua Prometheus (UI hoặc curl)
-curl -s http://localhost:9090/metrics | grep redis_stream
+curl -s http://localhost:9091/metrics | grep redis_stream
 
 # Hoặc trực tiếp qua redis-cli trong container:
 docker exec -it dongdo_redis \
@@ -298,10 +333,46 @@ Mở Grafana → dashboard "Chat / WebSocket":
 
 ---
 
+## Cấu trúc env
+
+Monitoring stack dùng **2 file env riêng biệt**, tách biệt hoàn toàn:
+
+| File | Ai quản lý | Chứa |
+|------|------------|------|
+| `.env` | App dev | Server config, DB, Redis, AI keys, JWT secrets |
+| `.env.monitoring` | SRE / Observability | Grafana credentials, Grafana/Prometheus ports |
+
+**Lý do tách**: SRE team chỉ cần access `.env.monitoring` để rotate Grafana password
+hoặc đổi port, không cần biết app secrets (API keys, JWT secret).
+
+```bash
+# .env.monitoring — chỉ monitoring, KHÔNG chứa app secrets
+GRAFANA_ADMIN_USER=admin
+GRAFANA_ADMIN_PASSWORD=admin
+GRAFANA_ROOT_URL=http://localhost:3050
+GRAFANA_PORT=3050
+PROMETHEUS_PORT=9090
+```
+
+Makefile tự động truyền `--env-file .env.monitoring` khi chạy monitoring commands.
+Nếu chạy trực tiếp `docker compose` (không qua Makefile), nhớ thêm flag này:
+
+```bash
+docker compose \
+  --env-file .env.monitoring \
+  -f docker-compose.yml \
+  -f monitoring/docker-compose.monitoring.yml \
+  --profile monitoring up -d
+```
+
+---
+
 ## Cấu hình
 
 Toàn bộ setting điều khiển qua environment variable. Giá trị mặc định an toàn
 (bind loopback).
+
+### App-side observability (trong `.env`)
 
 | Env var                     | Mặc định            | Mục đích                            |
 |-----------------------------|----------------------|-------------------------------------|
@@ -312,8 +383,21 @@ Toàn bộ setting điều khiển qua environment variable. Giá trị mặc đ
 | `BUSINESS_METRICS_ENABLED`  | `true`               | Bật business gauge poller           |
 | `BUSINESS_METRICS_POLL_SEC` | `15`                 | Polling interval (giây)              |
 | `REDIS_POOL_METRICS_ENABLED`| `true`               | Export go-redis pool stats          |
-| `GRAFANA_ADMIN_USER`        | `admin`              | Đổi trước khi expose ra public     |
-| `GRAFANA_ADMIN_PASSWORD`    | `admin`              | Đổi trước khi expose ra public     |
+
+### Monitoring stack (trong `.env.monitoring`)
+
+| Env var                  | Mặc định            | Mục đích                            |
+|--------------------------|----------------------|-------------------------------------|
+| `GRAFANA_ADMIN_USER`     | `admin`              | Username đăng nhập Grafana          |
+| `GRAFANA_ADMIN_PASSWORD` | `admin`              | Password đăng nhập Grafana          |
+| `GRAFANA_ROOT_URL`       | `http://localhost:3050` | Public URL cho OAuth/deep links  |
+| `GRAFANA_PORT`           | `3050`               | Host port expose Grafana UI         |
+| `PROMETHEUS_PORT`        | `9090`               | Host port expose Prometheus UI      |
+
+> **Lưu ý**: Bảng ở phiên bản cũ đã gộp Grafana vars vào `.env`. Sau khi tách,
+> Grafana vars chuyển sang `.env.monitoring`. App vars (`METRICS_*`, `PPROF_*`,
+> `BUSINESS_METRICS_*`, `REDIS_POOL_*`) vẫn nằm trong `.env` vì chúng điều khiển
+> Go server bind `/metrics` và `/debug/pprof`.
 
 ---
 
@@ -344,10 +428,10 @@ make monitoring-config
 make metrics
 
 # 3. Toàn bộ Prometheus targets phải là UP.
-curl -s http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | {job: .labels.job, health: .health}'
+curl -s http://localhost:9091/api/v1/targets | jq '.data.activeTargets[] | {job: .labels.job, health: .health}'
 
 # 4. Alert rules compile được.
-curl -s http://localhost:9090/api/v1/rules | jq '.data.groups[].rules[].name'
+curl -s http://localhost:9091/api/v1/rules | jq '.data.groups[].rules[].name'
 
 # 5. Grafana datasource kết nối thành công.
 # Truy cập http://localhost:3050/datasources và kiểm tra Prometheus màu xanh.

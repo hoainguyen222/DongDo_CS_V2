@@ -63,6 +63,8 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
+      - "9090:9090"   # /metrics  — Prometheus scrapes via Docker network (server:9090)
+      - "6060:6060"   # /debug/pprof
     environment:
       PORT: "8080"
       DATABASE_URL: "postgres://postgres:postgrespassword@postgres:5432/dongdo_cs?sslmode=disable"
@@ -76,6 +78,13 @@ services:
       LLM_MODEL: "${LLM_MODEL:-claude-haiku-4-5-20251001}"
       LLM_TEMPERATURE: "0.1"
       DOCUMENTS_DIR: "/app/tailieu"
+      # Observability — bind to 0.0.0.0 so Prometheus can scrape via Docker network
+      METRICS_ENABLED: "true"
+      METRICS_ADDR: "0.0.0.0:9090"
+      PPROF_ENABLED: "true"
+      PPROF_ADDR: "0.0.0.0:6060"
+      BUSINESS_METRICS_ENABLED: "true"
+      BUSINESS_METRICS_POLL_SEC: "15"
     volumes:
       - ./recordings:/app/recordings
       - ./tailieu:/app/tailieu
