@@ -237,7 +237,6 @@ export function Pagination({
           value={pageSize}
           onChange={(e) => {
             onPageSizeChange(Number(e.target.value));
-            onPageChange(1);
           }}
           className={styles.paginationSelect}
         >

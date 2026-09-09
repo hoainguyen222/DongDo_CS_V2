@@ -185,7 +185,7 @@ export default function LearningPage() {
         )}
       </div>
 
-      {total > pageSize && (
+      {total > 0 && (
         <div className="mt-4">
           <Pagination
             currentPage={page}
