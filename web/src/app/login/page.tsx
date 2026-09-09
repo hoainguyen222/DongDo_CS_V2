@@ -62,7 +62,7 @@ export default function LoginPage() {
           <div className={styles.brand}>
             <div className={styles.brandIconBox}>
               <Image
-                src="/logo/Logo Dọc_Trắng.svg"
+                src="/logo/logo-white.svg"
                 alt="Đông Đô Partners"
                 width={56}
                 height={56}
@@ -89,7 +89,7 @@ export default function LoginPage() {
         <div className={styles.brand}>
           <div className={styles.brandIconBox}>
             <Image
-              src="/logo/Logo Dọc_Trắng.svg"
+              src="/logo/logo-white.svg"
               alt="Đông Đô Partners"
               width={56}
               height={56}

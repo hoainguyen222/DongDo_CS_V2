@@ -162,17 +162,33 @@ services:
   # 7. Next.js Frontend (Production) — served directly on port 3000.
   # An external nginx (not included in this stack) should be deployed
   # separately as a reverse proxy for HTTPS termination and SSL.
+  #
+  # IMPORTANT: `NEXT_PUBLIC_*` variables are inlined into the JS bundle
+  # at BUILD TIME by Next.js. They MUST be passed via `build.args`.
+  # We use `--env-file web/.env` in the Makefile so docker-compose build
+  # reads these vars from `web/.env`. Runtime env (for `next start`) comes
+  # from `env_file: web/.env` below.
   web:
     build:
       context: ./web
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
+        NEXT_PUBLIC_APP_ENV: ${NEXT_PUBLIC_APP_ENV}
+        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME}
+        NEXT_PUBLIC_ADMIN_PATH: ${NEXT_PUBLIC_ADMIN_PATH}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL}
+        NEXT_PUBLIC_STUN_SERVERS: ${NEXT_PUBLIC_STUN_SERVERS}
+        NEXT_PUBLIC_LOG_LEVEL: ${NEXT_PUBLIC_LOG_LEVEL}
     container_name: dongdo_web
     restart: unless-stopped
     ports:
       - "3000:3000"
+    # Pass web/.env to the running container (runtime env for `next start`).
+    env_file:
+      - web/.env
     environment:
-      # Back-end URL inside the Docker network — used by Next.js rewrites to
-      # proxy /api/*, /auth/* etc. to the Go server without CORS.
+      # In Docker network, the Go server is reachable as `server:8080`.
       BACKEND_URL: "http://server:8080"
       NODE_ENV: "production"
       NEXT_TELEMETRY_DISABLED: "1"

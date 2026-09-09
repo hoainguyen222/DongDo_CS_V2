@@ -116,7 +116,7 @@ function SetupPageInner() {
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-[#1C2D56] border border-[#95252E]/40 mb-4 shadow-lg">
             <img
-              src="/logo/Logo Dọc_Trắng.svg"
+              src="/logo/logo-white.svg"
               alt="Đông Đô Partners"
               className="h-12 w-auto object-contain"
               onError={(e) => { e.currentTarget.style.display = 'none'; }}

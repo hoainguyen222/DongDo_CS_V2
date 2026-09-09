@@ -10,7 +10,7 @@ export function AdminLoadingScreen() {
       <div className={styles.loadingContent}>
         <div className={styles.loadingIconBox}>
           <Image
-            src="/logo/Logo Dọc_Trắng.svg"
+            src="/logo/logo-white.svg"
             alt="Đông Đô Partners"
             width={56}
             height={56}

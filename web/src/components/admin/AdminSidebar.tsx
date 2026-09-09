@@ -387,7 +387,7 @@ export function AdminSidebar({
       <aside className={styles.aside}>
         <div className={styles.logoBar}>
           <Image
-            src="/logo/Logo Dọc_Trắng.svg"
+            src="/logo/logo-white.svg"
             alt="Logo Đông Đô Partners"
             width={40}
             height={40}
