@@ -19,6 +19,8 @@ chat_history.db-wal
 .env.development.local
 .env.test.local
 .env.production.local
+.env.production
+.env.development
 
 # Test Reports & Logs
 tests/automation/reports/*.json
@@ -82,3 +84,10 @@ monitoring/.env.monitoring
 # Docker Compose local overrides (per-developer)
 docker-compose.override.yml
 docker-compose.local.yml
+
+# Certbot working files (--work-dir, --logs-dir)
+/docker/nginx/certbot/logs/
+/docker/nginx/certbot/lib/
+
+# Nginx logs (when bind-mounted for debugging)
+/docker/nginx/logs/
