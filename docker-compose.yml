@@ -164,22 +164,13 @@ services:
   # separately as a reverse proxy for HTTPS termination and SSL.
   #
   # IMPORTANT: `NEXT_PUBLIC_*` variables are inlined into the JS bundle
-  # at BUILD TIME by Next.js. They MUST be passed via `build.args`.
-  # We use `--env-file web/.env` in the Makefile so docker-compose build
-  # reads these vars from `web/.env`. Runtime env (for `next start`) comes
-  # from `env_file: web/.env` below.
+  # at BUILD TIME. The web/Dockerfile copies `web/.env` and sources it
+  # directly in the builder stage, so build args are NOT needed here.
+  # Runtime env (for `next start`) comes from `env_file: web/.env`.
   web:
     build:
       context: ./web
       dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
-        NEXT_PUBLIC_APP_ENV: ${NEXT_PUBLIC_APP_ENV}
-        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME}
-        NEXT_PUBLIC_ADMIN_PATH: ${NEXT_PUBLIC_ADMIN_PATH}
-        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL}
-        NEXT_PUBLIC_STUN_SERVERS: ${NEXT_PUBLIC_STUN_SERVERS}
-        NEXT_PUBLIC_LOG_LEVEL: ${NEXT_PUBLIC_LOG_LEVEL}
     container_name: dongdo_web
     restart: unless-stopped
     ports:

@@ -43,23 +43,27 @@ ENV NODE_ENV=production
 # ---- Build-time args (inlined into JS bundle by Next.js) -------------------
 # All `NEXT_PUBLIC_*` values MUST be present at build time, otherwise
 # Next.js will inline `undefined` and they will never reach the browser.
-# Each ARG has a default so the image can still build standalone (e.g. CI).
-ARG NEXT_PUBLIC_API_BASE_URL
-ARG NEXT_PUBLIC_APP_ENV=production
-ARG NEXT_PUBLIC_APP_NAME="DongDo CS"
-ARG NEXT_PUBLIC_ADMIN_PATH=/admin
-ARG NEXT_PUBLIC_WS_URL
-ARG NEXT_PUBLIC_STUN_SERVERS=stun:stun.l.google.com:19302
-ARG NEXT_PUBLIC_LOG_LEVEL=warn
+# Strategy: copy .env into the builder and source it so ENV vars are available
+# to `next build`. This works on any host (local, CI, AWS) without needing
+# `--env-file` flags.
+COPY .env ./
+RUN set -a && . .env && set +a && \
+    echo "NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8080}" && \
+    echo "NEXT_PUBLIC_APP_ENV=${NEXT_PUBLIC_APP_ENV:-production}" && \
+    echo "NEXT_PUBLIC_APP_NAME=${NEXT_PUBLIC_APP_NAME:-DongDo CS}" && \
+    echo "NEXT_PUBLIC_ADMIN_PATH=${NEXT_PUBLIC_ADMIN_PATH:-/admin}" && \
+    echo "NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL:-ws://localhost:8080}" && \
+    echo "NEXT_PUBLIC_STUN_SERVERS=${NEXT_PUBLIC_STUN_SERVERS:-stun:stun.l.google.com:19302}" && \
+    echo "NEXT_PUBLIC_LOG_LEVEL=${NEXT_PUBLIC_LOG_LEVEL:-warn}"
 
-# Promote ARGs to ENV so `next build` (which runs `process.env.*`) can see them.
-ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL \
-    NEXT_PUBLIC_APP_ENV=$NEXT_PUBLIC_APP_ENV \
-    NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME \
-    NEXT_PUBLIC_ADMIN_PATH=$NEXT_PUBLIC_ADMIN_PATH \
-    NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL \
-    NEXT_PUBLIC_STUN_SERVERS=$NEXT_PUBLIC_STUN_SERVERS \
-    NEXT_PUBLIC_LOG_LEVEL=$NEXT_PUBLIC_LOG_LEVEL
+# Promote all NEXT_PUBLIC_* from the sourced .env into ENV so `next build` sees them.
+ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8080} \
+    NEXT_PUBLIC_APP_ENV=${NEXT_PUBLIC_APP_ENV:-production} \
+    NEXT_PUBLIC_APP_NAME=${NEXT_PUBLIC_APP_NAME:-DongDo CS} \
+    NEXT_PUBLIC_ADMIN_PATH=${NEXT_PUBLIC_ADMIN_PATH:-/admin} \
+    NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL:-ws://localhost:8080} \
+    NEXT_PUBLIC_STUN_SERVERS=${NEXT_PUBLIC_STUN_SERVERS:-stun:stun.l.google.com:19302} \
+    NEXT_PUBLIC_LOG_LEVEL=${NEXT_PUBLIC_LOG_LEVEL:-warn}
 
 # Reuse the already-installed node_modules from the deps stage.
 COPY --from=deps /app/node_modules ./node_modules

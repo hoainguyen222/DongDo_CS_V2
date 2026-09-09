@@ -164,7 +164,7 @@ sync-init: ## Sync db/migrations/*.sql → db/init/*.sql (for fresh Postgres vol
 
 # Bring up the full stack. The server binary runs goose migrations on startup.
 up: ## Build and start the full app stack
-	docker compose --env-file web/.env up -d --build
+	docker compose up -d --build
 
 # Up WITHOUT rebuilding the image (faster iteration if only db/init changed).
 up-fast: ## Start the stack without rebuilding images
