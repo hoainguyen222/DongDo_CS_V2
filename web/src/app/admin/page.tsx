@@ -28,6 +28,7 @@ import {
   Headphones,
   Users,
   PhoneCall,
+  Bot,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { WSClient } from '@/lib/ws';
@@ -420,6 +421,20 @@ export default function AdminPage() {
       setSelectedCase({ ...selectedCase, status: 'HUMAN_CS_ACTIVE', assigned_cs: currentUser?.username || '' });
       loadCases();
       loadCaseDetail(selectedCase.session_id);
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleResumeAI = async () => {
+    if (!selectedCase) return;
+    if (!confirm('Bạn có chắc muốn kích hoạt AI hỗ trợ tiếp cho cuộc hội thoại này?\n\nAI sẽ tự động trả lời các câu hỏi tiếp theo của khách hàng nếu có trong tài liệu.')) return;
+    try {
+      await api.resumeAI(selectedCase.session_id);
+      setSelectedCase({ ...selectedCase, status: 'AI_ACTIVE', assigned_cs: '' });
+      loadCases();
+      loadCaseDetail(selectedCase.session_id);
+      alert('✅ Đã bật chế độ AI hỗ trợ tiếp! AI sẽ tự động trả lời các câu hỏi tiếp theo của khách hàng nếu có trong tài liệu.');
     } catch (err: any) {
       alert(err.message);
     }
@@ -1663,6 +1678,17 @@ export default function AdminPage() {
                           >
                             <UserCheck className="w-3.5 h-3.5" />
                             <span>Tiếp Nhận Case</span>
+                          </button>
+                        )}
+
+                        {selectedCase.status !== 'AI_ACTIVE' && selectedCase.status !== 'RESOLVED' && (
+                          <button
+                            onClick={handleResumeAI}
+                            className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold flex items-center space-x-1 shadow transition cursor-pointer"
+                            title="Bật lại AI để AI hỗ trợ tiếp cho khách hàng"
+                          >
+                            <Bot className="w-3.5 h-3.5" />
+                            <span>AI Hỗ Trợ Tiếp</span>
                           </button>
                         )}
 

@@ -24,6 +24,12 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
           h3: ({ node, ...props }) => (
             <h3 className="text-sm font-semibold text-rose-300 mt-2 mb-1" {...props} />
           ),
+          h4: ({ node, ...props }) => (
+            <h4 className="text-xs font-semibold text-rose-300 mt-2 mb-1" {...props} />
+          ),
+          h5: ({ node, ...props }) => (
+            <h5 className="text-xs font-medium text-amber-300 mt-1.5 mb-0.5" {...props} />
+          ),
           p: ({ node, ...props }) => (
             <p className="mb-2 last:mb-0 leading-relaxed text-slate-200" {...props} />
           ),

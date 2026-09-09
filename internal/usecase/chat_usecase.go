@@ -91,17 +91,41 @@ func (uc *ChatUseCase) SendGuestMessage(ctx context.Context, sessionID, customer
 		"status":         caseStatus,
 	}, targetCustomerName)
 
-	// 5. If Human CS is actively chatting, increment unread and DO NOT trigger AI
-	if caseStatus == domain.StatusHumanCSActive && assignedCS != "" {
-		_, _ = uc.stateMgr.IncrementUnread(ctx, sessionID, assignedCS)
-		_ = uc.eventBus.PublishWS(ctx, "admin_inbox", domain.WSEventUnread, map[string]interface{}{
-			"session_id": sessionID,
-			"assigned":   assignedCS,
-		}, customerName)
+	// 5. If Case is in NEEDS_HUMAN_CS or HUMAN_CS_ACTIVE, AI is completely OFF!
+	if caseStatus == domain.StatusNeedsHumanCS || caseStatus == domain.StatusHumanCSActive {
+		if assignedCS != "" {
+			_, _ = uc.stateMgr.IncrementUnread(ctx, sessionID, assignedCS)
+			_ = uc.eventBus.PublishWS(ctx, "admin_inbox", domain.WSEventUnread, map[string]interface{}{
+				"session_id": sessionID,
+				"assigned":   assignedCS,
+			}, customerName)
+		}
+
+		// Broadcast waiting notice to client via WebSocket with ai_locked=true
+		waitNotice := "Dạ anh/chị vui lòng chờ trong giây lát, chuyên viên CSKH sẽ hỗ trợ anh/chị ngay ạ."
+		if caseStatus == domain.StatusHumanCSActive && assignedCS != "" {
+			waitNotice = fmt.Sprintf("Dạ anh/chị vui lòng chờ, chuyên viên %s đang hỗ trợ trực tiếp ạ.", assignedCS)
+		}
+
+		_ = uc.eventBus.PublishWS(ctx, sessionID, domain.WSEventMessage, map[string]interface{}{
+			"message": &domain.Message{
+				SessionID:  sessionID,
+				SenderType: domain.SenderSystem,
+				SenderID:   "Hệ thống CSKH",
+				Content:    waitNotice,
+				CreatedAt:  time.Now(),
+			},
+			"ai_locked":      true,
+			"is_fallback":    true,
+			"waiting_for_cs": true,
+			"cs_agent":       assignedCS,
+			"status":         string(caseStatus),
+		}, "system")
+
 		return savedMsg, nil
 	}
 
-	// 6. Otherwise, publish AI Job to stream:ai for asynchronous processing
+	// 6. Otherwise, when AI_ACTIVE: publish AI Job to stream:ai for asynchronous processing
 	_ = uc.eventBus.PublishAIJob(ctx, sessionID, content, customerName, clientMsgID)
 
 	return savedMsg, nil

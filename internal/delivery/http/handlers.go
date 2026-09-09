@@ -171,10 +171,26 @@ func (h *Handler) HandleChat(c *gin.Context) {
 		return
 	}
 
+	// Check current case status to return ai_locked flag for HTTP response
+	chatCase, _ := h.caseUC.GetCase(c.Request.Context(), sessionID)
+	aiLocked := false
+	reply := ""
+	if chatCase != nil && (chatCase.Status == domain.StatusNeedsHumanCS || chatCase.Status == domain.StatusHumanCSActive) {
+		aiLocked = true
+		if chatCase.Status == domain.StatusHumanCSActive && chatCase.AssignedCS != "" {
+			reply = fmt.Sprintf("Dạ anh/chị vui lòng chờ, chuyên viên %s đang hỗ trợ trực tiếp ạ.", chatCase.AssignedCS)
+		} else {
+			reply = "Dạ anh/chị vui lòng chờ trong giây lát, chuyên viên CSKH sẽ hỗ trợ anh/chị ngay ạ."
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"session_id": sessionID,
-		"message_id": msg.ID,
-		"status":     "RECEIVED",
+		"session_id":     sessionID,
+		"message_id":     msg.ID,
+		"status":         "RECEIVED",
+		"ai_locked":      aiLocked,
+		"reply":          reply,
+		"waiting_for_cs": aiLocked,
 	})
 }
 
@@ -276,6 +292,22 @@ func (h *Handler) HandleTakeCase(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Đã tiếp nhận case thành công"})
+}
+
+func (h *Handler) HandleResumeAI(c *gin.Context) {
+	sessionID := c.Param("session_id")
+	user := c.MustGet("user").(*domain.SessionUser)
+
+	err := h.caseUC.ResumeAI(c.Request.Context(), sessionID, user.Username)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "Lỗi kích hoạt AI hỗ trợ tiếp: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": fmt.Sprintf("Đã bật lại chế độ AI hỗ trợ tiếp cho case %s", sessionID),
+	})
 }
 
 type ReplyRequest struct {

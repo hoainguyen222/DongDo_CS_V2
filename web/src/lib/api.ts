@@ -138,6 +138,18 @@ export const api = {
     if (!res.ok) throw new Error('Không thể tiếp nhận case');
   },
 
+  async resumeAI(sessionID: string): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/api/admin/cases/${sessionID}/resume-ai`, {
+      method: 'POST',
+      headers: getHeaders(),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Không thể kích hoạt AI hỗ trợ tiếp' }));
+      throw new Error(err.detail || 'Không thể kích hoạt AI hỗ trợ tiếp');
+    }
+    return res.json();
+  },
+
   async replyCase(sessionID: string, message: string): Promise<void> {
     const res = await fetch(`${API_BASE}/api/admin/cases/${sessionID}/reply`, {
       method: 'POST',
