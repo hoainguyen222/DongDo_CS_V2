@@ -10,8 +10,8 @@ const AUTH_COOKIE_NAME = 'dongdo_auth_token';
 
 function getApiBase(): string {
   if (typeof window === 'undefined') {
-    // SSR: use default
-    return 'http://localhost:8080';
+    // SSR: use env var or default
+    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
   }
   if (process.env.NEXT_PUBLIC_API_URL) {
     return process.env.NEXT_PUBLIC_API_URL;

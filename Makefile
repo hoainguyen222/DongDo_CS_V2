@@ -166,6 +166,9 @@ sync-init: ## Sync db/migrations/*.sql → db/init/*.sql (for fresh Postgres vol
 up: ## Build and start the full app stack
 	docker compose up -d --build
 
+up-fresh: ## Build from scratch (no cache) — use this after changing Dockerfile or .dockerignore
+	docker compose build --no-cache web && docker compose up -d
+
 # Up WITHOUT rebuilding the image (faster iteration if only db/init changed).
 up-fast: ## Start the stack without rebuilding images
 	docker compose up -d

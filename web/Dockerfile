@@ -16,9 +16,10 @@
 # A short comment noting both paths is kept inline below for reference.
 #
 # IMPORTANT: Next.js inlines `NEXT_PUBLIC_*` variables at BUILD TIME.
-# We accept them as ARGs so docker-compose can pass them in from the root
-# `.env` file. Non-NEXT_PUBLIC vars (e.g. `BACKEND_URL`) are passed at runtime
-# via compose `environment:` and reach `next start` directly.
+# The builder stage copies `web/.env` and sources it directly, so the env vars
+# are available to `next build` without needing `--env-file` or `build.args`.
+# Non-NEXT_PUBLIC vars (e.g. `BACKEND_URL`) are passed at runtime via
+# docker-compose `env_file:` and reach `next start` directly.
 # =============================================================================
 
 # ---------- 1. deps ----------------------------------------------------------
@@ -43,23 +44,31 @@ ENV NODE_ENV=production
 # ---- Build-time args (inlined into JS bundle by Next.js) -------------------
 # All `NEXT_PUBLIC_*` values MUST be present at build time, otherwise
 # Next.js will inline `undefined` and they will never reach the browser.
-# Strategy: copy .env into the builder and source it so ENV vars are available
-# to `next build`. This works on any host (local, CI, AWS) without needing
-# `--env-file` flags.
-COPY .env ./
-RUN set -a && . .env && set +a && \
-    echo "NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8080}" && \
+# Strategy: stage `.env` into /tmp in the builder and source it so the
+# variables are visible to `next build`. We stage in /tmp (not /app) because
+# the runtime compose service mounts the same `.env` via `env_file:` at
+# /app/.env, and we don't want to overwrite or conflict with that mount.
+# `set -a` auto-exports every var, so we don't have to explicitly enumerate
+# each one — simpler and avoids drift if a new var is added to web/.env later.
+COPY .env /tmp/.env.build
+RUN set -a && . /tmp/.env.build && set +a && \
+    echo "NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8080}" && \
     echo "NEXT_PUBLIC_APP_ENV=${NEXT_PUBLIC_APP_ENV:-production}" && \
     echo "NEXT_PUBLIC_APP_NAME=${NEXT_PUBLIC_APP_NAME:-DongDo CS}" && \
     echo "NEXT_PUBLIC_ADMIN_PATH=${NEXT_PUBLIC_ADMIN_PATH:-/admin}" && \
     echo "NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL:-ws://localhost:8080}" && \
     echo "NEXT_PUBLIC_STUN_SERVERS=${NEXT_PUBLIC_STUN_SERVERS:-stun:stun.l.google.com:19302}" && \
-    echo "NEXT_PUBLIC_LOG_LEVEL=${NEXT_PUBLIC_LOG_LEVEL:-warn}"
+    echo "NEXT_PUBLIC_LOG_LEVEL=${NEXT_PUBLIC_LOG_LEVEL:-warn}" && \
+    echo "BACKEND_URL=${BACKEND_URL:-http://server:8080}" && \
+    rm -f /tmp/.env.build
 
-# Promote all NEXT_PUBLIC_* from the sourced .env into ENV so `next build` sees them.
-ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8080} \
+# Promote the sourced .env into ENV so `next build` sees them. Values with
+# spaces MUST be quoted so Docker parses them as a single value; otherwise
+# Docker splits on whitespace and fails with:
+#   `Syntax error - can't find = in "CS"`.
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8080} \
     NEXT_PUBLIC_APP_ENV=${NEXT_PUBLIC_APP_ENV:-production} \
-    NEXT_PUBLIC_APP_NAME=${NEXT_PUBLIC_APP_NAME:-DongDo CS} \
+    NEXT_PUBLIC_APP_NAME="${NEXT_PUBLIC_APP_NAME:-DongDo CS}" \
     NEXT_PUBLIC_ADMIN_PATH=${NEXT_PUBLIC_ADMIN_PATH:-/admin} \
     NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL:-ws://localhost:8080} \
     NEXT_PUBLIC_STUN_SERVERS=${NEXT_PUBLIC_STUN_SERVERS:-stun:stun.l.google.com:19302} \

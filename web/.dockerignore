@@ -34,11 +34,13 @@ yarn-error.log
 # Next.js generated types
 next-env.d.ts
 
-# Local env files — never bake secrets into an image
-.env
+# Local env files for development / secrets — NOT excluded here because the
+# Dockerfile builder stage needs them to inline NEXT_PUBLIC_* into the JS bundle.
+# Only .env.production is used for builds, and it should contain non-secret
+# public values only. Sensitive values (DB passwords, API keys) belong in
+# docker-compose `env_file:` / `environment:` or secret stores, never baked in.
 .env*.local
 .env.development
-.env.production
 
 # Tests & coverage
 coverage
@@ -51,7 +53,6 @@ coverage
 README.md
 
 # Docker / compose meta-files (defensive: prevents recursive copy in monorepo)
-Dockerfile*
 docker-compose*.yml
 
 # ESLint cache
