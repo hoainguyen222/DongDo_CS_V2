@@ -1,7 +1,10 @@
 # Binaries & Build Output
 /server
-/dist
-/bin
+/ingest
+/server_new
+/ingest_new
+/bin/
+/dist/
 *.exe
 *.exe~
 *.dll

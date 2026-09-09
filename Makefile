@@ -191,10 +191,14 @@ run:
 sqlc-gen:
 	./tools/bin/sqlc generate
 
-# Build the server binary.
+# Build server & ingest binaries into ./bin/ (gitignored).
+# Running alongside a previously-started process (which still holds the old
+# binary's inode) is safe — `./bin/server` is replaced atomically by Go.
 build:
-	go build -o server_new ./cmd/server
+	@mkdir -p ./bin
+	go build -o ./bin/server ./cmd/server
+	go build -o ./bin/ingest ./cmd/ingest
 
 # Full dev workflow: sqlc generate → build → run.
 dev: sqlc-gen build
-	./server_new
+	./bin/server

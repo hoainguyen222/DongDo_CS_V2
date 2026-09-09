@@ -240,13 +240,12 @@ docker compose exec server /app/ingest
 ./tools/bin/goose -dir internal/repository/postgres/migrations \
     postgres "postgres://postgres:postgrespassword@localhost:5433/dongdo_cs?sslmode=disable" up
 
-# 2. Build & chạy server
-go build -o server_new ./cmd/server
-./server_new
+# 2. Build & chạy server (binary ra ./bin/, gitignored)
+make build
+./bin/server
 
 # 3. Build & chạy ingest (nạp tài liệu Qdrant)
-go build -o ingest_new ./cmd/ingest
-./ingest_new
+./bin/ingest
 
 # 4. Frontend (terminal khác)
 cd web && npm install && npm run dev
@@ -260,9 +259,9 @@ make dev
 
 # Hoặc từng bước:
 make sqlc-gen    # 1. Generate code
-make build       # 2. Build binary
+make build       # 2. Build binary (ra ./bin/)
 make migrate-up  # 3. Run migrations
-./server_new     # 4. Chạy server
+./bin/server     # 4. Chạy server
 ```
 
 ---
