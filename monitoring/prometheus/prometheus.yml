@@ -6,7 +6,6 @@
 #   - server          : CSKH Go server's /metrics endpoint
 #   - postgres        : PostgreSQL exporter (queries, connections, locks)
 #   - redis           : Redis exporter (memory, clients, commands)
-#   - nginx           : nginx-prometheus-exporter (connections, requests)
 #
 # SECURITY: All exporters bind to the private monitoring network. Prometheus
 # is the only service that needs to reach both the app network and the
@@ -75,18 +74,3 @@ scrape_configs:
           - redis-exporter:9121
         labels:
           component: redis
-
-  - job_name: nginx
-    static_configs:
-      # nginx-prometheus-exporter reads nginx's stub_status endpoint
-      # (served on :9091 inside the nginx container — see
-      # docker/nginx/conf.d/metrics.conf) and exposes Prometheus metrics
-      # on its own :9113 port. We bind :9113 to the host loopback (see
-      # the `ports:` block in docker-compose.monitoring.yml) and reach
-      # it from Prometheus via `host.docker.internal` for the same DNS
-      # reason as the `server` job above — `nginx-exporter` is not
-      # visible to the monitoring project's DNS scope.
-      - targets:
-          - host.docker.internal:9113
-        labels:
-          component: nginx

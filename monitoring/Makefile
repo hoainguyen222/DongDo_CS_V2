@@ -15,7 +15,7 @@
 
 .PHONY: help up down restart logs ps status \
         prometheus-logs grafana-logs alertmanager-logs \
-        postgres-exporter-logs redis-exporter-logs nginx-exporter-logs \
+        postgres-exporter-logs redis-exporter-logs \
         node-exporter-logs \
         prometheus-shell grafana-shell alertmanager-shell \
         reload-prometheus check-targets check-exporters check-server-metrics \
@@ -133,13 +133,6 @@ postgres-exporter-logs: ## Tail Postgres exporter logs
 redis-exporter-logs:    ## Tail Redis exporter logs
 	docker logs -f dongdo_redis_exporter
 
-nginx-exporter-logs:    ## Tail nginx exporter logs (only if container exists)
-	@if docker ps --format '{{.Names}}' | grep -q '^dongdo_nginx_exporter$$'; then \
-	  docker logs -f dongdo_nginx_exporter; \
-	else \
-	  echo "❌  dongdo_nginx_exporter is not running (not in compose? not started?)"; \
-	fi
-
 node-exporter-logs:     ## Tail node-exporter logs
 	docker logs -f dongdo_node_exporter
 
@@ -185,7 +178,7 @@ check-targets: ## Query Prometheus for every scrape target and show UP/DOWN
 d=json.load(sys.stdin)['data']['activeTargets']; \
 groups={}; \
 [groups.setdefault(t['labels'].get('job','?'),[]).append(t) for t in d]; \
-order=['prometheus','node','postgres','redis','nginx','server','cs-server','cskh-server']; \
+order=['prometheus','node','postgres','redis','server','cs-server','cskh-server']; \
 jobs=sorted(groups.keys(), key=lambda j:(order.index(j) if j in order else 999, j)); \
 for j in jobs: \
   print(f'\n  [{j}]'); \
@@ -196,15 +189,14 @@ for j in jobs: \
 # -----------------------------------------------------------------------------
 # Diagnostic — exporter UP/DOWN summary
 # -----------------------------------------------------------------------------
-check-exporters: ## Quick UP/DOWN summary for every exporter (postgres/redis/node/nginx)
+check-exporters: ## Quick UP/DOWN summary for every exporter (postgres/redis/node)
 	@echo ""
 	@echo "🧪  Exporter UP/DOWN summary"
 	@echo "─────────────────────────────────────────────"
 	@for pair in \
 	  "postgres-exporter:9187" \
 	  "redis-exporter:9121"    \
-	  "node-exporter:9100"     \
-	  "nginx-exporter:9113"; do \
+	  "node-exporter:9100"; do \
 	    name=$${pair%%:*}; port=$${pair##*:}; \
 	    code=$$(curl -s -o /dev/null -w '%{http_code}' http://localhost:$${port}/metrics 2>/dev/null); \
 	    if [ "$$code" = "200" ]; then \

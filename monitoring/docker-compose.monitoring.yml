@@ -28,9 +28,6 @@
 #     Prometheus reaches it via `host.docker.internal:9091` — Docker
 #     Desktop (macOS / Windows) maps this automatically; Linux Docker
 #     Engine resolves it via `extra_hosts` to the default gateway IP.
-#   - nginx-exporter's :9113 is bound to 127.0.0.1 on the host too, so
-#     Prometheus can scrape host.docker.internal:9113 (see the `ports:`
-#     block below and prometheus.yml).
 #
 # SECURITY:
 #   - No exporter or app port is published to a PUBLIC host address.
@@ -183,35 +180,7 @@ services:
       # Pulled into Prometheus via the `redis_stream_length` etc. names.
 
   # ---------------------------------------------------------------------------
-  # 6. nginx Exporter — connection / request metrics for the nginx proxy
-  # ---------------------------------------------------------------------------
-  # Reads nginx's stub_status endpoint (served on :9091 inside the nginx
-  # container — see docker/nginx/conf.d/metrics.conf) and exposes
-  # Prometheus metrics on :9113. The exporter joins both networks so it
-  # can resolve `nginx:9091` on the app network while Prometheus scrapes
-  # it as `nginx-exporter:9113` on the monitoring network.
-  nginx-exporter:
-    image: nginx/nginx-prometheus-exporter:1.4
-    container_name: dongdo_nginx_exporter
-    profiles: ["monitoring"]
-    restart: unless-stopped
-    networks:
-      dongdo-monitoring:
-        aliases:
-          - nginx-exporter
-      dongdo_cs_v2_default:
-        aliases:
-          - nginx-exporter
-    environment:
-      SCRAPE_URI: "http://nginx:9091/stub_status"
-    # Bind :9113 to the host loopback so Prometheus can reach it via
-    # host.docker.internal:9113 (see prometheus.yml). No public exposure.
-    ports:
-      - "127.0.0.1:9113:9113"
-    # No host ports — only Prometheus inside the monitoring network reaches it.
-
-  # ---------------------------------------------------------------------------
-  # 7. Grafana — dashboards
+  # 6. Grafana — dashboards
   # ---------------------------------------------------------------------------
   grafana:
     image: grafana/grafana:11.3.0

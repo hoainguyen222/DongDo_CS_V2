@@ -69,10 +69,10 @@ block.prof
 /alertmanager_data/
 /tests/automation/reports
 
-# TLS / Let's Encrypt — real certificates must NEVER be committed
-/docker/nginx/certbot/conf/
-/docker/nginx/certbot/www/
-/docker/nginx/dhparam.pem
+# TLS / Let's Encrypt — real certificates must NEVER be committed.
+# If using external nginx with Let's Encrypt, add your cert paths here, e.g.:
+# /etc/letsencrypt/
+# /etc/nginx/ssl/
 
 # Local secrets for the monitoring compose override
 .env.monitoring
@@ -82,10 +82,3 @@ monitoring/.env.monitoring
 # Docker Compose local overrides (per-developer)
 docker-compose.override.yml
 docker-compose.local.yml
-
-# Certbot working files (--work-dir, --logs-dir)
-/docker/nginx/certbot/logs/
-/docker/nginx/certbot/lib/
-
-# Nginx logs (when bind-mounted for debugging)
-/docker/nginx/logs/

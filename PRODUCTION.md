@@ -37,12 +37,11 @@
                   ┌──────────────────────────────┐
                   │  EC2 host (1 instance)       │
                   │                              │
-                  │   :80, :443  ◄──── DNS A     │
                   │   ┌──────────────────────┐   │
-                  │   │  dongdo_nginx        │   │   TLS termination
-                  │   │  (reverse proxy)     │   │   rate limit
-                  │   └──────┬───────────────┘   │   security headers
-                  │          │                   │
+                  │   │ External nginx        │   │   TLS termination (managed separately)
+                  │   │ (not in this stack)    │   │   reverse proxy
+                  │   └──────┬───────────────┘   │
+                  │          │ :3000 (http)       │
                   │   ┌──────▼───────┐  ┌─────┐ │
                   │   │ dongdo_web   │  │ ... │ │   Next.js SSR
                   │   │ (Next.js 14) │  └─────┘ │
@@ -57,17 +56,12 @@
                   │  │ PG │ │RD │ │QDRNT │      │   postgres / redis / qdrant
                   │  └───┘ └───┘ └──────┘      │
                   │                              │
-                  │   ┌──────────────────────┐   │   HTTP-01 + 12h renewal
-                  │   │  dongdo_certbot      │   │
-                  │   └──────────────────────┘   │
-                  │                              │
                   │   ┌──────────────────────┐   │   (opt-in profile: monitoring)
                   │   │  prometheus + grafana│   │
-                  │   │  + 5 exporters       │   │
+                  │   │  + 4 exporters       │   │
                   │   └──────────────────────┘   │
                   └──────────────────────────────┘
 
-  Bind mounts (host paths in ./docker/nginx/certbot/, ./docker/nginx/dhparam.pem)
   Docker volumes (pgdata, redisdata, qdrantdata, prometheus_data, grafana_data)
   Docker networks (dongdo_cs_v2_default, dongdo-monitoring)
 ```
@@ -76,22 +70,22 @@
 
 | Service | Container | Host port | Profile | Mục đích |
 |---|---|---|---|---|
-| nginx | `dongdo_nginx` | 80, 443 | default | TLS, rate limit, reverse proxy |
-| web | `dongdo_web` | (internal) | default | Next.js frontend |
+| web | `dongdo_web` | 3000 (internal) | default | Next.js frontend |
 | server | `dongdo_server` | 8080 (host), 9091/metrics (loopback) | default | Go API + WebSocket |
 | call_service | `dongdo_call_service` | 8081 (host) | default | WebRTC signaling |
 | asterisk | `dongdo_asterisk` | 5060/udp, 10000-10200/udp, 8088 | default | PBX |
 | postgres | `dongdo_postgres` | 5433 (host, dev only) | default | Source of truth |
 | redis | `dongdo_redis` | 6379 (host, dev only) | default | Cache + streams |
 | qdrant | `dongdo_qdrant` | 6333, 6334 (host, dev only) | default | Vector DB |
-| certbot | `dongdo_certbot` | — | **ssl** | Let's Encrypt renewal |
 | prometheus | `dongdo_prometheus` | 9090 | **monitoring** | Metrics scrape |
 | alertmanager | `dongdo_alertmanager` | 9093 | **monitoring** | Alerts |
 | grafana | `dongdo_grafana` | 3050 | **monitoring** | Dashboards |
 | node-exporter | `dongdo_node_exporter` | — | **monitoring** | Host metrics |
 | postgres-exporter | `dongdo_postgres_exporter` | — | **monitoring** | DB metrics |
 | redis-exporter | `dongdo_redis_exporter` | — | **monitoring** | Redis metrics |
-| nginx-exporter | `dongdo_nginx_exporter` | 9113 (loopback) | **monitoring** | nginx metrics |
+
+> **Note:** Reverse proxy and SSL termination (nginx) is handled by an **external nginx
+> instance** (not included in this Docker stack). Deploy and manage it separately.
 
 ### 1.3 Yêu cầu hạ tầng tối thiểu
 
@@ -100,7 +94,7 @@
 - **Storage:** 30 GB gp3 EBS (root) + 50 GB gp3 EBS riêng cho `/var/lib/docker` và recordings.
 - **OS:** Ubuntu 22.04 LTS hoặc Amazon Linux 2023.
 - **Docker:** Engine 24+ với Compose v2.
-- **Network:** Public IP + DNS A record trỏ về IP. Security group mở 22, 80, 443 (và 3050 nếu muốn Grafana public).
+- **Network:** Public IP + DNS A record trỏ về IP. Security group mở 22 (My IP), 3000, 8080, 8081, 5433, 6379 (tùy dev access).
 
 **DNS** (làm **trước khi** bắt đầu deploy):
 - `cskh.dongdopartners.com` → A record → EC2 public IP.
@@ -154,10 +148,7 @@ nano .env
 | `GRAFANA_ADMIN_PASSWORD` | Mạnh | `Gr@fanaP@ss!` |
 | `ASTERISK_PASS` | Mạnh | `St@riskP@ss!` |
 | `ANTHROPIC_API_KEY` | API key thật | `sk-ant-api03-...` |
-| `NGINX_SERVER_NAME` | Domain public | `cskh.dongdopartners.com` |
-| `NGINX_ENABLE_SSL` | Bật HTTPS | `true` |
-| `CERTBOT_EMAIL` | Email nhận cảnh báo expiry | `ops@dongdopartners.com` |
-| `COOKIE_DOMAIN` | Khớp `NGINX_SERVER_NAME` | `cskh.dongdopartners.com` |
+| `COOKIE_DOMAIN` | Khớp domain của external nginx | `cskh.dongdopartners.com` |
 | `COOKIE_SECURE` | Bắt buộc với HTTPS | `true` |
 | `GRAFANA_ROOT_URL` | URL public của Grafana | `https://cskh.dongdopartners.com` |
 | `APP_ENV` | Production | `production` |
@@ -169,62 +160,30 @@ nano .env
 > ⚠️ **Đừng commit `.env`**. File đã nằm trong `.gitignore` (section
 > `Environment & Secrets`).
 
-### 2.3 Generate DH params (chỉ 1 lần)
+> Mất ~2–5 phút tùy CPU. DH params không phải secret, có thể copy
+> file lên EC2 nếu muốn nhanh hơn.
 
-```bash
-make nginx-dhparam
-# 🔐 Generating 4096-bit DH parameters (this takes a few minutes)...
-# ✅ Wrote docker/nginx/dhparam.pem
-```
-
-> Mất ~2–5 phút tùy CPU. Có thể chạy trên máy local có openssl rồi copy
-> file lên EC2 nếu muốn nhanh hơn — chỉ là random prime, không phải secret.
-
-### 2.4 Build + start app stack
+### 2.3 Build + start app stack
 
 ```bash
 make up
-# Lần đầu sẽ build 4 image: server, web, nginx, asterisk, call_service
+# Lần đầu sẽ build 4 image: server, web, asterisk, call_service
 # ~3-5 phút tùy network
 ```
 
 Verify:
 ```bash
 docker compose ps
-# Kỳ vọng: 8/8 UP (certbot nằm ở profile ssl, CHƯA chạy)
+# Kỳ vọng: 7/7 UP
 
 make health
 # → ok
 ```
 
-Smoke test HTTP (chưa có cert):
-```bash
-curl -fsS http://cskh.dongdopartners.com/nginx-health
-# → ok
-```
-
-### 2.5 Cấp Let's Encrypt cert
-
-```bash
-# Start certbot sidecar
-docker compose --profile ssl up -d certbot
-
-# Request cert (HTTP-01 challenge)
-make nginx-ssl-init
-# → Certificate issued for cskh.dongdopartners.com
-
-# Reload nginx để pick up cert
-make docker-nginx-reload
-```
-
-Verify HTTPS:
-```bash
-curl -fsS https://cskh.dongdopartners.com/nginx-health
-# → ok
-
-make nginx-cert-info        # Subject, Issuer, Expiry, SANs
-make nginx-check-expiry     # Days until expiry
-```
+> **Note:** SSL/TLS termination is handled by external nginx (not in this stack).
+> Configure your external nginx to proxy `https://<domain>/` → `http://<EC2_IP>:3000`
+> for the Next.js frontend and `https://<domain>/api/*` → `http://<EC2_IP>:8080`
+> for the Go API.
 
 ### 2.6 Start monitoring stack (khuyến nghị)
 
@@ -237,7 +196,7 @@ Verify:
 ```bash
 make mon-status            # HTTP 200 cho Prometheus, Grafana, Alertmanager
 make mon-check-targets     # Tất cả scrape target UP
-make mon-check-exporters   # postgres/redis/node/nginx exporters OK
+make mon-check-exporters   # postgres/redis/node exporters OK
 ```
 
 **Đổi mật khẩu Grafana admin lần đầu:**
@@ -245,60 +204,23 @@ make mon-check-exporters   # postgres/redis/node/nginx exporters OK
 2. Login `admin` / `<GRAFANA_ADMIN_PASSWORD>`.
 3. Vào **Administration → Users → admin → Password** → đổi.
 
-### 2.7 Auto-renewal hook (zero-downtime cert rotation)
-
-Certbot sidecar tự loop `certbot renew` 12h/lần, nhưng nginx vẫn giữ cert
-cũ trong memory. Tạo **systemd timer** để reload nginx sau khi cert được
-renew:
+### 2.7 Smoke test toàn diện
 
 ```bash
-sudo tee /etc/systemd/system/dongdo-nginx-reload.service <<'EOF'
-[Unit]
-Description=Reload nginx after Let's Encrypt cert renewal
-
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/docker exec dongdo_nginx nginx -s reload
-EOF
-
-sudo tee /etc/systemd/system/dongdo-nginx-reload.timer <<'EOF'
-[Unit]
-Description=Hourly check + reload nginx after cert renewal
-
-[Timer]
-OnCalendar=hourly
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable --now dongdo-nginx-reload.timer
-systemctl list-timers dongdo-nginx-reload.timer
-```
-
-### 2.8 Smoke test toàn diện
-
-```bash
-# 1. HTTP redirect → HTTPS
-curl -fsS -o /dev/null -w "%{http_code} → %{redirect_url}\n" \
-  http://cskh.dongdopartners.com/nginx-health
-# → 301 → https://cskh.dongdopartners.com/nginx-health
-
-# 2. HTTPS endpoint
-curl -fsS https://cskh.dongdopartners.com/nginx-health
+# 1. App health (direct to backend)
+curl -fsS http://<EC2_IP>:8080/health
 # → ok
 
-# 3. Security headers
-curl -fsS -D - -o /dev/null https://cskh.dongdopartners.com/ | grep -iE 'strict-transport|x-frame|content-security'
-# → strict-transport-security: max-age=63072000; includeSubDomains; preload
-# → x-frame-options: SAMEORIGIN
-# → content-security-policy: ...
+# 2. Web frontend (direct to Next.js)
+curl -fsS http://<EC2_IP>:3000/ | head -5
+# → <!DOCTYPE html>
 
-# 4. Cert expiry
-make nginx-check-expiry
-# → Cert expires in 89 days
+# 3. HTTPS via external nginx (replace with your actual domain)
+curl -fsS https://cskh.dongdopartners.com/ | head -5
+# → <!DOCTYPE html>
+
+# 4. Security headers via external nginx
+curl -fsS -D - -o /dev/null https://cskh.dongdopartners.com/ | grep -iE 'strict-transport|x-frame|content-security'
 
 # 5. Prometheus targets
 make mon-check-targets
@@ -308,7 +230,7 @@ make mon-check-targets
 make health
 # → ok
 
-# 7. Manual test trên browser
+# 7. Manual test trên browser qua external nginx
 # Mở https://cskh.dongdopartners.com → đăng nhập → thử chat
 ```
 
@@ -347,7 +269,6 @@ make logs
 
 # Tail 1 service cụ thể
 docker logs -f dongdo_server
-docker logs -f --tail=200 dongdo_nginx
 
 # Tìm error trong logs
 docker logs dongdo_server --since 1h 2>&1 | grep -iE 'error|panic|fatal'
@@ -362,9 +283,6 @@ make mon-logs
 # Shell vào Go server
 docker exec -it dongdo_server /bin/sh
 
-# Shell vào nginx
-make docker-nginx-shell
-
 # Postgres CLI
 docker exec -it dongdo_postgres psql -U postgres -d dongdo_cs
 
@@ -377,12 +295,8 @@ curl http://localhost:6333/collections
 
 ### 3.4 Check cert expiry
 
-```bash
-make nginx-check-expiry
-# → Cert expires in 87 days
-# Nếu < 14 ngày: chạy
-make nginx-cert-renew
-```
+> Skip this section if using external nginx for SSL. Cert expiry monitoring
+> should be configured on your external nginx/certbot setup.
 
 ### 3.5 Đọc nhanh metrics từ CLI
 
@@ -449,9 +363,6 @@ make rebuild
 # Rebuild image web (Next.js code đổi)
 make web-docker-build && docker compose up -d web
 
-# Rebuild image nginx (chỉ khi sửa nginx config)
-make docker-nginx-build && docker compose up -d nginx
-
 # Rebuild image asterisk / call_service
 docker compose build asterisk call_service
 docker compose up -d asterisk call_service
@@ -501,9 +412,9 @@ docker compose up -d server
 ```
 
 Nếu muốn zero-downtime thực sự:
-- Dùng nginx upstream với 2 instance server (`server_a`, `server_b`).
-- Hoặc deploy lên ECS/EKS với rolling update.
+- Deploy lên ECS/EKS với rolling update.
 - Hoặc tách Go server thành deployment riêng (Kubernetes).
+- Hoặc tách Next.js thành deployment riêng.
 
 ### 4.5 Cập nhật `.env` (không rebuild)
 
@@ -582,19 +493,20 @@ aws s3 sync \
   --exclude "*.tmp"
 ```
 
-### 5.5 Let's Encrypt certs
+### 5.5 Let's Encrypt certs (external nginx)
 
-**Quan trọng** — mất thư mục này = phải renew từ đầu:
+SSL certificates are managed by your **external nginx** installation, not this
+Docker stack. Backup your external nginx cert directory:
 
 ```bash
 # --- BACKUP ---
-tar czf /backups/letsencrypt-$(date +%F).tgz \
-  -C /home/ubuntu/DongDo_CS_V2 docker/nginx/certbot/conf/
+# Adjust path to match your external nginx cert location
+sudo tar czf /backups/letsencrypt-$(date +%F).tgz \
+  /etc/letsencrypt/
 
 # --- RESTORE ---
-tar xzf /backups/letsencrypt-2026-09-09.tgz \
-  -C /home/ubuntu/DongDo_CS_V2/
-make docker-nginx-reload
+sudo tar xzf /backups/letsencrypt-2026-09-09.tgz -C /
+# Reload nginx: sudo nginx -s reload
 ```
 
 ### 5.6 Toàn bộ project state
@@ -606,9 +518,7 @@ tar czf /backups/dongdo-state-$(date +%F).tgz \
   --exclude='DongDo_CS_V2/recordings' \
   --exclude='DongDo_CS_V2/web/node_modules' \
   --exclude='DongDo_CS_V2/web/.next' \
-  DongDo_CS_V2/.env \
-  DongDo_CS_V2/docker/nginx/certbot/ \
-  DongDo_CS_V2/docker/nginx/dhparam.pem
+  DongDo_CS_V2/.env
 ```
 
 ### 5.7 Cronjob tự động (khuyến nghị)
@@ -636,17 +546,12 @@ docker exec dongdo_postgres pg_dump -U postgres dongdo_cs \
 docker exec dongdo_qdrant tar czf - /qdrant/storage \
   > "$BACKUP_DIR/qdrant-$DATE.tar.gz"
 
-# Let's Encrypt
-tar czf "$BACKUP_DIR/letsencrypt-$DATE.tgz" \
-  -C "$PROJECT_DIR" docker/nginx/certbot/conf/
-
 # Recordings (incremental — chỉ file mới)
 rsync -a --delete "$PROJECT_DIR/recordings/" "$BACKUP_DIR/recordings/"
 
 # Retention: giữ 30 ngày
 find "$BACKUP_DIR" -name "*.sql.gz" -mtime +30 -delete
 find "$BACKUP_DIR" -name "*.tar.gz" -mtime +30 -delete
-find "$BACKUP_DIR" -name "letsencrypt-*.tgz" -mtime +30 -delete
 ```
 
 ---
@@ -733,34 +638,39 @@ Restart:
 docker compose up -d server
 ```
 
-### 6.5 Tuning nginx
+### 6.5 Tuning external nginx
 
-Sửa `docker/nginx/conf.d/ssl-params.conf` (hoặc inline trong template):
+Configuration for the external nginx reverse proxy is **outside this Docker stack**.
+Refer to your external nginx configuration for:
+- Worker processes and connections
+- Rate limiting zones (`limit_req`)
+- Buffer sizes
+- Gzip compression
+- Caching headers
 
+If your external nginx proxies to this stack, recommended upstream config:
 ```nginx
-# Worker processes (mặc định = số CPU cores, OK)
-# worker_connections: mặc định 1024
-events {
-    worker_connections 4096;
-    multi_accept on;
+# Point to Docker host IP (where port 3000 is published)
+upstream dongdo_web {
+    server <EC2_PRIVATE_IP>:3000;
 }
 
-# Rate limit zones (đã có trong conf)
-# Điều chỉnh `rate=` và `burst=` trong:
-#   limit_req zone=api_rl burst=60 nodelay;
-#   limit_req zone=auth_rl burst=20 nodelay;
+# Point to Docker host IP (where port 8080 is published)
+upstream dongdo_backend {
+    server <EC2_PRIVATE_IP>:8080;
+}
 ```
 
-### 6.6 CDN / CloudFront (giảm tải nginx)
+### 6.6 CDN / CloudFront
 
 Đặt CloudFront trước nginx để cache static assets:
 
 ```
-User → CloudFront → nginx (origin) → web/server
+User → CloudFront → external nginx (origin) → web/server
 ```
 
 Pattern:
-- Cache `/_next/static/*` TTL 1 năm (đã set trong nginx config).
+- Cache `/_next/static/*` TTL 1 năm.
 - Cache `/static/*` TTL 7 ngày.
 - Không cache `/api/*`, `/auth/*`, `/ws`, `/chat` (dynamic).
 
@@ -848,8 +758,8 @@ Dùng [UptimeRobot](https://uptimerobot.com) (free), [Better Stack](https://bett
 
 ```bash
 # Health checks cần monitor:
-# 1. https://cskh.dongdopartners.com/nginx-health       → "ok"
-# 2. https://cskh.dongdopartners.com/                    → 200
+# 1. https://cskh.dongdopartners.com/                    → 200
+# 2. https://cskh.dongdopartners.com/api/health          → 200
 # 3. http://localhost:9090/-/healthy (qua SSH tunnel)    → 200 (Prometheus)
 ```
 
@@ -863,7 +773,7 @@ Dùng [UptimeRobot](https://uptimerobot.com) (free), [Better Stack](https://bett
 - [ ] **Rotate `JWT_SECRET`** sau khi tạo owner đầu tiên (tất cả user phải login lại).
 - [ ] **Đổi `POSTGRES_PASSWORD`** + update cả `docker-compose.yml`.
 - [ ] **Đổi Grafana admin password** (login lần đầu).
-- [ ] **Không expose `:3050`, `:9090`, `:9093`, `:9113` ra public** (chỉ SSH tunnel).
+- [ ] **Không expose `:3050`, `:9090`, `:9093` ra public** (chỉ SSH tunnel).
 - [ ] **Bật UFW/iptables** (chỉ mở 22, 80, 443 cho public):
   ```bash
   sudo ufw default deny incoming
@@ -903,11 +813,10 @@ docker scan dongdo-cs-server:latest   # cần login Docker Hub
 trivy image dongdo-cs-server:latest
 
 # 3. Check ports đang mở public
-sudo ss -tlnp | grep -E ':(80|443|3050|9090|9093|9113|5433|6379|6333|6334)'
+sudo ss -tlnp | grep -E ':(80|443|3000|3050|8080|8081|8088|9090|9093|5433|6379|6333|6334)'
 
-# 4. Audit nginx access log cho pattern tấn công
-docker exec dongdo_nginx cat /var/log/nginx/access.log \
-  | grep -iE '(union|select|script|%3Cscript|admin|wp-login|\.env)'
+# 4. Audit external nginx access log cho pattern tấn công
+sudo grep -iE '(union|select|script|%3Cscript|admin|wp-login|\.env)' /var/log/nginx/access.log
 
 # 5. Kiểm tra JWT secret đã được rotate chưa
 grep -c 'JWT_SECRET' .env
@@ -952,10 +861,6 @@ make monitoring-up
 
 | Triệu chứng | Nguyên nhân | Cách xử lý |
 |---|---|---|
-| `nginx -t` fails: "cannot load certificate" | Chưa có cert | `make nginx-ssl-init` |
-| `nginx -t` fails: "BIO_new_file(.../dhparam.pem) failed" | DH params missing | `make nginx-dhparam` rồi `make up` |
-| ACME challenge fails `connection refused` | Port :80 bị chặn / DNS chưa propagate | Check SG, `dig +short <domain>`, chờ TTL |
-| ACME challenge fails `incorrect challenge token` | DNS record không trỏ đúng IP | Verify lại A record |
 | `make monitoring-up` fails `network dongdo_cs_v2_default not found` | Chưa chạy `make up` trước | Chạy `make up` trước |
 | `make up` fail ở build stage | Network chậm / Dockerfile lỗi | `docker compose build --no-cache server` |
 | Postgres container restart loop | Volume bị corrupt | `make up-fresh` (mất data) |
@@ -965,14 +870,10 @@ make monitoring-up
 
 | Triệu chứng | Nguyên nhân | Cách xử lý |
 |---|---|---|
-| WebSocket client disconnect liên tục | nginx timeout quá ngắn / load balancer không support WS | Verify `proxy_read_timeout 3600s` trong nginx config; check `proxy_set_header Upgrade` |
 | AI response chậm (>10s) | LLM API rate-limited hoặc context quá lớn | Check Anthropic console; giảm `LLM_MAX_TOKENS`; check `RETRIEVER_K` |
 | Chat message mất | Redis stream bị full / consumer không XACK | `redis-cli XINFO STREAM stream:ws`; check `STREAM_MAX_LEN` |
-| Web load chậm | Cold cache / build cache miss | Verify `/_next/static/*` cache headers; check CDN |
+| Web load chậm | Cold cache / build cache miss | Check CDN caching for static assets; verify Next.js build cache |
 | Server OOM killed | Memory leak hoặc traffic spike | `make pprof-heap`; check Grafana "Go API" dashboard |
-| Cert renewal loop OK nhưng nginx vẫn serve cert cũ | nginx không reload | `make docker-nginx-reload` hoặc check systemd timer |
-| `curl: (60) SSL certificate problem` | OCSP fail hoặc chain không đủ | Check `nginx-cert-info` (fullchain hay cert); check OCSP stapling log |
-| `ERR_TOO_MANY_REDIRECTS` | HSTS + redirect loop | Clear browser cache; check nginx config |
 | Calls không connect được (WebRTC) | STUN unreachable / SIP NAT | Test STUN từ client; check `STUN_SERVERS` env; Asterisk `pjsip show endpoints` |
 
 ### 9.3 Lỗi database
@@ -1021,27 +922,16 @@ docker exec dongdo_redis redis-cli INFO memory | grep used_memory_human
 docker exec dongdo_redis redis-cli SLOWLOG GET 20
 ```
 
-### 9.5 Lỗi nginx / TLS
+### 9.5 SSL/TLS (external nginx)
+
+SSL termination is handled by **external nginx** outside this Docker stack.
+For nginx/TLS issues, check your external nginx configuration and logs:
 
 ```bash
-# Test config syntax
-make docker-nginx-config-test
-
-# Reload thủ công
-make docker-nginx-reload
-
-# Xem error log
-docker logs dongdo_nginx 2>&1 | tail -50
-
-# Verify cert chain
-openssl s_client -servername cskh.dongdopartners.com \
-  -connect cskh.dongdopartners.com:443 -showcerts </dev/null 2>&1 \
-  | openssl x509 -noout -subject -issuer -dates
-
-# Test OCSP stapling
-openssl s_client -servername cskh.dongdopartners.com \
-  -connect cskh.dongdopartners.com:443 -status </dev/null 2>&1 \
-  | grep -i "OCSP Response Status"
+# On the host where external nginx runs:
+sudo nginx -t          # validate config
+sudo nginx -s reload   # reload after changes
+sudo tail -50 /var/log/nginx/error.log
 ```
 
 ### 9.6 Lỗi WebRTC / Asterisk
@@ -1107,7 +997,6 @@ git clone https://github.com/yourorg/DongDo_CS_V2.git
 cd DongDo_CS_V2
 
 # 3. Restore config
-tar xzf /backups/letsencrypt-2026-09-09.tgz
 tar xzf /backups/dongdo-state-2026-09-09.tgz
 # (Hoặc restore file .env riêng)
 
@@ -1126,7 +1015,6 @@ docker cp /backups/redis-2026-09-09.rdb dongdo_redis:/data/dump.rdb
 
 # 7. Khởi động toàn bộ
 make up
-docker compose --profile ssl up -d certbot
 make monitoring-up
 
 # 8. Update DNS nếu IP đổi
@@ -1176,7 +1064,6 @@ Recordings là data ít quan trọng hơn (có thể replay cuộc gọi). Nếu
 # Khởi động
 make up
 make monitoring-up
-docker compose --profile ssl up -d certbot
 
 # Dừng (giữ data)
 make down
@@ -1191,7 +1078,6 @@ make mon-logs
 
 # Health check
 make health
-curl -fsS https://<domain>/nginx-health
 ```
 
 ### 11.2 Lệnh debug
@@ -1212,9 +1098,6 @@ make pprof-goroutine
 
 # WebSocket connections
 # Mở Grafana → Chat / WebSocket dashboard
-
-# Cert expiry
-make nginx-check-expiry
 ```
 
 ### 11.3 Lệnh backup / restore
@@ -1237,7 +1120,6 @@ gunzip -c postgres-2026-09-09.sql.gz \
 # Rebuild image sau khi đổi code
 make rebuild                          # server
 make web-docker-build                 # web
-make docker-nginx-build               # nginx
 
 # Xem disk usage
 docker system df
@@ -1254,22 +1136,21 @@ make down && make up && make monitoring-up
 
 | Biến | Mặc định | Mục đích |
 |---|---|---|
-| `NGINX_SERVER_NAME` | `cskh.dongdopartners.com` | Domain served |
-| `NGINX_ENABLE_SSL` | `true` | Bật :443 |
-| `CERTBOT_EMAIL` | `ops@dongdopartners.com` | LE expiry notice |
 | `JWT_SECRET` | — | **MUST rotate** |
 | `POSTGRES_PASSWORD` | `postgrespassword` | **MUST change** (cả `.env` + `docker-compose.yml`) |
 | `GRAFANA_ADMIN_PASSWORD` | `admin` | **MUST change** |
 | `APP_ENV` | `development` | Set `production` |
 | `COOKIE_SECURE` | `false` | Set `true` với HTTPS |
 | `ANTHROPIC_API_KEY` | — | **MUST provide** |
+| `NGINX_SERVER_NAME` | `cskh.dongdopartners.com` | Used by external nginx (not this stack) |
+| `NGINX_ENABLE_SSL` | `true` | Used by external nginx (not this stack) |
 
 ### 11.6 URLs tham chiếu nhanh
 
 | Service | URL |
 |---|---|
-| App | `https://cskh.dongdopartners.com` |
-| App health | `https://cskh.dongdopartners.com/nginx-health` |
+| App (via external nginx → Next.js) | `https://cskh.dongdopartners.com` |
+| API (via external nginx → Go server) | `https://cskh.dongdopartners.com/api/*` |
 | Grafana | `https://<EC2_IP>:3050` (qua SSH tunnel nếu SG chặn) |
 | Prometheus | `http://<EC2_IP>:9090` (qua SSH tunnel) |
 | Alertmanager | `http://<EC2_IP>:9093` (qua SSH tunnel) |
