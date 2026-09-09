@@ -470,7 +470,7 @@ export default function CustomerChatPage() {
           <div className={styles.preChatHeader}>
             <div className={styles.brandBlock}>
               <div className={styles.brandIconBox}>
-                <Image
+                <img
                   src="/logo/Logo Dọc_Trắng.svg"
                   alt="Đông Đô Partners"
                   width={56}
@@ -564,7 +564,7 @@ export default function CustomerChatPage() {
 
       <header className={styles.header}>
         <div className={styles.headerBrand}>
-          <Image
+          <img
             src="/logo/Logo Ngang_Trắng.svg"
             alt="Đông Đô Partners"
             width={140}
