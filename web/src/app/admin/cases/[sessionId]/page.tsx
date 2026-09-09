@@ -324,7 +324,24 @@ export default function CaseDetailPage() {
   const handleTakeCase = async () => {
     if (!currentCase) return;
     try {
+      const agentName = user?.full_name || user?.username || '';
       await takeCaseMutation.mutateAsync(currentCase.session_id);
+
+      // Optimistic sync so the UI reflects the new state immediately
+      // instead of waiting for the refetch round trip (the "Tiếp Nhận"
+      // button hides the moment the cache goes stale, otherwise the user
+      // has to reload to see the change).
+      setCurrentCase((prev) => ({
+        session_id: sessionId,
+        customer_name: prev?.customer_name ?? currentCase.customer_name,
+        customer_phone: prev?.customer_phone ?? currentCase.customer_phone,
+        status: 'HUMAN_CS_ACTIVE',
+        assigned_cs: prev?.assigned_cs ?? currentCase.assigned_cs,
+        active_assigned_cs: agentName,
+        assigned_cs_history: prev?.assigned_cs_history ?? currentCase.assigned_cs_history,
+        updated_at: new Date().toISOString(),
+      }));
+
       addToast({ title: 'Đã tiếp nhận case', variant: 'success' });
     } catch (err: any) {
       addToast({ title: 'Lỗi tiếp nhận case', message: err.message, variant: 'error' });
@@ -388,9 +405,24 @@ export default function CaseDetailPage() {
         resolutionNote: resolveNote,
         extractPairs: validPairs,
       });
+
+      // Sync the local case to RESOLVED so the chat panel flips into
+      // read-only mode (banner + locked reply box + "Hội thoại đã đóng" pill)
+      // without a full page reload and without bouncing the user back to
+      // the inbox list.
+      setCurrentCase((prev) => ({
+        session_id: sessionId,
+        customer_name: prev?.customer_name ?? currentCase.customer_name,
+        customer_phone: prev?.customer_phone ?? currentCase.customer_phone,
+        status: 'RESOLVED',
+        assigned_cs: prev?.assigned_cs ?? currentCase.assigned_cs,
+        active_assigned_cs: prev?.active_assigned_cs ?? currentCase.active_assigned_cs,
+        assigned_cs_history: prev?.assigned_cs_history ?? currentCase.assigned_cs_history,
+        updated_at: new Date().toISOString(),
+      }));
       setShowResolveModal(false);
+      setResolveNote('');
       addToast({ title: 'Đã đóng case thành công!', variant: 'success' });
-      router.push(buildUrl('/admin/inbox'));
     } catch (err: any) {
       addToast({ title: err.message || 'Lỗi đóng case', variant: 'error' });
     }
