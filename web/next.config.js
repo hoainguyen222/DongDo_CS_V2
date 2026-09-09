@@ -23,6 +23,17 @@ const nextConfig = {
     config.resolve.alias['@'] = path.resolve(__dirname, 'src');
     return config;
   },
+  images: {
+    // SVG is not a raster format, so Next.js' built-in optimizer refuses it
+    // by default and throws `Invalid src prop (...)` in the browser console.
+    // Our brand assets are all SVG and served from /public (same-origin), so
+    // enabling dangerouslyAllowSVG is safe here. If we ever start loading
+    // untrusted SVG (e.g. user uploads), tighten this with a strict
+    // contentSecurityPolicy instead.
+    dangerouslyAllowSVG: true,
+    contentDispositionType: 'attachment',
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
+  },
   async rewrites() {
     // Note: keys in next.config.js are computed at build time. Changing
     // BACKEND_URL after `next build` requires a rebuild. For runtime

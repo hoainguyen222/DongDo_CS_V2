@@ -19,11 +19,8 @@ export class WSClient {
     this.sessionID = sessionID;
     this.userID = userID;
     this.role = role;
-    const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const backendHost = typeof window !== 'undefined'
-      ? (window.location.port === '3000' ? `${window.location.hostname}:8080` : window.location.host)
-      : 'localhost:8080';
-    this.url = `${protocol}//${backendHost}/ws?session_id=${encodeURIComponent(sessionID)}&user_id=${encodeURIComponent(userID)}&role=${encodeURIComponent(role)}`;
+
+    this.url = `${process.env.NEXT_PUBLIC_WS_URL}/ws?session_id=${encodeURIComponent(sessionID)}&user_id=${encodeURIComponent(userID)}&role=${encodeURIComponent(role)}`;
   }
 
   public connect(): void {

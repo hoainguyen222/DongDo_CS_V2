@@ -471,7 +471,7 @@ export default function CustomerChatPage() {
             <div className={styles.brandBlock}>
               <div className={styles.brandIconBox}>
                 <Image
-                  src="/logo/logo-white.svg"
+                  src="/logo/Logo Dọc_Trắng.svg"
                   alt="Đông Đô Partners"
                   width={56}
                   height={56}
