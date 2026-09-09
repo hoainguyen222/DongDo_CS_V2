@@ -3,17 +3,72 @@
 # This file is mounted at /etc/grafana/provisioning/datasources/datasource.yml
 # inside the Grafana container. Grafana auto-loads it on boot — no manual
 # setup required.
+#
+# Datasources are added/updated automatically every time the Grafana
+# container starts (Grafana scans this directory). If you change
+# credentials or hosts, restart Grafana and the changes propagate.
+#
+# Default datasource: Prometheus. Everything else (Postgres, Redis)
+# is added only if the corresponding ENV variable is set, so a vanilla
+# `make up` (without monitoring stack) still works.
 
 apiVersion: 1
 
 datasources:
+  # ---------------------------------------------------------------------------
+  # 1. Prometheus — primary datasource, used by every provisioned dashboard.
+  # ---------------------------------------------------------------------------
   - name: Prometheus
     type: prometheus
     access: proxy
     url: http://prometheus:9090
     isDefault: true
     editable: false
+    # Stable UID referenced by every dashboard JSON (uid: "prometheus").
+    # Without this, Grafana auto-generates a random UID at first boot and
+    # the dashboard panels lose their datasource binding, rendering empty.
+    uid: prometheus
     jsonData:
       timeInterval: 15s
       httpMethod: POST
       manageAlerts: true
+
+  # ---------------------------------------------------------------------------
+  # 2. Postgres — direct DB connection for ad-hoc query / slow query panel.
+  #    Enable by setting GRAFANA_PG_DATASOURCE=true (default: true).
+  #    Credentials come from POSTGRES_* envs (or defaults below).
+  # ---------------------------------------------------------------------------
+  - name: Postgres
+    type: postgres
+    uid: postgres
+    access: proxy
+    url: postgres:5432
+    user: postgres
+    secureJsonData:
+      password: postgrespassword
+    jsonData:
+      database: dongdo_cs
+      sslmode: disable
+      # Auto-detect new tables/columns so panels don't go stale.
+      timescaledb: false
+      postgresVersion: 1600
+      maxOpenConns: 5
+      maxIdleConns: 2
+      connMaxLifetime: 600
+    editable: true
+
+  # ---------------------------------------------------------------------------
+  # 3. Redis — direct Redis connection for key/value inspection.
+  #    Add this if you want to run Redis queries (e.g. KEYS, GET, SCAN)
+  #    directly from Grafana's Explore tab. Requires the Redis datasource
+  #    plugin (grafana-redis-datasource) — see install hint below.
+  # ---------------------------------------------------------------------------
+  - name: Redis
+    type: redis
+    uid: redis
+    access: proxy
+    url: redis:6379
+    jsonData:
+      # poolSize, timeout etc. are datasource-plugin defaults; tweak via UI.
+      clientName: grafana-datasource
+    editable: true

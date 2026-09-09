@@ -68,3 +68,24 @@ block.prof
 /grafana_data/
 /alertmanager_data/
 /tests/automation/reports
+
+# TLS / Let's Encrypt — real certificates must NEVER be committed
+/docker/nginx/certbot/conf/
+/docker/nginx/certbot/www/
+/docker/nginx/dhparam.pem
+
+# Local secrets for the monitoring compose override
+.env.monitoring
+.env.monitoring.local
+monitoring/.env.monitoring
+
+# Docker Compose local overrides (per-developer)
+docker-compose.override.yml
+docker-compose.local.yml
+
+# Certbot working files (--work-dir, --logs-dir)
+/docker/nginx/certbot/logs/
+/docker/nginx/certbot/lib/
+
+# Nginx logs (when bind-mounted for debugging)
+/docker/nginx/logs/

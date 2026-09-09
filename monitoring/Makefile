@@ -34,7 +34,7 @@ NETWORK_FALLBACK  := dongdo_cs_v2_default
 
 PROM_URL          := http://localhost:9090
 GRAFANA_URL       := http://localhost:$${GRAFANA_PORT:-3050}
-SERVER_METRICS    := http://host.docker.internal:9090/metrics
+SERVER_METRICS    := http://host.docker.internal:9091/metrics
 
 # -----------------------------------------------------------------------------
 # Help
@@ -226,10 +226,10 @@ check-server-metrics: ## Verify the Go server's /metrics is reachable from Prome
 	@echo "🩺  Server /metrics reachability"
 	@echo "─────────────────────────────────────────────"
 	@printf "  From host    → "; \
-	  curl -fsS -o /dev/null -w "HTTP %{http_code}\n" http://127.0.0.1:9090/metrics \
-	    || echo "❌ 127.0.0.1:9090/metrics unreachable (server up? METRICS_ADDR set?)"
+	  curl -fsS -o /dev/null -w "HTTP %{http_code}\n" http://127.0.0.1:9091/metrics \
+	    || echo "❌ 127.0.0.1:9091/metrics unreachable (server up? METRICS_ADDR set?)"
 	@printf "  From Prometheus container → "; \
-	  docker exec dongdo_prometheus wget -qO- --timeout=3 http://host.docker.internal:9090/metrics >/dev/null 2>&1 \
+	  docker exec dongdo_prometheus wget -qO- --timeout=3 http://host.docker.internal:9091/metrics >/dev/null 2>&1 \
 	    && echo "✅ OK" \
 	    || echo "❌ unreachable (host.docker.internal mapping? firewall?)"
 	@echo ""

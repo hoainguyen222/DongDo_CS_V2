@@ -22,18 +22,26 @@
 #     without first running `make up`), the Makefile creates a fallback
 #     `dongdo_app` bridge network and Postgres / Redis exporters fall back
 #     to that.
-#   - The Go server's /metrics lives on the HOST loopback (127.0.0.1:9090).
-#     Prometheus reaches it via `host.docker.internal` — Docker Desktop
-#     (macOS / Windows) maps this automatically; Linux Docker Engine resolves
-#     it via `extra_hosts` to the default gateway IP.
+#   - The Go server's /metrics lives on the HOST loopback (published as
+#     127.0.0.1:9091→container:9090 in docker-compose.yml; the container
+#     binds METRICS_ADDR=0.0.0.0:9090 so Docker's port mapping works).
+#     Prometheus reaches it via `host.docker.internal:9091` — Docker
+#     Desktop (macOS / Windows) maps this automatically; Linux Docker
+#     Engine resolves it via `extra_hosts` to the default gateway IP.
+#   - nginx-exporter's :9113 is bound to 127.0.0.1 on the host too, so
+#     Prometheus can scrape host.docker.internal:9113 (see the `ports:`
+#     block below and prometheus.yml).
 #
 # SECURITY:
-#   - No exporter's port is published to the host. Reach Prometheus and
-#     Grafana only through SSH tunneling or a private VPN.
-#   - The CSKH Go server's /metrics and /debug/pprof stay bound to
-#     127.0.0.1 inside its container; Prometheus reaches them via
+#   - No exporter or app port is published to a PUBLIC host address.
+#     `127.0.0.1:<port>:<port>` mappings only bind to the host loopback,
+#     so they are unreachable from the network. Reach Prometheus and
+#     Grafana through SSH tunneling or a private VPN.
+#   - The CSKH Go server's /metrics and /debug/pprof are bound to the
+#     host loopback (127.0.0.1) only — Prometheus reaches /metrics via
 #     `host.docker.internal` (macOS / Windows Docker Desktop) or via the
-#     network gateway IP (Linux).
+#     network gateway IP (Linux). /debug/pprof has no host publish and
+#     must be reached via `ssh -L 6060:127.0.0.1:6060 user@host`.
 #
 # Grafana admin credentials default to admin / admin (configurable via
 # env). CHANGE THEM BEFORE EXPOSING GRAFANA ANYWHERE.
@@ -74,16 +82,21 @@ services:
       dongdo-monitoring:
         aliases:
           - prometheus
-      # Joined to the app network so it can reach the Go server's
-      # /metrics endpoint directly via DNS (`server:9090`). No need
-      # for `host.docker.internal` here — that was the workaround when
-      # /metrics lived on the host loopback.
-      dongdo_cs_v2_default:
-        aliases:
-          - prometheus
-    # Port 9090 is the Prometheus UI + scrape API. Same TCP port number as
-    # the Go server's /metrics, but they live on different addresses (the
-    # host's loopback vs the container's published port). No collision.
+      # Prometheus reaches the Go server's /metrics via
+      # `host.docker.internal:9091` (see prometheus.yml job "server"),
+      # so it does NOT need to join the app network. Removing it from
+      # the app network keeps the monitoring project isolated from the
+      # app project and removes cross-project DNS leakage.
+      # The `dongdo_cs_v2_default` block below is kept as a no-op
+      # (commented out) for documentation; re-enable if a future
+      # exporter returns to using internal DNS names.
+      # dongdo_cs_v2_default:
+      #   aliases:
+      #     - prometheus
+    # Port 9090 is the Prometheus UI + scrape API. The Go server's
+    # /metrics is published on host 127.0.0.1:9091 (see
+    # docker-compose.yml); Prometheus scrapes it via
+    # `host.docker.internal:9091`. Different host ports = no collision.
     ports:
       - "9090:9090"
     volumes:
@@ -191,6 +204,10 @@ services:
           - nginx-exporter
     environment:
       SCRAPE_URI: "http://nginx:9091/stub_status"
+    # Bind :9113 to the host loopback so Prometheus can reach it via
+    # host.docker.internal:9113 (see prometheus.yml). No public exposure.
+    ports:
+      - "127.0.0.1:9113:9113"
     # No host ports — only Prometheus inside the monitoring network reaches it.
 
   # ---------------------------------------------------------------------------
@@ -218,6 +235,16 @@ services:
       # Disable telemetry / phone-home.
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_USAGE_STATS_ENABLED: "false"
+      # Pre-install datasources/plugins at container boot. Grafana reads this
+      # env and runs `grafana-cli plugins install <name>` automatically.
+      # - redis-datasource: lets you run KEYS / GET / SCAN / XLEN from Explore.
+      # - postgres: built-in, no install needed.
+      # Override via GRAFANA_PLUGINS env if you want to add more.
+      GF_INSTALL_PLUGINS: "${GRAFANA_PLUGINS:-redis-datasource}"
+      # Allow datasource provisioning to add Postgres + Redis alongside
+      # Prometheus. Both default to "true". Set false to keep only Prometheus.
+      GRAFANA_PG_DATASOURCE: "${GRAFANA_PG_DATASOURCE:-true}"
+      GRAFANA_REDIS_DATASOURCE: "${GRAFANA_REDIS_DATASOURCE:-true}"
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro

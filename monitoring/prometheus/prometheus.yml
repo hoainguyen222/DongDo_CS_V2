@@ -45,15 +45,16 @@ scrape_configs:
   - job_name: server
     metrics_path: /metrics
     static_configs:
-      # The Go server exposes /metrics inside its container on
-      # METRICS_ADDR=0.0.0.0:9090. Prometheus joins the
-      # `dongdo_cs_v2_default` network (see docker-compose.monitoring.yml)
-      # so it can resolve the service name `server` directly.
-      # (Earlier this used `host.docker.internal:9090`, which only works
-      # when the server's /metrics is bound to the host loopback. We
-      # moved that endpoint into the container, so DNS resolves it now.)
+      # The Go server binds /metrics to 127.0.0.1:9090 inside its container
+      # and Docker publishes 9090 on the host loopback. Prometheus reaches
+      # it via `host.docker.internal` — Docker Desktop (macOS / Windows)
+      # maps this automatically; on Linux Docker Engine, the `extra_hosts`
+      # block above maps it to the default gateway. DNS resolution via
+      # `server:9090` does NOT work here because `server` lives on the
+      # separate `docker-compose.yml` project and is not visible to the
+      # monitoring project's DNS scope.
       - targets:
-          - server:9090
+          - host.docker.internal:9091
         labels:
           component: cskh-server
           service: dongdo-cs-server
@@ -78,14 +79,14 @@ scrape_configs:
   - job_name: nginx
     static_configs:
       # nginx-prometheus-exporter reads nginx's stub_status endpoint
-      # (served on :9091 inside the container — see
+      # (served on :9091 inside the nginx container — see
       # docker/nginx/conf.d/metrics.conf) and exposes Prometheus metrics
-      # on its own :9113 port. The exporter service joins both the
-      # dongdo-monitoring and dongdo_cs_v2_default networks so that:
-      #   1. Prometheus can reach it here as `nginx-exporter:9113`.
-      #   2. The exporter itself can resolve `nginx:9091` on the app
-      #      network.
+      # on its own :9113 port. We bind :9113 to the host loopback (see
+      # the `ports:` block in docker-compose.monitoring.yml) and reach
+      # it from Prometheus via `host.docker.internal` for the same DNS
+      # reason as the `server` job above — `nginx-exporter` is not
+      # visible to the monitoring project's DNS scope.
       - targets:
-          - nginx-exporter:9113
+          - host.docker.internal:9113
         labels:
           component: nginx

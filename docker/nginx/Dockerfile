@@ -9,7 +9,14 @@ COPY conf.d/ /etc/nginx/conf.d/
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 
 # Install curl for healthcheck and envsubst for template rendering
-RUN apk add --no-cache curl gettext
+RUN apk add --no-cache curl gettext openssl
+
+# Generate a 2048-bit DH params file as a fallback. Production deployments
+# SHOULD mount a 4096-bit dhparam.pem over this path (see Makefile target
+# `nginx-dhparam`). 2048-bit is the smallest key still considered safe by
+# Mozilla's "Intermediate" profile.
+RUN mkdir -p /etc/nginx && \
+    openssl dhparam -out /etc/nginx/dhparam.pem 2048 2>/dev/null
 
 # Make the entrypoint executable
 RUN chmod +x /docker-entrypoint.sh

@@ -11,7 +11,9 @@
         docker-nginx-config-test docker-nginx-shell \
         mon-up mon-down mon-restart mon-logs mon-ps mon-status \
         mon-reload-prom mon-check-targets mon-check-exporters \
-        mon-check-server-metrics mon-validate-prom
+        mon-check-server-metrics mon-validate-prom \
+        nginx-dhparam nginx-ssl-init nginx-cert-renew nginx-cert-info \
+        nginx-test-ssl nginx-check-expiry nginx-reload
 
 .DEFAULT_GOAL := help
 
@@ -92,7 +94,7 @@ monitoring-config: ## Render the merged monitoring compose config
 # Hit the running server's /metrics endpoint directly. Default address
 # matches the default METRICS_ADDR (127.0.0.1:9090). Override:
 #   make metrics METRICS_URL=http://localhost:9090/metrics
-METRICS_URL ?= http://127.0.0.1:9090/metrics
+METRICS_URL ?= http://127.0.0.1:9091/metrics
 metrics: ## Hit the server's /metrics endpoint (override METRICS_URL=...)
 	@curl -fsS "$(METRICS_URL)" | head -50
 
@@ -283,6 +285,84 @@ docker-nginx-config-test: ## [docker] validate nginx config (nginx -t)
 
 docker-nginx-shell: ## [docker] open bash in nginx container
 	$(MAKE) -C docker nginx-shell
+
+# -----------------------------------------------------------------------------
+# Production HTTPS — Let's Encrypt + DH params
+# -----------------------------------------------------------------------------
+# Usage (one-off per host):
+#   1. Edit .env → set NGINX_SERVER_NAME=cskh.dongdopartners.com, NGINX_ENABLE_SSL=true,
+#      CERTBOT_EMAIL=ops@yourdomain.com
+#   2. make nginx-dhparam       # ~minutes; generates 4096-bit DH params
+#   3. make up                  # bring up stack (nginx now listens on :443 too)
+#   4. make nginx-ssl-init      # requests the first certificate via HTTP-01
+#   5. make docker-nginx-reload # nginx picks up the new cert
+# Renewal is automatic via the certbot sidecar (sleeps 12h between checks).
+
+nginx-dhparam: ## Generate 4096-bit DH params (run once per host; ~minutes)
+	@if [ -f docker/nginx/dhparam.pem ]; then \
+	  echo "⚠️  docker/nginx/dhparam.pem already exists. Remove it to regenerate."; \
+	  exit 1; \
+	fi
+	@echo "🔐 Generating 4096-bit DH parameters (this takes a few minutes)..."
+	@openssl dhparam -out docker/nginx/dhparam.pem 4096
+	@chmod 644 docker/nginx/dhparam.pem
+	@echo "✅ Wrote docker/nginx/dhparam.pem"
+
+nginx-ssl-init: ## Request the first Let's Encrypt cert (HTTP-01, webroot)
+	@DOMAIN=$${NGINX_SERVER_NAME:-cskh.dongdopartners.com}; \
+	EMAIL=$${CERTBOT_EMAIL:-ops@dongdopartners.com}; \
+	if [ "$$NGINX_ENABLE_SSL" != "true" ]; then \
+	  echo "❌ NGINX_ENABLE_SSL is not 'true' in .env — refusing to request a cert."; \
+	  exit 1; \
+	fi; \
+	mkdir -p docker/nginx/certbot/conf docker/nginx/certbot/www; \
+	echo "🌐 Requesting cert for $$DOMAIN from $$EMAIL"; \
+	docker run --rm \
+	  -v "$(PWD)/docker/nginx/certbot/conf:/etc/letsencrypt" \
+	  -v "$(PWD)/docker/nginx/certbot/www:/var/www/certbot" \
+	  certbot/certbot:v2.11.0 certonly --webroot \
+	    --webroot-path=/var/www/certbot \
+	    -d "$$DOMAIN" --email "$$EMAIL" --agree-tos --no-eff-email \
+	    $${CERTBOT_STAGING:+--staging}
+	@echo "✅ Certificate issued. Now run: make docker-nginx-reload"
+
+nginx-cert-renew: ## Force-renew the Let's Encrypt cert and reload nginx
+	@echo "🔄 Forcing cert renewal..."
+	docker run --rm \
+	  -v "$(PWD)/docker/nginx/certbot/conf:/etc/letsencrypt" \
+	  -v "$(PWD)/docker/nginx/certbot/www:/var/www/certbot" \
+	  certbot/certbot:v2.11.0 renew --force-renewal --webroot -w /var/www/certbot
+	@$(MAKE) -s docker-nginx-reload
+
+nginx-cert-info: ## Show cert details (issuer, expiry, SANs)
+	@DOMAIN=$${NGINX_SERVER_NAME:-cskh.dongdopartners.com}; \
+	CERT=docker/nginx/certbot/conf/live/$$DOMAIN/fullchain.pem; \
+	if [ ! -f "$$CERT" ]; then \
+	  echo "❌ No cert found at $$CERT — run \`make nginx-ssl-init\` first."; \
+	  exit 1; \
+	fi; \
+	openssl x509 -in "$$CERT" -noout -issuer -subject -dates -ext subjectAltName 2>&1
+
+nginx-check-expiry: ## Alert if cert expires within 14 days
+	@DOMAIN=$${NGINX_SERVER_NAME:-cskh.dongdopartners.com}; \
+	CERT=docker/nginx/certbot/conf/live/$$DOMAIN/fullchain.pem; \
+	if [ ! -f "$$CERT" ]; then echo "❌ No cert at $$CERT"; exit 1; fi; \
+	DAYS=$$(openssl x509 -in "$$CERT" -noout -enddate | cut -d= -f2 | xargs -I{} date -j -f '%b %d %H:%M:%S %Y %Z' '{}' +%s | awk -v now=$$(date +%s) '{print int(($1-now)/86400)}'); \
+	echo "📅 Cert expires in $$DAYS days"; \
+	if [ "$$DAYS" -lt 14 ]; then echo "⚠️  Less than 14 days — run make nginx-cert-renew"; exit 1; fi
+
+nginx-test-ssl: ## Run an external SSL Labs-style smoke test (testssl.sh if present)
+	@DOMAIN=$${NGINX_SERVER_NAME:-cskh.dongdopartners.com}; \
+	if command -v testssl >/dev/null 2>&1; then \
+	  testssl --color 0 "$$DOMAIN"; \
+	else \
+	  echo "⚠️  testssl not installed (brew install testssl). Falling back to openssl s_client."; \
+	  echo | openssl s_client -servername "$$DOMAIN" -connect "$$DOMAIN:443" 2>/dev/null \
+	    | openssl x509 -noout -subject -issuer -dates -ext subjectAltName,extendedKeyUsage; \
+	fi
+
+nginx-reload: ## Hot-reload nginx (alias for docker-nginx-reload)
+	$(MAKE) -s docker-nginx-reload
 
 # =============================================================================
 # Monitoring subsystem (delegated to monitoring/Makefile)

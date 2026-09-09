@@ -195,14 +195,12 @@ Instrumentation của Go nằm trong `internal/observability/`:
 - **Grafana trên 3000** trùng với Next.js `npm run dev`. Map sang
   `3050:3000` để chạy cả hai cùng lúc. Ghi đè bằng
   `GRAFANA_PORT=<port-tự-chọn> make monitoring-up`.
-- **Prometheus trên 9090** cùng số port với `METRICS_ADDR` của Go app.
-  Đây là cố ý — Prometheus scrape `host.docker.internal:9090`
-  (tức 9090 trên host = Go server's `/metrics`), còn Prometheus UI
-  publish container port 9090 ra host 9090. Cùng port number nhưng ở
-  địa chỉ khác nhau (localhost vs container bridge) nên không conflict
-  thực sự — nhưng có thể gây nhầm. Nếu muốn, đặt
-  `METRICS_ADDR=127.0.0.1:9091` trong `.env` và update `targets`
-  trong `prometheus.yml` sang `:9091`.
+- **Prometheus trên 9090** vs Go server `/metrics` trên host **9091**
+  (publish `127.0.0.1:9091:9090` trong `docker-compose.yml`). Trước đây
+  cả hai cùng port 9090, gây nhầm lẫn. Bây giờ Prometheus UI giữ
+  host 9090, còn Go server `/metrics` ở host 9091 — Prometheus scrape
+  qua `host.docker.internal:9091`. Trong container, Go server bind
+  `METRICS_ADDR=0.0.0.0:9090` để Docker publish tới host loopback.
 
 ---
 
