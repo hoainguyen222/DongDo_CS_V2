@@ -67,6 +67,7 @@ export const api = {
   getCases: (status?: string, page = 1, limit = 10, search?: string) =>
     casesApi.list({ status, page, limit, search }).then((d) => d.cases),
   takeCase: casesApi.take,
+  resumeAI: casesApi.resumeAI,
   replyCase: casesApi.reply,
   sendCSMessage: casesApi.sendCSMessage,
   resolveCase: casesApi.resolve,

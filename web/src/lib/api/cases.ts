@@ -40,6 +40,10 @@ export const casesApi = {
     await apiClient.post(`/api/admin/cases/${sessionID}/take`);
   },
 
+  async resumeAI(sessionID: string): Promise<{ success: boolean; message: string }> {
+    return apiClient.post<{ success: boolean; message: string }>(`/api/admin/cases/${sessionID}/resume-ai`);
+  },
+
   async reply(sessionID: string, message: string): Promise<void> {
     await apiClient.post(`/api/admin/cases/${sessionID}/reply`, { message });
   },

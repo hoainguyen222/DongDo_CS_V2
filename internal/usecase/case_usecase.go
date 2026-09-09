@@ -220,6 +220,36 @@ func (uc *CaseUseCase) TakeCase(ctx context.Context, sessionID, csUsername, csFu
 	return nil
 }
 
+// ResumeAI resets the case status to AI_ACTIVE so AI can take over future queries (completely silent to customer).
+func (uc *CaseUseCase) ResumeAI(ctx context.Context, sessionID, csUsername string) error {
+	existingCase, err := uc.caseRepo.Get(ctx, sessionID)
+	if err != nil || existingCase == nil {
+		return fmt.Errorf("không tìm thấy case: %s", sessionID)
+	}
+
+	_, err = uc.caseRepo.Upsert(ctx, sessionID, existingCase.GuestID, existingCase.CustomerName, existingCase.CustomerPhone, domain.StatusAIActive, "", existingCase.LastMessage)
+	if err != nil {
+		return fmt.Errorf("failed to resume AI for case: %w", err)
+	}
+
+	// Broadcast status change to both admin studio and client via WebSocket
+	_ = uc.eventBus.PublishWS(ctx, "admin_inbox", domain.WSEventCaseUpdate, map[string]interface{}{
+		"session_id":     sessionID,
+		"customer_name":  existingCase.CustomerName,
+		"customer_phone": existingCase.CustomerPhone,
+		"status":         domain.StatusAIActive,
+		"assigned_cs":    "",
+		"last_message":   existingCase.LastMessage,
+	}, csUsername)
+
+	_ = uc.eventBus.PublishWS(ctx, sessionID, domain.WSEventCaseUpdate, map[string]interface{}{
+		"session_id": sessionID,
+		"status":     domain.StatusAIActive,
+	}, "system")
+
+	return nil
+}
+
 // ResolveCase marks a case as resolved and processes continuous learning Q&A pairs.
 func (uc *CaseUseCase) ResolveCase(ctx context.Context, sessionID, csUsername, csFullName, resolutionNote string, qaPairs []domain.QAPair) (autoLearned bool, learnedCount int, err error) {
 	agentName := csFullName

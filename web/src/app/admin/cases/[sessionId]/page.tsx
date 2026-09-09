@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Trash2, CheckCircle2, UserCheck, Send, Tag as TagIcon, X, MessageCircle, RefreshCw, Inbox, LifeBuoy, Lock, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Trash2, CheckCircle2, UserCheck, Send, Tag as TagIcon, X, MessageCircle, RefreshCw, Inbox, LifeBuoy, Lock, AlertTriangle, Bot } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useCaseDetail,
@@ -346,6 +346,30 @@ export default function CaseDetailPage() {
     } catch (err: any) {
       addToast({ title: 'Lỗi tiếp nhận case', message: err.message, variant: 'error' });
     }
+  };
+
+  const handleResumeAI = async () => {
+    if (!currentCase) return;
+    openConfirm({
+      title: 'Kích hoạt AI Hỗ Trợ Tiếp',
+      message: 'Bạn có chắc muốn kích hoạt AI hỗ trợ tiếp cho cuộc hội thoại này?\n\nAI sẽ tự động trả lời các câu hỏi tiếp theo của khách hàng nếu có trong tài liệu.',
+      confirmText: 'Bật AI Hỗ Trợ',
+      onConfirm: async () => {
+        try {
+          const { api } = await import('@/lib/api');
+          await api.resumeAI(currentCase.session_id);
+          setCurrentCase((prev) => (prev ? { ...prev, status: 'AI_ACTIVE', assigned_cs: '' } : null));
+          queryClient.invalidateQueries({ queryKey: ['cases'] });
+          addToast({
+            title: 'Đã bật AI hỗ trợ tiếp',
+            message: 'AI sẽ tự động trả lời các câu hỏi tiếp theo của khách hàng nếu có trong tài liệu.',
+            variant: 'success',
+          });
+        } catch (err: any) {
+          addToast({ title: 'Lỗi kích hoạt AI', message: err.message, variant: 'error' });
+        }
+      },
+    });
   };
 
   const handleSendReply = async (e: React.FormEvent) => {
@@ -810,6 +834,18 @@ export default function CaseDetailPage() {
                     >
                       <UserCheck size={14} />
                       <span>Tiếp Nhận</span>
+                    </button>
+                  )}
+
+                  {currentCase?.status !== 'AI_ACTIVE' && currentCase?.status !== 'RESOLVED' && (
+                    <button
+                      onClick={handleResumeAI}
+                      className={styles.secondaryBtn}
+                      style={{ borderColor: '#a855f7', color: '#c084fc' }}
+                      title="Bật lại AI để AI hỗ trợ tiếp cho khách hàng"
+                    >
+                      <Bot size={14} />
+                      <span>AI Hỗ Trợ Tiếp</span>
                     </button>
                   )}
 

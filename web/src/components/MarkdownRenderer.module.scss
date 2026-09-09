@@ -39,6 +39,20 @@
     margin: s.$space-2 0 s.$space-1;
   }
 
+  h4 {
+    font-size: 12px;
+    font-weight: 600;
+    color: #fda4af;
+    margin: s.$space-2 0 s.$space-1;
+  }
+
+  h5 {
+    font-size: 12px;
+    font-weight: 500;
+    color: #fde047;
+    margin: s.$space-1 0 2px;
+  }
+
   strong { font-weight: 600; color: #fff; letter-spacing: 0.01em; }
   em { color: #cbd5e1; font-style: italic; }
 

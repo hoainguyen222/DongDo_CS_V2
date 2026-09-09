@@ -13,13 +13,7 @@ interface MarkdownRendererProps {
 export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className = '' }) => {
   return (
     <div className={`${styles.content} ${className}`}>
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          // All overrides intentionally omitted — base markdown
-          // is fully styled via .content > * rules.
-        }}
-      >
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>
         {content}
       </ReactMarkdown>
     </div>

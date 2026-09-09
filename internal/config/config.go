@@ -211,7 +211,7 @@ func Load() *Config {
 		// RAG
 		ChunkSize:    getEnvInt("CHUNK_SIZE", 800),
 		ChunkOverlap: getEnvInt("CHUNK_OVERLAP", 200),
-		RetrieverK:   getEnvInt("RETRIEVER_K", 5),
+		RetrieverK:   getEnvInt("RETRIEVER_K", 15),
 		MemoryWindow: getEnvInt("MEMORY_WINDOW_SIZE", 10),
 
 		// Paths

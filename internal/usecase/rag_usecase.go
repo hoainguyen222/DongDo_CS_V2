@@ -89,8 +89,12 @@ func (uc *RAGUseCase) GenerateResponse(ctx context.Context, sessionID, query str
 			uc.logger.Warn().Err(err).Str("session_id", sessionID).
 				Msg("failed to embed query (continuing without vector search)")
 		} else {
-			// Require minimum similarity score of 0.35 to avoid matching random documents on short queries
-			docs, err := uc.vectorStore.Search(ctx, queryVec, uc.retrieverK, 0.35)
+			limit := uc.retrieverK
+			if limit < 15 {
+				limit = 15
+			}
+			// Ngưỡng điểm 0.15 giúp bắt trọn các câu hỏi định nghĩa đặc thù (Biên độ giá, Lot, LME...)
+			docs, err := uc.vectorStore.Search(ctx, queryVec, limit, 0.15)
 			if err != nil {
 				uc.logger.Warn().Err(err).Str("session_id", sessionID).
 					Msg("vector search failed (continuing without context)")

@@ -166,6 +166,7 @@ func SetupRouter(
 		// Cases (Live Inbox) - Staff+ can access
 		admin.GET("/api/admin/cases", handler.HandleListCases)
 		admin.POST("/api/admin/cases/:session_id/take", handler.HandleTakeCase)
+		admin.POST("/api/admin/cases/:session_id/resume-ai", handler.HandleResumeAI)
 		admin.POST("/api/admin/cases/:session_id/reply", handler.HandleReplyCase)
 		admin.POST("/api/admin/cases/:session_id/resolve", handler.HandleResolveCase)
 		admin.POST("/api/admin/cases/:session_id/helper", handler.HandleSubmitCaseHelper)

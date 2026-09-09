@@ -134,9 +134,7 @@ func (c *Client) GenerateResponse(
 								}
 							}
 							reply = replyBuilder.String()
-							fallbackPhrase := "chuyên viên CSKH của Đông Đô sẽ trực tiếp tham gia cuộc trò chuyện để hỗ trợ bạn ngay"
-							isFallback = strings.Contains(strings.ToLower(reply), strings.ToLower(fallbackPhrase)) || contextBlock == ""
-
+							reply, isFallback = evaluateFallback(reply, contextBlock)
 							if reply != "" {
 								return reply, isFallback, nil
 							}
@@ -158,8 +156,7 @@ func (c *Client) GenerateResponse(
 	if c.geminiKey != "" {
 		geminiReply, geminiErr := c.generateGemini(ctx, fullSystemPrompt, messages)
 		if geminiErr == nil && geminiReply != "" {
-			fallbackPhrase := "chuyên viên CSKH của Đông Đô sẽ trực tiếp tham gia cuộc trò chuyện để hỗ trợ bạn ngay"
-			isFallback = strings.Contains(strings.ToLower(geminiReply), strings.ToLower(fallbackPhrase)) || contextBlock == ""
+			geminiReply, isFallback = evaluateFallback(geminiReply, contextBlock)
 			return geminiReply, isFallback, nil
 		} else if geminiErr != nil {
 			c.logger.Warn().Err(geminiErr).Msg("Gemini API failed")
@@ -170,8 +167,7 @@ func (c *Client) GenerateResponse(
 	if c.openAIKey != "" {
 		openAIReply, openAIErr := c.generateOpenAI(ctx, fullSystemPrompt, messages)
 		if openAIErr == nil && openAIReply != "" {
-			fallbackPhrase := "chuyên viên CSKH của Đông Đô sẽ trực tiếp tham gia cuộc trò chuyện để hỗ trợ bạn ngay"
-			isFallback = strings.Contains(strings.ToLower(openAIReply), strings.ToLower(fallbackPhrase)) || contextBlock == ""
+			openAIReply, isFallback = evaluateFallback(openAIReply, contextBlock)
 			return openAIReply, isFallback, nil
 		} else if openAIErr != nil {
 			c.logger.Warn().Err(openAIErr).Msg("OpenAI API failed")
@@ -207,6 +203,39 @@ func getAvailableProviders(c *Client) []string {
 	}
 	providers = append(providers, "local_synthesizer")
 	return providers
+}
+
+func evaluateFallback(reply, contextBlock string) (string, bool) {
+	fallbackSignals := []string{
+		"chuyên viên cskh của đông đô sẽ trực tiếp tham gia",
+		"trực tiếp tham gia cuộc trò chuyện để hỗ trợ",
+		"nằm ngoài lĩnh vực chuyên môn",
+		"chưa có thông tin chi tiết về",
+		"chưa có thông tin chi tiết",
+		"không có thông tin chi tiết",
+		"không có thông tin trong hệ thống",
+		"chưa có thông tin trong hệ thống",
+		"chưa có thông tin",
+	}
+
+	replyLower := strings.ToLower(reply)
+	isFallback := false
+	for _, sig := range fallbackSignals {
+		if strings.Contains(replyLower, sig) {
+			isFallback = true
+			break
+		}
+	}
+	if !isFallback && contextBlock == "" {
+		isFallback = true
+	}
+
+	if isFallback && !strings.Contains(replyLower, "chuyên viên cskh của đông đô sẽ trực tiếp tham gia") {
+		handoverText := "Vui lòng đợi trong giây lát, chuyên viên CSKH của Đông Đô sẽ trực tiếp tham gia cuộc trò chuyện để hỗ trợ bạn ngay."
+		reply = fmt.Sprintf("%s\n\n%s", strings.TrimSpace(reply), handoverText)
+	}
+
+	return reply, isFallback
 }
 
 func synthesizeKnowledgeResponse(query, contextBlock string) (string, bool) {
